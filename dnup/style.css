@@ -818,6 +818,17 @@ a {
   margin-left: 0;
 }
 
+/* The hit area must not move with the lift: extend it below the card so the
+   cursor stays "on" the card while it is raised (otherwise hover flickers). */
+#hand .pcard::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: -16px;
+}
+
 #hand .pcard:hover {
   transform: translateY(-8px);
   z-index: 2;
