@@ -16,6 +16,7 @@ import {
   applyMove,
   markDisconnected,
   viewFor,
+  botChoose,
 } from './game.js';
 
 // ---------------------------------------------------------------- networking
@@ -37,6 +38,7 @@ const RTC_CONFIG = {
 
 const PEER_OPTS = { debug: 1, config: RTC_CONFIG };
 const ID_PREFIX = 'dnup-v1-'; // namespaces our room ids on the public broker
+const BOT_NAMES = ['Chip', 'Gizmo', 'Sparky', 'Bolt', 'Widget'];
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I/L
 
 function genCode(len = 5) {
@@ -138,9 +140,9 @@ function setBusy(busy) {
   $('#btn-join').disabled = busy;
 }
 
-function avatarEl(name, seat) {
-  const a = el('div', `av s${seat % 5}`, (name || '?').trim().charAt(0).toUpperCase() || '?');
-  return a;
+function avatarEl(name, seat, bot = false) {
+  if (bot) return el('div', 'av bot', '🤖');
+  return el('div', `av s${seat % 5}`, (name || '?').trim().charAt(0).toUpperCase() || '?');
 }
 
 function cardEl(card, big = false) {
@@ -189,6 +191,7 @@ class HostSession {
     this.roster = [{ seat: 0, name, connected: true }];
     this.conns = new Map(); // seat -> DataConnection
     this.G = null;
+    this.botTimer = null;
     peer.on('connection', (conn) => this.accept(conn));
     peer.on('disconnected', () => {
       // Lost the broker (not the players). Reconnect so new guests can join.
@@ -277,11 +280,51 @@ class HostSession {
     }
   }
 
+  addBot() {
+    if (this.G) return;
+    if (this.roster.length >= MAX_PLAYERS) {
+      toast('The room is full');
+      return;
+    }
+    let seat = 0;
+    while (this.roster.some((p) => p.seat === seat)) seat++;
+    const used = new Set(this.roster.map((p) => p.name));
+    const name = BOT_NAMES.find((n) => !used.has(n)) || `Bot ${seat + 1}`;
+    this.roster.push({ seat, name, connected: true, bot: true });
+    this.pushLobby();
+  }
+
+  removeBot(seat) {
+    if (this.G) return;
+    const p = this.roster.find((r) => r.seat === seat && r.bot);
+    if (!p) return;
+    this.roster = this.roster.filter((r) => r.seat !== seat);
+    this.pushLobby();
+  }
+
+  // Bots run in the host's browser: whenever the turn lands on one, pick a
+  // move after a short "thinking" pause. Chains itself via broadcast().
+  scheduleBots() {
+    clearTimeout(this.botTimer);
+    if (!this.G || this.G.phase !== 'playing') return;
+    const cur = this.roster.find((p) => p.seat === this.G.turn);
+    if (!cur || !cur.bot) return;
+    this.botTimer = setTimeout(() => {
+      if (!this.G || this.G.phase !== 'playing') return;
+      const seat = this.G.turn;
+      const p = this.roster.find((q) => q.seat === seat);
+      if (!p || !p.bot) return;
+      const res = applyMove(this.G, seat, botChoose(this.G, seat));
+      if (!res.ok) applyMove(this.G, seat, { kind: 'draw' }); // safety net
+      this.broadcast();
+    }, 650 + Math.random() * 850);
+  }
+
   lobbyMsg() {
     return {
       t: 'lobby',
       code: this.code,
-      players: this.roster.map((p) => ({ seat: p.seat, name: p.name })),
+      players: this.roster.map((p) => ({ seat: p.seat, name: p.name, bot: !!p.bot })),
       min: MIN_PLAYERS,
       max: MAX_PLAYERS,
     };
@@ -337,6 +380,7 @@ class HostSession {
     }
     showScreen('game');
     renderGame(viewFor(this.G, 0, this.code), this);
+    this.scheduleBots();
   }
 
   move(seat, move) {
@@ -363,6 +407,7 @@ class HostSession {
 
   destroy() {
     clearInterval(this.hb);
+    clearTimeout(this.botTimer);
     try {
       this.peer.destroy();
     } catch {}
@@ -473,21 +518,34 @@ function renderLobby(lob, sess) {
     const p = lob.players[i];
     const row = el('li', `seat-row${p ? '' : ' empty'}`);
     if (p) {
-      row.append(avatarEl(p.name, p.seat));
+      row.append(avatarEl(p.name, p.seat, p.bot));
       const label = el('span', 'seat-name', p.name);
       row.append(label);
       if (p.seat === 0) row.append(el('span', 'chip', 'host'));
+      if (p.bot) row.append(el('span', 'chip bot', 'bot'));
       if (p.seat === mySeat) row.append(el('span', 'chip you', 'you'));
+      if (p.bot && sess.isHost) {
+        const kick = el('button', 'kick', '✕');
+        kick.type = 'button';
+        kick.title = `Remove ${p.name}`;
+        kick.setAttribute('aria-label', `Remove ${p.name}`);
+        kick.addEventListener('click', () => sess.removeBot(p.seat));
+        row.append(kick);
+      }
     } else {
       row.append(el('div', 'av empty', '·'), el('span', 'seat-name dim', 'Waiting for player…'));
     }
     list.append(row);
   }
   $('#btn-start').classList.toggle('hidden', !sess.isHost);
-  if (sess.isHost) $('#btn-start').disabled = lob.players.length < lob.min;
+  $('#btn-add-bot').classList.toggle('hidden', !sess.isHost);
+  if (sess.isHost) {
+    $('#btn-start').disabled = lob.players.length < lob.min;
+    $('#btn-add-bot').disabled = lob.players.length >= lob.max;
+  }
   $('#lobby-hint').textContent = sess.isHost
     ? lob.players.length < lob.min
-      ? 'Share the code or link — you need at least one more player.'
+      ? 'Share the code or link — or add a bot to play right away.'
       : `${lob.players.length} of ${lob.max} players in. Start whenever you like!`
     : 'Waiting for the host to start the game…';
 }
@@ -509,7 +567,7 @@ function renderGame(view, sess) {
     const p = view.players.find((q) => q.seat === seats[(myIdx + k) % seats.length]);
     if (!p || p.seat === view.you) continue;
     const box = el('div', `opp${view.phase === 'playing' && view.turn === p.seat ? ' turn' : ''}${p.connected ? '' : ' offline'}`);
-    box.append(avatarEl(p.name, p.seat));
+    box.append(avatarEl(p.name, p.seat, p.bot));
     const meta = el('div', 'opp-meta');
     meta.append(el('div', 'opp-name', p.name));
     const backs = el('div', 'backs');
@@ -614,7 +672,7 @@ function showGameover(view, sess) {
     const row = el('li', `rank-row${r.seat === view.you ? ' me' : ''}`);
     row.append(
       el('span', 'rank-pos', String(i + 1)),
-      avatarEl(r.name, r.seat),
+      avatarEl(r.name, r.seat, r.bot),
       el('span', 'rank-name', r.name + (r.connected ? '' : ' (left)')),
       el('span', 'rank-cards', r.cardsLeft === 0 ? 'out!' : `${r.cardsLeft} left`),
     );
@@ -724,6 +782,7 @@ function init() {
   $('#btn-copy-code').addEventListener('click', () => copyText(session ? session.code : ''));
   $('#btn-copy-link').addEventListener('click', () => copyText(session ? roomLink(session.code) : ''));
   $('#btn-start').addEventListener('click', () => session && session.isHost && session.start());
+  $('#btn-add-bot').addEventListener('click', () => session && session.isHost && session.addBot());
   $('#btn-again').addEventListener('click', () => session && session.isHost && session.again());
   $('#btn-golobby').addEventListener('click', () => session && session.isHost && session.toLobby());
   $('#draw-pile').addEventListener('click', drawCard);

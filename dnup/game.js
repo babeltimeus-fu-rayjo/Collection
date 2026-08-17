@@ -71,6 +71,7 @@ export function newGame(roster) {
   const players = roster.map((p) => ({
     seat: p.seat,
     name: p.name,
+    bot: !!p.bot,
     connected: p.connected !== false,
     hand: [],
     finished: false,
@@ -216,7 +217,30 @@ export function ranking(G) {
       if (a.hand.length !== b.hand.length) return a.hand.length - b.hand.length;
       return a.seat - b.seat;
     })
-    .map((p) => ({ seat: p.seat, name: p.name, cardsLeft: p.hand.length, connected: p.connected }));
+    .map((p) => ({ seat: p.seat, name: p.name, bot: !!p.bot, cardsLeft: p.hand.length, connected: p.connected }));
+}
+
+// Pick a move for a bot. One-ply lookahead: prefer the legal card that leaves
+// the most playable follow-ups in hand; tie-break by shedding the card that is
+// hardest to play later (low ranks while UP, high ranks while DOWN).
+export function botChoose(G, seat) {
+  const p = bySeat(G, seat);
+  if (!p) return { kind: 'draw' };
+  const legal = p.hand.filter((c) => isLegal(c, G.top, G.dir));
+  if (!legal.length) return { kind: 'draw' };
+  let best = legal[0];
+  let bestScore = -Infinity;
+  for (const card of legal) {
+    const nextDir = dirAfter(card, G.top, G.dir);
+    const followups = p.hand.filter((c) => c.id !== card.id && isLegal(c, card, nextDir)).length;
+    const shed = G.dir === 'up' ? 10 - card.rank : card.rank;
+    const score = followups * 2 + shed / 10 + Math.random() * 0.01;
+    if (score > bestScore) {
+      bestScore = score;
+      best = card;
+    }
+  }
+  return { kind: 'play', cardId: best.id };
 }
 
 // Personalized snapshot: public info about everyone, plus this seat's own hand.
@@ -234,6 +258,7 @@ export function viewFor(G, seat, code) {
     players: G.players.map((p) => ({
       seat: p.seat,
       name: p.name,
+      bot: !!p.bot,
       handCount: p.hand.length,
       connected: p.connected,
       finished: p.finished,

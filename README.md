@@ -12,6 +12,7 @@ DNUP is a "down-up" shedding card game for **2–5 players**:
 - The pile always has a direction, **UP** or **DOWN**. Play a card that follows the direction (strictly higher when UP, strictly lower when DOWN), matches the top card's color, or matches its number.
 - A number match **flips the direction**. A 10 always turns the game DOWN, a 1 always turns it UP.
 - Can't play? Draw one card and your turn ends. The discards get reshuffled when the draw pile runs out.
+- **Bots:** the host can add bot players in the lobby (🤖), so any mix of humans and bots can fill the 2–5 seats — including playing solo against up to four bots. Bots run in the host's browser and pick moves with a one-ply lookahead heuristic (`botChoose` in [`dnup/game.js`](dnup/game.js)).
 
 ### How multiplayer works
 

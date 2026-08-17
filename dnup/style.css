@@ -344,6 +344,35 @@ button {
   color: #587065;
 }
 
+.av.bot {
+  background: linear-gradient(160deg, #6b7a99, #3d4a66);
+  font-size: 20px;
+}
+
+.chip.bot {
+  background: rgba(154, 92, 208, 0.22);
+  color: #c9a4ee;
+}
+
+.kick {
+  margin-left: auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--dim);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  flex: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.kick:hover {
+  background: rgba(229, 72, 77, 0.3);
+  color: #ffb4b4;
+}
+
 /* ---------------------------------------------------------------- game */
 
 #screen-game {
