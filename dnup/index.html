@@ -126,6 +126,19 @@
     </div>
   </div>
 
+  <!-- CHAT -->
+  <div id="chat" class="hidden">
+    <div id="chat-panel" class="hidden">
+      <div class="chat-head">Room chat</div>
+      <div id="chat-msgs"></div>
+      <form id="chat-form">
+        <input id="chat-input" maxlength="200" placeholder="Say something…" autocomplete="off">
+        <button type="submit" class="chat-send" aria-label="Send">➤</button>
+      </form>
+    </div>
+    <button id="chat-toggle" type="button" aria-label="Toggle chat">💬<span id="chat-unread" class="hidden"></span></button>
+  </div>
+
   <div id="toasts" aria-live="polite"></div>
   <div id="banner" class="flash hidden"></div>
   <div id="confetti"></div>

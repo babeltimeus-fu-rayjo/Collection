@@ -150,6 +150,32 @@ function avatarEl(name, seat, bot = false) {
   return el('div', `av s${seat % 5}`, (name || '?').trim().charAt(0).toUpperCase() || '?');
 }
 
+// ---------------------------------------------------------------- chat
+
+let chatUnread = 0;
+
+function chatSetVisible(v) {
+  $('#chat').classList.toggle('hidden', !v);
+}
+
+function addChatMsg(m, self) {
+  const box = $('#chat-msgs');
+  const row = el('div', `chat-msg${self ? ' mine' : ''}`);
+  row.append(
+    el('span', `chat-name s${(m.seat || 0) % 5}`, m.name || '?'),
+    el('span', 'chat-text', m.text),
+  );
+  box.append(row);
+  while (box.children.length > 100) box.firstChild.remove();
+  box.scrollTop = box.scrollHeight;
+  if ($('#chat-panel').classList.contains('hidden') && !self) {
+    chatUnread++;
+    const b = $('#chat-unread');
+    b.textContent = chatUnread > 9 ? '9+' : String(chatUnread);
+    b.classList.remove('hidden');
+  }
+}
+
 function confetti() {
   const box = $('#confetti');
   box.replaceChildren();
@@ -182,6 +208,7 @@ class HostSession {
     this.conns = new Map(); // seat -> DataConnection
     this.G = null;
     this.botTimer = null;
+    this.chatLog = [];
     peer.on('connection', (conn) => this.accept(conn));
     peer.on('disconnected', () => {
       // Lost the broker (not the players). Reconnect so new guests can join.
@@ -208,7 +235,27 @@ class HostSession {
     const seat = conn._seat;
     if (seat == null) return;
     if (msg.t === 'move') this.move(seat, msg.move);
+    if (msg.t === 'chat') {
+      const p = this.roster.find((r) => r.seat === seat);
+      if (p) this.relayChat(seat, p.name, msg.text);
+    }
     // 'hb' just refreshes _seen above
+  }
+
+  // All chat flows through the host, which stamps the sender and fans out.
+  relayChat(seat, name, text) {
+    text = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+    if (!text) return;
+    const entry = { seat, name, text };
+    this.chatLog.push(entry);
+    if (this.chatLog.length > 50) this.chatLog.shift();
+    this.sendAll({ t: 'chat', ...entry });
+    addChatMsg(entry, seat === 0);
+  }
+
+  sendChat(text) {
+    const me = this.roster.find((p) => p.seat === 0);
+    this.relayChat(0, me ? me.name : 'Host', text);
   }
 
   join(conn, msg) {
@@ -235,6 +282,7 @@ class HostSession {
     this.roster.push({ seat, name, connected: true });
     try {
       conn.send({ t: 'welcome', seat, code: this.code });
+      if (this.chatLog.length) conn.send({ t: 'chatlog', items: this.chatLog.slice(-20) });
     } catch {}
     toast(`${name} joined`);
     this.pushLobby();
@@ -481,6 +529,14 @@ class GuestSession {
         toast(msg.error);
         if (lastView) renderGame(lastView, this);
         break;
+      case 'chat':
+        addChatMsg(msg, msg.seat === this.seat);
+        break;
+      case 'chatlog':
+        for (const m of Array.isArray(msg.items) ? msg.items : []) {
+          addChatMsg(m, m.seat === this.seat);
+        }
+        break;
     }
   }
 
@@ -490,10 +546,18 @@ class GuestSession {
     } catch {}
   }
 
+  sendChat(text) {
+    try {
+      this.conn.send({ t: 'chat', text });
+    } catch {}
+  }
+
   fail(text) {
     this.destroy();
     session = null;
     showScreen('home');
+    chatSetVisible(false);
+    $('#chat-msgs').replaceChildren();
     setBusy(false);
     setHomeStatus(text, true);
   }
@@ -512,6 +576,7 @@ class GuestSession {
 
 function renderLobby(lob, sess) {
   handOrder = [];
+  chatSetVisible(true);
   $('#lobby-code').textContent = lob.code;
   const list = $('#lobby-players');
   list.replaceChildren();
@@ -613,13 +678,16 @@ function renderHand(view, clickable) {
     return handCardEl(c, clickable);
   });
   for (const n of [...hand.children]) if (!desired.includes(n)) n.remove();
-  let cursor = hand.firstChild;
-  for (const n of desired) {
-    if (n === cursor) {
-      cursor = cursor.nextSibling;
-      continue;
+  // Don't reshuffle DOM under an active drag; order settles on the next render.
+  if (!hand.querySelector('.pcard.dragging')) {
+    let cursor = hand.firstChild;
+    for (const n of desired) {
+      if (n === cursor) {
+        cursor = cursor.nextSibling;
+        continue;
+      }
+      hand.insertBefore(n, cursor);
     }
-    hand.insertBefore(n, cursor);
   }
   layoutHand();
 }
@@ -666,16 +734,61 @@ function attachDrag(cardEl, cardId) {
   cardEl.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     cardEl._dragged = false;
+    const hand = $('#hand');
     const startX = e.clientX;
     let dragging = false;
+    // Snapshot of slot positions taken at drag start. Landing index is always
+    // computed against these frozen centers, so the preview shifting cards
+    // around never moves the thresholds under the pointer.
+    let slots = null;
+
+    const snapshot = () => {
+      const children = [...hand.children];
+      const rects = children.map((n) => n.getBoundingClientRect());
+      slots = {
+        children,
+        centers: rects.map((r) => r.left + r.width / 2),
+        myIndex: children.indexOf(cardEl),
+        step: children.length > 1 ? Math.abs(rects[1].left - rects[0].left) : rects[0].width,
+      };
+    };
+
+    // Final index of the dragged card = how many other cards sit left of the pointer.
+    const targetIndex = (x) => {
+      let t = 0;
+      slots.children.forEach((n, i) => {
+        if (n !== cardEl && slots.centers[i] < x) t++;
+      });
+      return t;
+    };
+
+    // Slide the cards between the old and new slot to open the landing gap.
+    const preview = (x) => {
+      const F = targetIndex(x);
+      const D = slots.myIndex;
+      slots.children.forEach((n, i) => {
+        if (n === cardEl) return;
+        let dx = 0;
+        if (F > D && i > D && i <= F) dx = -slots.step;
+        else if (F < D && i >= F && i < D) dx = slots.step;
+        n.style.transform = dx ? `translateX(${dx}px)` : '';
+      });
+    };
+
     const move = (ev) => {
       const dx = ev.clientX - startX;
       if (!dragging && Math.abs(dx) > 12) {
         dragging = true;
         cardEl.classList.add('dragging');
+        hand.classList.add('reordering');
+        snapshot();
       }
-      if (dragging) cardEl.style.transform = `translate(${dx}px, -14px) scale(1.04)`;
+      if (dragging) {
+        cardEl.style.transform = `translate(${dx}px, -14px) scale(1.04)`;
+        preview(ev.clientX);
+      }
     };
+
     const done = (ev) => {
       cardEl.removeEventListener('pointermove', move);
       cardEl.removeEventListener('pointerup', done);
@@ -683,21 +796,16 @@ function attachDrag(cardEl, cardId) {
       if (!dragging) return;
       cardEl._dragged = true;
       cardEl.classList.remove('dragging');
+      hand.classList.remove('reordering');
+      const idx = targetIndex(ev.clientX);
+      for (const n of slots.children) n.style.transform = '';
       cardEl.style.transform = '';
-      const others = [...document.querySelectorAll('#hand .pcard')].filter((c) => c.dataset.id !== cardId);
-      let idx = others.length;
-      for (let i = 0; i < others.length; i++) {
-        const r = others[i].getBoundingClientRect();
-        if (ev.clientX < r.left + r.width / 2) {
-          idx = i;
-          break;
-        }
-      }
       const rest = handOrder.filter((id) => id !== cardId);
       rest.splice(idx, 0, cardId);
       handOrder = rest;
       if (lastView) renderGame(lastView, session);
     };
+
     try {
       cardEl.setPointerCapture(e.pointerId);
     } catch {}
@@ -760,6 +868,7 @@ function scoreBadge(view, p) {
 
 function renderGame(view, sess) {
   lastView = view;
+  chatSetVisible(true);
   $('#room-chip').textContent = view.code;
   $('#round-chip').textContent =
     view.mode === 'duel'
@@ -1068,6 +1177,25 @@ function init() {
   $('#btn-rules-close').addEventListener('click', () => $('#modal-rules').classList.add('hidden'));
   $('#modal-rules').addEventListener('click', (e) => {
     if (e.target === $('#modal-rules')) $('#modal-rules').classList.add('hidden');
+  });
+
+  $('#chat-toggle').addEventListener('click', () => {
+    const p = $('#chat-panel');
+    const opening = p.classList.contains('hidden');
+    p.classList.toggle('hidden');
+    if (opening) {
+      chatUnread = 0;
+      $('#chat-unread').classList.add('hidden');
+      $('#chat-msgs').scrollTop = $('#chat-msgs').scrollHeight;
+      $('#chat-input').focus();
+    }
+  });
+  $('#chat-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const inp = $('#chat-input');
+    const text = inp.value.trim();
+    if (text && session) session.sendChat(text);
+    inp.value = '';
   });
 
   window.addEventListener('resize', () => {
