@@ -167,6 +167,7 @@ export function dealRound(G) {
   for (const p of G.players) {
     p.hand = [];
     p.areas = p.areas.map(() => null);
+    p.notes = p.areas.map(() => null); // at-a-glance "what happened here" labels
     p.out = false;
   }
   let i = 0;
@@ -211,10 +212,12 @@ export function advanceTurn(G) {
           had = true;
         }
       });
+      p.notes = p.areas.map(() => null);
       if (had) note(G, `${p.name}'s remaining set is discarded.`);
       continue;
     }
     const s = discardArea(G, p, area);
+    p.notes[area] = null;
     if (s) note(G, `${p.name} discards ${setLabel(s)}.`);
     G.turn = { seat, area };
     return;
@@ -233,6 +236,7 @@ function bounceSet(G, ref) {
   const s = owner.areas[ref.area];
   if (!s) return;
   owner.areas[ref.area] = null;
+  owner.notes[ref.area] = `${setLabel(s)} beaten`;
   if (owner.out || !owner.connected) {
     G.discardCount += s.cards.length;
     note(G, `${owner.name}'s ${setLabel(s)} is beaten and discarded.`);
@@ -354,6 +358,7 @@ export function applyMove(G, seat, move) {
       };
     }
     note(G, `${p.name} adds a ${activeVal(card)} to ${tp.name}'s set.`);
+    p.notes[areaIdx] = `added a ${activeVal(card)} to ${tp.name}`;
     if (verdict.bounce) bounceSet(G, verdict.bounce);
     p.hand = p.hand.filter((c) => c.id !== card.id);
     target.cards.push(card);
@@ -368,19 +373,23 @@ export function applyMove(G, seat, move) {
     const tp = bySeat(G, t.seat);
     const target = tp && tp.areas[t.area];
     if (!target) return { ok: false, error: 'That set is gone.' };
+    const takenLabel = setLabel(target);
     tp.areas[t.area] = null;
+    tp.notes[t.area] = `${takenLabel} taken by ${p.name}`;
+    p.notes[areaIdx] = `took ${tp.name}'s ${takenLabel}`;
     for (const c of target.cards) {
       c.flip = !c.flip;
       p.hand.push(c);
     }
     G.fx = { seq: ++G.fxSeq, kind: 'take', seat, targetSeat: t.seat };
-    note(G, `${p.name} takes ${tp.name}'s ${setLabel(target)} rotated — dnup!`);
+    note(G, `${p.name} takes ${tp.name}'s ${takenLabel} rotated — dnup!`);
     afterAction(G, p);
     return { ok: true };
   }
 
   if (move && move.kind === 'rotate') {
     for (const c of p.hand) c.flip = !c.flip;
+    p.notes[areaIdx] = 'rotated hand — dnup!';
     G.fx = { seq: ++G.fxSeq, kind: 'rotate', seat };
     note(G, `${p.name} rotates their whole hand — dnup!`);
     afterAction(G, p);
@@ -512,6 +521,7 @@ export function viewFor(G, seat, code) {
       points: p.points,
       rounds: p.rounds,
       handCount: p.hand.length,
+      notes: [...(p.notes || [])],
       areas: p.areas.map((s) =>
         s
           ? {

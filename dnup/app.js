@@ -153,9 +153,33 @@ function avatarEl(name, seat, bot = false) {
 // ---------------------------------------------------------------- chat
 
 let chatUnread = 0;
+let peekTimer = null;
 
 function chatSetVisible(v) {
   $('#chat').classList.toggle('hidden', !v);
+}
+
+function openChatPanel() {
+  $('#chat-panel').classList.remove('hidden');
+  $('#chat-peek').classList.add('hidden');
+  chatUnread = 0;
+  $('#chat-unread').classList.add('hidden');
+  const box = $('#chat-msgs');
+  box.scrollTop = box.scrollHeight;
+  $('#chat-input').focus();
+}
+
+// Briefly surface the newest message next to the chat button when the panel
+// is closed, so new chat never goes unnoticed.
+function peekChatMsg(m) {
+  const peek = $('#chat-peek');
+  peek.replaceChildren(
+    el('span', `chat-name s${(m.seat || 0) % 5}`, m.name || '?'),
+    el('span', 'chat-text', m.text.length > 90 ? `${m.text.slice(0, 90)}…` : m.text),
+  );
+  peek.classList.remove('hidden');
+  clearTimeout(peekTimer);
+  peekTimer = setTimeout(() => peek.classList.add('hidden'), 6000);
 }
 
 // Rendered from an absolute timestamp, so each player sees their own timezone.
@@ -179,6 +203,7 @@ function addChatMsg(m, self) {
     const b = $('#chat-unread');
     b.textContent = chatUnread > 9 ? '9+' : String(chatUnread);
     b.classList.remove('hidden');
+    peekChatMsg(m);
   }
 }
 
@@ -840,7 +865,8 @@ function areaEl(view, p, areaIdx, sess) {
     tag.append(el('span', null, `${s.size} × `), valSpan('', s.value));
     wrap.append(row, tag);
   } else {
-    wrap.append(el('div', 'tset-none', '·'));
+    const note = (p.notes || [])[areaIdx];
+    wrap.append(note ? el('div', 'tset-note', note) : el('div', 'tset-none', '·'));
   }
   if (s && !mine && myTurn) {
     const acts = el('div', 'tset-acts');
@@ -1186,16 +1212,10 @@ function init() {
   });
 
   $('#chat-toggle').addEventListener('click', () => {
-    const p = $('#chat-panel');
-    const opening = p.classList.contains('hidden');
-    p.classList.toggle('hidden');
-    if (opening) {
-      chatUnread = 0;
-      $('#chat-unread').classList.add('hidden');
-      $('#chat-msgs').scrollTop = $('#chat-msgs').scrollHeight;
-      $('#chat-input').focus();
-    }
+    if ($('#chat-panel').classList.contains('hidden')) openChatPanel();
+    else $('#chat-panel').classList.add('hidden');
   });
+  $('#chat-peek').addEventListener('click', openChatPanel);
   $('#chat-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const inp = $('#chat-input');
