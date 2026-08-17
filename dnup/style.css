@@ -735,25 +735,35 @@ a {
 .pc-top.two { font-size: 27px; top: 9px; }
 .pc-bot.two { font-size: 19px; }
 
-/* hand card — two-tone halves: top = active value, bottom = inactive */
+/* hand card — two-tone halves: top = active value, bottom = inactive.
+   The button itself is a stationary, invisible hit slot; all visuals live on
+   .pc-body, which is what lifts. Hover geometry therefore never changes and
+   hover flicker is structurally impossible. */
 
 .pcard {
   position: relative;
   width: 66px;
   height: 96px;
-  border-radius: 10px;
-  border: 3px solid rgba(255, 255, 255, 0.88);
   color: #fff;
   font-weight: 800;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.4);
   flex: none;
   user-select: none;
   touch-action: none;
-  background: linear-gradient(180deg, var(--ca) 0%, var(--ca) 55%, var(--cb) 55%, var(--cb) 100%);
-  transition: transform 0.12s ease, box-shadow 0.15s ease, filter 0.2s ease, margin 0.15s ease;
+  transition: margin 0.15s ease;
 }
 
-.pcard::after {
+.pc-body {
+  position: absolute;
+  inset: 0;
+  display: block;
+  border-radius: 10px;
+  border: 3px solid rgba(255, 255, 255, 0.88);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.4);
+  background: linear-gradient(180deg, var(--ca) 0%, var(--ca) 55%, var(--cb) 55%, var(--cb) 100%);
+  transition: transform 0.12s ease, box-shadow 0.15s ease, filter 0.2s ease;
+}
+
+.pc-body::after {
   content: '';
   position: absolute;
   left: 0;
@@ -785,14 +795,13 @@ a {
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
 }
 
-.pcard.inert {
+.pcard.inert .pc-body {
   filter: saturate(0.75) brightness(0.85);
 }
 
 .pcard.dragging {
   transition: none;
   z-index: 30;
-  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.55);
   cursor: grabbing;
 }
 
@@ -800,12 +809,12 @@ a {
   display: flex;
   justify-content: safe center;
   align-items: flex-end;
-  padding: 16px 12px 6px;
+  padding: 24px 12px 6px;
   width: 100%;
   max-width: 1080px;
   overflow-x: auto;
   overflow-y: visible;
-  min-height: 122px;
+  min-height: 130px;
   margin: 0 auto;
 }
 
@@ -818,35 +827,31 @@ a {
   margin-left: 0;
 }
 
-/* The hover hit area must be stationary or hovering flickers. The card's hit
-   region extends 16px below it; while hovered (lifted 8px) the extension grows
-   by the same 8px, so the region's floor stays exactly where it was at rest
-   and the raised card never slips out from under the cursor. */
-#hand .pcard::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  bottom: -16px;
-}
-
+/* Only the artwork moves — the button (hit target) stays put. */
 #hand .pcard:hover {
-  transform: translateY(-8px);
   z-index: 2;
 }
 
-#hand .pcard:hover::before {
-  bottom: -24px; /* -16px minus the -8px lift */
+#hand .pcard:hover .pc-body {
+  transform: translateY(-8px);
 }
 
 #hand .pcard.sel {
-  transform: translateY(-16px);
-  box-shadow: 0 0 0 3px var(--gold), 0 0 18px rgba(255, 197, 61, 0.55), 0 8px 16px rgba(0, 0, 0, 0.45);
   z-index: 1;
 }
 
-body:not(.my-turn) #hand .pcard {
+#hand .pcard.sel .pc-body {
+  transform: translateY(-16px);
+  box-shadow: 0 0 0 3px var(--gold), 0 0 18px rgba(255, 197, 61, 0.55), 0 8px 16px rgba(0, 0, 0, 0.45);
+}
+
+#hand .pcard.dragging .pc-body {
+  transform: none;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.55);
+  transition: none;
+}
+
+body:not(.my-turn) #hand .pcard .pc-body {
   filter: saturate(0.85) brightness(0.92);
 }
 

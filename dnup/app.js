@@ -563,25 +563,65 @@ function valSpan(cls, v) {
 
 // Two-tone card: top half = active value's color, bottom half = inactive
 // value's color; both numbers upright on the left edge.
+//
+// The <button> is a STATIONARY hit slot — it never moves, so hovering can
+// never un-hover itself. Only the inner .pc-body (the artwork) lifts.
 function handCardEl(card, clickable) {
-  const v = activeVal(card);
-  const iv = inactiveVal(card);
-  const b = el('button', `pcard${sel.has(card.id) ? ' sel' : ''}${clickable ? '' : ' inert'}`);
+  const b = el('button', 'pcard');
   b.type = 'button';
   b.dataset.id = card.id;
-  b.style.setProperty('--ca', `var(--v${v})`);
-  b.style.setProperty('--cb', `var(--v${iv})`);
-  b.setAttribute('aria-label', `card ${v} (${iv} when rotated)`);
-  b.append(valSpan('pc-top', v), valSpan('pc-bot', iv));
+  b.append(el('span', 'pc-body'));
   b.addEventListener('click', () => {
     if (b._dragged) {
       b._dragged = false;
       return;
     }
-    if (clickable) toggleSelect(card);
+    if (b._clickable) toggleSelect(b._card);
   });
   attachDrag(b, card.id);
+  patchCard(b, card, clickable);
   return b;
+}
+
+// Update a card button in place (values change on rotation; sel/inert per turn).
+function patchCard(b, card, clickable) {
+  b._card = card;
+  b._clickable = clickable;
+  const v = activeVal(card);
+  const iv = inactiveVal(card);
+  b.classList.toggle('sel', sel.has(card.id));
+  b.classList.toggle('inert', !clickable);
+  b.setAttribute('aria-label', `card ${v} (${iv} when rotated)`);
+  const body = b.firstChild;
+  body.style.setProperty('--ca', `var(--v${v})`);
+  body.style.setProperty('--cb', `var(--v${iv})`);
+  body.replaceChildren(valSpan('pc-top', v), valSpan('pc-bot', iv));
+}
+
+// Keyed hand rendering: reuse existing card buttons (patched in place) and
+// only move DOM nodes whose order actually changed. A parked cursor keeps its
+// hover through bot broadcasts because the hovered element is not recreated.
+function renderHand(view, clickable) {
+  const hand = $('#hand');
+  const byId = new Map([...hand.children].map((n) => [n.dataset.id, n]));
+  const desired = orderedHand(view.hand).map((c) => {
+    const existing = byId.get(c.id);
+    if (existing) {
+      patchCard(existing, c, clickable);
+      return existing;
+    }
+    return handCardEl(c, clickable);
+  });
+  for (const n of [...hand.children]) if (!desired.includes(n)) n.remove();
+  let cursor = hand.firstChild;
+  for (const n of desired) {
+    if (n === cursor) {
+      cursor = cursor.nextSibling;
+      continue;
+    }
+    hand.insertBefore(n, cursor);
+  }
+  layoutHand();
 }
 
 function miniCardEl(c) {
@@ -820,11 +860,8 @@ function renderGame(view, sess) {
     hint.textContent = myTurn ? 'Tap cards of one value to build a set.' : '';
   }
 
-  // Hand (local arrangement preserved across re-renders).
-  const hand = $('#hand');
-  hand.replaceChildren();
-  for (const c of orderedHand(view.hand)) hand.append(handCardEl(c, myTurn && !pendingMove));
-  layoutHand();
+  // Hand (local arrangement + hover state preserved across re-renders).
+  renderHand(view, myTurn && !pendingMove);
 
   // Feed.
   const feed = $('#feed');

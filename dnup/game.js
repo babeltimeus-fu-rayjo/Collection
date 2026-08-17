@@ -7,11 +7,11 @@
 // (upside down). Rotating a card 180° — "a dnup" — swaps them. Cards taken
 // from the table are ALWAYS rotated as they enter a hand (the golden rule).
 //
-// The exact 40-card pairing manifest is not published in the rulebook, so this
-// deck is a reconstruction honoring everything the rulebook shows: values 1–10,
-// every pair seen in the rulebook examples exists (in the 3-player deck), every
-// value appears exactly 8 times, and the setup groups deal 8 cards per player
-// at every player count. Swap DECK_* below if the official list surfaces.
+// The 40-card manifest below is the real one, transcribed from the physical
+// deck: 26 base cards, plus 4 added at 3+ players, 6 more at 4+, 4 more at 5.
+// All cards are always dealt out, so hands are 13 / 10 / 9 / 8 cards at
+// 2 / 3 / 4 / 5 players. High values are deliberately scarce (three 10s, five
+// 9s in the whole deck) and no card pairs two high values together.
 
 export const PROTO = 2;
 export const MIN_PLAYERS = 2;
@@ -19,11 +19,17 @@ export const MAX_PLAYERS = 5;
 export const TARGET_POINTS = 4; // standard (3-5p): first to 4+ points wins
 export const TARGET_ROUNDS = 2; // duel (2p): first to 2 round wins
 
-// [activeSideA, sideB] value pairs. base: always used; g3/g4/g5: added at 3+/4+/5 players.
-const DECK_BASE = [[1,3],[1,5],[1,9],[2,4],[2,7],[2,9],[3,4],[3,7],[4,8],[4,10],[5,6],[5,7],[6,8],[6,9],[6,10],[8,10]];
-const DECK_G3 = [[1,7],[1,10],[2,5],[2,8],[3,6],[3,9],[4,9],[7,10]];
-const DECK_G4 = [[1,4],[1,6],[2,10],[3,8],[5,9],[5,10],[6,7],[8,9]];
-const DECK_G5 = [[1,8],[2,3],[2,6],[3,10],[4,5],[4,7],[5,8],[7,9]];
+// [sideA, sideB] value pairs. base: always used; g3/g4/g5: added at 3+/4+/5
+// players. Some pairings repeat (e.g. two 1/6 cards) — ids get an index.
+const DECK_BASE = [
+  [1, 5], [1, 6], [1, 6], [1, 7], [1, 7], [1, 8], [1, 9],
+  [2, 4], [2, 4], [2, 5], [2, 5], [2, 6], [2, 9], [2, 10],
+  [3, 4], [3, 5], [3, 6], [3, 7], [3, 8], [3, 9],
+  [4, 6], [4, 7], [4, 8], [5, 7], [5, 8], [6, 7],
+];
+const DECK_G3 = [[1, 10], [2, 8], [3, 6], [4, 5]];
+const DECK_G4 = [[1, 8], [1, 9], [2, 6], [2, 7], [3, 4], [3, 5]];
+const DECK_G5 = [[3, 10], [4, 9], [5, 8], [6, 7]];
 
 export function buildDeck(playerCount) {
   const groups = [
@@ -33,12 +39,13 @@ export function buildDeck(playerCount) {
     [DECK_G5, '5'],
   ].slice(0, playerCount >= 5 ? 4 : playerCount - 1);
   const deck = [];
+  let n = 0;
   for (const [pairs, sym] of groups) {
     for (const [a, b] of pairs) {
-      deck.push({ id: `c${a}-${b}`, a, b, sym, star: a === 1 && b === 5 });
+      deck.push({ id: `c${n++}-${a}-${b}`, a, b, sym, star: a === 1 && b === 5 });
     }
   }
-  return deck; // 16 / 24 / 32 / 40 cards -> always 8 per player
+  return deck; // 26 / 30 / 36 / 40 cards -> hands of 13 / 10 / 9 / 8
 }
 
 export function shuffled(cards) {
