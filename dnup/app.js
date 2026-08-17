@@ -1019,7 +1019,7 @@ function renderGame(view, sess) {
       const t = document.querySelector(`.tset[data-owner="${owner}"][data-area="${view.fx.area}"]`);
       if (t) t.classList.add('pop');
       if (view.fx.bounced) flash('DNUP!', 'dnup');
-    } else if (view.fx.kind === 'take' || view.fx.kind === 'rotate') {
+    } else if (view.fx.kind === 'take') {
       flash('DNUP!', 'dnup');
     } else if (view.fx.kind === 'out') {
       flash(`${who ? who.name : ''} is out — +2!`, 'up');
