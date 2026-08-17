@@ -307,7 +307,7 @@ class HostSession {
       const res = applyMove(this.G, seat, botChoose(this.G, seat));
       if (!res.ok) applyMove(this.G, seat, { kind: 'rotate' }); // safety net
       this.broadcast();
-    }, 750 + Math.random() * 900);
+    }, 1700 + Math.random() * 1100); // deliberate pause so consecutive bot turns read clearly
   }
 
   lobbyMsg() {
@@ -511,6 +511,7 @@ class GuestSession {
 // ---------------------------------------------------------------- lobby UI
 
 function renderLobby(lob, sess) {
+  handOrder = [];
   $('#lobby-code').textContent = lob.code;
   const list = $('#lobby-players');
   list.replaceChildren();
@@ -553,26 +554,116 @@ function renderLobby(lob, sess) {
 
 // ---------------------------------------------------------------- game UI
 
+// 6 and 9 get an underline so rotation talk stays unambiguous.
+function valSpan(cls, v) {
+  const isSix9 = v === 6 || v === 9;
+  return el('span', `${cls}${isSix9 ? ' u69' : ''}`, String(v));
+}
+
+// Two-tone card: top half = active value's color, bottom half = inactive
+// value's color; both numbers upright on the left edge.
 function handCardEl(card, clickable) {
   const v = activeVal(card);
   const iv = inactiveVal(card);
-  const b = el('button', `pcard v${v}${sel.has(card.id) ? ' sel' : ''}`);
+  const b = el('button', `pcard${sel.has(card.id) ? ' sel' : ''}${clickable ? '' : ' inert'}`);
   b.type = 'button';
+  b.dataset.id = card.id;
+  b.style.setProperty('--ca', `var(--v${v})`);
+  b.style.setProperty('--cb', `var(--v${iv})`);
   b.setAttribute('aria-label', `card ${v} (${iv} when rotated)`);
-  b.append(el('span', 'pc-top', String(v)), el('span', 'pc-mini', String(iv)), el('span', 'pc-bot', String(iv)));
-  if (card.star) b.append(el('span', 'pc-star', '★'));
-  else if (card.sym) b.append(el('span', 'pc-sym', card.sym));
-  if (clickable) b.addEventListener('click', () => toggleSelect(card));
-  else b.disabled = true;
+  b.append(valSpan('pc-top', v), valSpan('pc-bot', iv));
+  b.addEventListener('click', () => {
+    if (b._dragged) {
+      b._dragged = false;
+      return;
+    }
+    if (clickable) toggleSelect(card);
+  });
+  attachDrag(b, card.id);
   return b;
 }
 
 function miniCardEl(c) {
   const v = c.flip ? c.b : c.a;
   const iv = c.flip ? c.a : c.b;
-  const d = el('div', `mcard v${v}`);
-  d.append(el('span', 'mc-top', String(v)), el('span', 'mc-bot', String(iv)));
+  const d = el('div', 'mcard');
+  d.style.setProperty('--ca', `var(--v${v})`);
+  d.style.setProperty('--cb', `var(--v${iv})`);
+  d.append(valSpan('mc-top', v), valSpan('mc-bot', iv));
   return d;
+}
+
+// ---- local hand arrangement (visual only — never sent to anyone) ----
+
+let handOrder = [];
+
+function orderedHand(cards) {
+  const pos = new Map(handOrder.map((id, i) => [id, i]));
+  const known = cards.filter((c) => pos.has(c.id)).sort((a, b) => pos.get(a.id) - pos.get(b.id));
+  const fresh = cards.filter((c) => !pos.has(c.id));
+  const ordered = known.concat(fresh);
+  handOrder = ordered.map((c) => c.id);
+  return ordered;
+}
+
+// Overlap cards just enough that the whole hand fits without scrolling,
+// so touch-dragging a card never fights the scroll gesture.
+function layoutHand() {
+  const hand = $('#hand');
+  const cards = [...hand.children];
+  if (cards.length < 2) return;
+  const cw = cards[0].getBoundingClientRect().width || 66;
+  const avail = hand.clientWidth - 28;
+  const need = (cards.length * cw - avail) / (cards.length - 1);
+  const overlap = Math.max(18, Math.min(cw * 0.72, need));
+  cards.forEach((c, i) => {
+    c.style.marginLeft = i ? `${-overlap}px` : '0px';
+  });
+}
+
+function attachDrag(cardEl, cardId) {
+  cardEl.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    cardEl._dragged = false;
+    const startX = e.clientX;
+    let dragging = false;
+    const move = (ev) => {
+      const dx = ev.clientX - startX;
+      if (!dragging && Math.abs(dx) > 12) {
+        dragging = true;
+        cardEl.classList.add('dragging');
+      }
+      if (dragging) cardEl.style.transform = `translate(${dx}px, -14px) scale(1.04)`;
+    };
+    const done = (ev) => {
+      cardEl.removeEventListener('pointermove', move);
+      cardEl.removeEventListener('pointerup', done);
+      cardEl.removeEventListener('pointercancel', done);
+      if (!dragging) return;
+      cardEl._dragged = true;
+      cardEl.classList.remove('dragging');
+      cardEl.style.transform = '';
+      const others = [...document.querySelectorAll('#hand .pcard')].filter((c) => c.dataset.id !== cardId);
+      let idx = others.length;
+      for (let i = 0; i < others.length; i++) {
+        const r = others[i].getBoundingClientRect();
+        if (ev.clientX < r.left + r.width / 2) {
+          idx = i;
+          break;
+        }
+      }
+      const rest = handOrder.filter((id) => id !== cardId);
+      rest.splice(idx, 0, cardId);
+      handOrder = rest;
+      if (lastView) renderGame(lastView, session);
+    };
+    try {
+      cardEl.setPointerCapture(e.pointerId);
+    } catch {}
+    cardEl.addEventListener('pointermove', move);
+    cardEl.addEventListener('pointerup', done);
+    cardEl.addEventListener('pointercancel', done);
+  });
 }
 
 // One play area: the set in it, plus add/take affordances for opponents' sets.
@@ -590,7 +681,9 @@ function areaEl(view, p, areaIdx, sess) {
   if (s) {
     const row = el('div', 'tset-cards');
     for (const c of s.cards) row.append(miniCardEl(c));
-    wrap.append(row, el('div', 'tset-tag', `${s.size} × ${s.value}`));
+    const tag = el('div', 'tset-tag');
+    tag.append(el('span', null, `${s.size} × `), valSpan('', s.value));
+    wrap.append(row, tag);
   } else {
     wrap.append(el('div', 'tset-none', '·'));
   }
@@ -680,7 +773,7 @@ function renderGame(view, sess) {
       status.className = 'status mine';
     } else {
       const cur = view.players.find((p) => p.seat === view.turn.seat);
-      status.textContent = `Waiting for ${cur ? cur.name : '…'}…`;
+      status.textContent = cur && cur.bot ? `${cur.name} is thinking…` : `Waiting for ${cur ? cur.name : '…'}…`;
       status.className = 'status';
     }
   } else {
@@ -726,10 +819,11 @@ function renderGame(view, sess) {
     hint.textContent = myTurn ? 'Tap cards of one value to build a set.' : '';
   }
 
-  // Hand.
+  // Hand (local arrangement preserved across re-renders).
   const hand = $('#hand');
   hand.replaceChildren();
-  for (const c of view.hand) hand.append(handCardEl(c, myTurn && !pendingMove));
+  for (const c of orderedHand(view.hand)) hand.append(handCardEl(c, myTurn && !pendingMove));
+  layoutHand();
 
   // Feed.
   const feed = $('#feed');
@@ -936,6 +1030,10 @@ function init() {
   $('#btn-rules-close').addEventListener('click', () => $('#modal-rules').classList.add('hidden'));
   $('#modal-rules').addEventListener('click', (e) => {
     if (e.target === $('#modal-rules')) $('#modal-rules').classList.add('hidden');
+  });
+
+  window.addEventListener('resize', () => {
+    if (!$('#screen-game').classList.contains('hidden')) layoutHand();
   });
 
   window.addEventListener('beforeunload', () => {
