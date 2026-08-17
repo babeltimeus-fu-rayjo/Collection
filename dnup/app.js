@@ -158,9 +158,15 @@ function chatSetVisible(v) {
   $('#chat').classList.toggle('hidden', !v);
 }
 
+// Rendered from an absolute timestamp, so each player sees their own timezone.
+function fmtChatTime(ts) {
+  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
 function addChatMsg(m, self) {
   const box = $('#chat-msgs');
   const row = el('div', `chat-msg${self ? ' mine' : ''}`);
+  if (m.ts) row.append(el('span', 'chat-time', fmtChatTime(m.ts)));
   row.append(
     el('span', `chat-name s${(m.seat || 0) % 5}`, m.name || '?'),
     el('span', 'chat-text', m.text),
@@ -246,7 +252,7 @@ class HostSession {
   relayChat(seat, name, text) {
     text = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 200);
     if (!text) return;
-    const entry = { seat, name, text };
+    const entry = { seat, name, text, ts: Date.now() };
     this.chatLog.push(entry);
     if (this.chatLog.length > 50) this.chatLog.shift();
     this.sendAll({ t: 'chat', ...entry });

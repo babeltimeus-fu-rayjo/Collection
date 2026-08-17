@@ -1253,6 +1253,14 @@ body:not(.my-turn) #hand .pcard .pc-body {
   word-break: break-word;
 }
 
+.chat-time {
+  float: right;
+  margin-left: 8px;
+  color: #587065;
+  font-size: 10.5px;
+  line-height: 1.7;
+}
+
 .chat-name {
   font-weight: 800;
   margin-right: 6px;
