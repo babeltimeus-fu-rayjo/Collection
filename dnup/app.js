@@ -554,10 +554,11 @@ function renderLobby(lob, sess) {
 
 // ---------------------------------------------------------------- game UI
 
-// 6 and 9 get an underline so rotation talk stays unambiguous.
+// 6 and 9 get an underline so rotation talk stays unambiguous; 10 gets a
+// smaller size class so both digits stay visible on overlapped cards.
 function valSpan(cls, v) {
   const isSix9 = v === 6 || v === 9;
-  return el('span', `${cls}${isSix9 ? ' u69' : ''}`, String(v));
+  return el('span', `${cls}${isSix9 ? ' u69' : ''}${v === 10 ? ' two' : ''}`, String(v));
 }
 
 // Two-tone card: top half = active value's color, bottom half = inactive
