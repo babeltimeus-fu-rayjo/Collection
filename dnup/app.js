@@ -1,4 +1,4 @@
-// app.js — networking + UI for DNUP.
+// app.js — networking + UI for DNUP (official rules — see game.js header).
 //
 // Topology: host-authoritative star over WebRTC data channels.
 //   - The host's browser owns the game state and validates every move.
@@ -9,14 +9,19 @@
 
 import {
   PROTO,
-  GLYPHS,
   MIN_PLAYERS,
   MAX_PLAYERS,
-  newGame,
+  newMatch,
+  dealRound,
   applyMove,
   markDisconnected,
   viewFor,
   botChoose,
+  activeVal,
+  inactiveVal,
+  flatSets,
+  playConflict,
+  addConflict,
 } from './game.js';
 
 // ---------------------------------------------------------------- networking
@@ -37,7 +42,7 @@ const RTC_CONFIG = {
 };
 
 const PEER_OPTS = { debug: 1, config: RTC_CONFIG };
-const ID_PREFIX = 'dnup-v1-'; // namespaces our room ids on the public broker
+const ID_PREFIX = 'dnup-v2-'; // namespaces our room ids on the public broker
 const BOT_NAMES = ['Chip', 'Gizmo', 'Sparky', 'Bolt', 'Widget'];
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I/L
 
@@ -145,23 +150,6 @@ function avatarEl(name, seat, bot = false) {
   return el('div', `av s${seat % 5}`, (name || '?').trim().charAt(0).toUpperCase() || '?');
 }
 
-function cardEl(card, big = false) {
-  const b = el('button', `card c-${card.color}${big ? ' big' : ''}`);
-  b.type = 'button';
-  b.setAttribute('aria-label', `${card.color} ${card.rank}`);
-  b.append(
-    el('span', 'corner tl', String(card.rank)),
-    el('span', 'glyph', GLYPHS[card.color]),
-    el('span', 'rank', String(card.rank)),
-    el('span', 'corner br', String(card.rank)),
-  );
-  return b;
-}
-
-function hideGameover() {
-  $('#gameover').classList.add('hidden');
-}
-
 function confetti() {
   const box = $('#confetti');
   box.replaceChildren();
@@ -180,7 +168,9 @@ function confetti() {
 
 let session = null;
 let pendingMove = false;
+let lastView = null;
 let lastFxSeq = 0;
+const sel = new Set(); // selected hand card ids
 
 class HostSession {
   constructor(peer, code, name) {
@@ -307,17 +297,17 @@ class HostSession {
   scheduleBots() {
     clearTimeout(this.botTimer);
     if (!this.G || this.G.phase !== 'playing') return;
-    const cur = this.roster.find((p) => p.seat === this.G.turn);
+    const cur = this.roster.find((p) => p.seat === this.G.turn.seat);
     if (!cur || !cur.bot) return;
     this.botTimer = setTimeout(() => {
       if (!this.G || this.G.phase !== 'playing') return;
-      const seat = this.G.turn;
+      const seat = this.G.turn.seat;
       const p = this.roster.find((q) => q.seat === seat);
       if (!p || !p.bot) return;
       const res = applyMove(this.G, seat, botChoose(this.G, seat));
-      if (!res.ok) applyMove(this.G, seat, { kind: 'draw' }); // safety net
+      if (!res.ok) applyMove(this.G, seat, { kind: 'rotate' }); // safety net
       this.broadcast();
-    }, 650 + Math.random() * 850);
+    }, 750 + Math.random() * 900);
   }
 
   lobbyMsg() {
@@ -348,7 +338,13 @@ class HostSession {
       toast(`Need at least ${MIN_PLAYERS} players`);
       return;
     }
-    this.G = newGame(this.roster);
+    this.G = newMatch(this.roster);
+    this.broadcast();
+  }
+
+  nextRound() {
+    if (!this.G || this.G.phase !== 'roundEnd') return;
+    dealRound(this.G);
     this.broadcast();
   }
 
@@ -359,15 +355,15 @@ class HostSession {
       toast('Not enough players — back to the lobby');
       return;
     }
-    this.G = newGame(this.roster);
-    hideGameover();
+    this.G = newMatch(this.roster);
+    hideOverlays();
     this.broadcast();
   }
 
   toLobby() {
     this.G = null;
     this.roster = this.roster.filter((p) => p.connected);
-    hideGameover();
+    hideOverlays();
     this.pushLobby();
     showScreen('lobby');
   }
@@ -378,6 +374,8 @@ class HostSession {
         conn.send({ t: 'state', view: viewFor(this.G, seat, this.code) });
       } catch {}
     }
+    pendingMove = false;
+    sel.clear();
     showScreen('game');
     renderGame(viewFor(this.G, 0, this.code), this);
     this.scheduleBots();
@@ -468,17 +466,20 @@ class GuestSession {
         break;
       }
       case 'lobby':
-        hideGameover();
+        hideOverlays();
         renderLobby(msg, this);
         showScreen('lobby');
         break;
       case 'state':
+        pendingMove = false;
+        sel.clear();
         showScreen('game');
         renderGame(msg.view, this);
         break;
       case 'err':
         pendingMove = false;
         toast(msg.error);
+        if (lastView) renderGame(lastView, this);
         break;
     }
   }
@@ -507,7 +508,7 @@ class GuestSession {
   }
 }
 
-// ---------------------------------------------------------------- rendering
+// ---------------------------------------------------------------- lobby UI
 
 function renderLobby(lob, sess) {
   $('#lobby-code').textContent = lob.code;
@@ -519,8 +520,7 @@ function renderLobby(lob, sess) {
     const row = el('li', `seat-row${p ? '' : ' empty'}`);
     if (p) {
       row.append(avatarEl(p.name, p.seat, p.bot));
-      const label = el('span', 'seat-name', p.name);
-      row.append(label);
+      row.append(el('span', 'seat-name', p.name));
       if (p.seat === 0) row.append(el('span', 'chip', 'host'));
       if (p.bot) row.append(el('span', 'chip bot', 'bot'));
       if (p.seat === mySeat) row.append(el('span', 'chip you', 'you'));
@@ -543,19 +543,96 @@ function renderLobby(lob, sess) {
     $('#btn-start').disabled = lob.players.length < lob.min;
     $('#btn-add-bot').disabled = lob.players.length >= lob.max;
   }
+  const n = lob.players.length;
   $('#lobby-hint').textContent = sess.isHost
-    ? lob.players.length < lob.min
+    ? n < lob.min
       ? 'Share the code or link — or add a bot to play right away.'
-      : `${lob.players.length} of ${lob.max} players in. Start whenever you like!`
+      : `${n} of ${lob.max} in — ${n === 2 ? '2-player duel rules' : 'first to 4 points'}. Start whenever!`
     : 'Waiting for the host to start the game…';
 }
 
-function renderGame(view, sess) {
-  pendingMove = false;
-  hideGameover();
-  $('#room-chip').textContent = view.code;
+// ---------------------------------------------------------------- game UI
 
-  const myTurn = view.phase === 'playing' && view.turn === view.you;
+function handCardEl(card, clickable) {
+  const v = activeVal(card);
+  const iv = inactiveVal(card);
+  const b = el('button', `pcard v${v}${sel.has(card.id) ? ' sel' : ''}`);
+  b.type = 'button';
+  b.setAttribute('aria-label', `card ${v} (${iv} when rotated)`);
+  b.append(el('span', 'pc-top', String(v)), el('span', 'pc-mini', String(iv)), el('span', 'pc-bot', String(iv)));
+  if (card.star) b.append(el('span', 'pc-star', '★'));
+  else if (card.sym) b.append(el('span', 'pc-sym', card.sym));
+  if (clickable) b.addEventListener('click', () => toggleSelect(card));
+  else b.disabled = true;
+  return b;
+}
+
+function miniCardEl(c) {
+  const v = c.flip ? c.b : c.a;
+  const iv = c.flip ? c.a : c.b;
+  const d = el('div', `mcard v${v}`);
+  d.append(el('span', 'mc-top', String(v)), el('span', 'mc-bot', String(iv)));
+  return d;
+}
+
+// One play area: the set in it, plus add/take affordances for opponents' sets.
+function areaEl(view, p, areaIdx, sess) {
+  const s = p.areas[areaIdx];
+  const mine = p.seat === view.you;
+  const myTurn = view.phase === 'playing' && view.turn.seat === view.you && !pendingMove;
+  const wrap = el('div', `tset${s ? '' : ' empty'}`);
+  wrap.dataset.owner = p.seat;
+  wrap.dataset.area = areaIdx;
+  if (view.mode === 'duel') {
+    const active = view.phase === 'playing' && view.turn.seat === p.seat && view.turn.area === areaIdx;
+    wrap.append(el('div', `tset-label${active ? ' now' : ''}`, `Area ${areaIdx + 1}`));
+  }
+  if (s) {
+    const row = el('div', 'tset-cards');
+    for (const c of s.cards) row.append(miniCardEl(c));
+    wrap.append(row, el('div', 'tset-tag', `${s.size} × ${s.value}`));
+  } else {
+    wrap.append(el('div', 'tset-none', '·'));
+  }
+  if (s && !mine && myTurn) {
+    const acts = el('div', 'tset-acts');
+    if (sel.size === 1) {
+      const card = view.hand.find((c) => sel.has(c.id));
+      const sets = flatSets(view.players);
+      const ref = sets.find((x) => x.owner === p.seat && x.area === areaIdx);
+      if (card && ref && addConflict(sets, ref, activeVal(card)).ok) {
+        const add = el('button', 'sbtn add', `+ add ${activeVal(card)}`);
+        add.type = 'button';
+        add.addEventListener('click', () => sendMove({ kind: 'add', cardId: card.id, target: { seat: p.seat, area: areaIdx } }));
+        acts.append(add);
+      }
+    }
+    const take = el('button', 'sbtn take', '⤵ take');
+    take.type = 'button';
+    take.title = 'Take this set into your hand (rotated — dnup!)';
+    take.addEventListener('click', () => sendMove({ kind: 'take', target: { seat: p.seat, area: areaIdx } }));
+    acts.append(take);
+    wrap.append(acts);
+  }
+  return wrap;
+}
+
+function scoreBadge(view, p) {
+  if (view.mode === 'duel') {
+    return el('span', 'score', '◆'.repeat(p.rounds) + '◇'.repeat(Math.max(0, view.targetRounds - p.rounds)));
+  }
+  return el('span', 'score', '●'.repeat(Math.min(4, p.points)) + '○'.repeat(Math.max(0, view.targetPoints - p.points)));
+}
+
+function renderGame(view, sess) {
+  lastView = view;
+  $('#room-chip').textContent = view.code;
+  $('#round-chip').textContent =
+    view.mode === 'duel'
+      ? `Round ${view.round} · first to ${view.targetRounds} round wins`
+      : `Round ${view.round} · first to ${view.targetPoints} points`;
+
+  const myTurn = view.phase === 'playing' && view.turn.seat === view.you;
   document.body.classList.toggle('my-turn', myTurn);
 
   // Opponents, in seat order starting clockwise from you.
@@ -566,60 +643,43 @@ function renderGame(view, sess) {
   for (let k = 1; k < seats.length; k++) {
     const p = view.players.find((q) => q.seat === seats[(myIdx + k) % seats.length]);
     if (!p || p.seat === view.you) continue;
-    const box = el('div', `opp${view.phase === 'playing' && view.turn === p.seat ? ' turn' : ''}${p.connected ? '' : ' offline'}`);
-    box.append(avatarEl(p.name, p.seat, p.bot));
+    const turnNow = view.phase === 'playing' && view.turn.seat === p.seat;
+    const box = el('div', `opp${turnNow ? ' turn' : ''}${p.connected ? '' : ' offline'}`);
+    const head = el('div', 'opp-head');
+    head.append(avatarEl(p.name, p.seat, p.bot));
     const meta = el('div', 'opp-meta');
-    meta.append(el('div', 'opp-name', p.name));
-    const backs = el('div', 'backs');
-    for (let i = 0; i < Math.min(p.handCount, 7); i++) backs.append(el('i', 'mini-back'));
-    backs.append(el('span', 'count', String(p.handCount)));
-    meta.append(backs);
-    box.append(meta);
-    if (p.finished) box.append(el('span', 'tag win', 'WINNER'));
-    else if (!p.connected) box.append(el('span', 'tag off', 'OFFLINE'));
-    else if (p.handCount === 1) box.append(el('span', 'tag dnup', 'DNUP!'));
+    const nameRow = el('div', 'opp-name', p.name);
+    if (p.seat === view.starterSeat) nameRow.append(el('span', 'star-badge', '★'));
+    meta.append(nameRow);
+    const info = el('div', 'opp-info');
+    info.append(scoreBadge(view, p));
+    const backs = el('span', 'backs');
+    for (let i = 0; i < Math.min(p.handCount, 8); i++) backs.append(el('i', 'mini-back'));
+    info.append(backs, el('span', 'count', String(p.handCount)));
+    meta.append(info);
+    head.append(meta);
+    if (p.out) head.append(el('span', 'tag win', view.firstOut === p.seat ? 'OUT +2' : 'OUT +1'));
+    else if (!p.connected) head.append(el('span', 'tag off', 'OFFLINE'));
+    else if (p.handCount === 1) head.append(el('span', 'tag dnup', '1 CARD!'));
+    box.append(head);
+    const areasRow = el('div', 'areas');
+    p.areas.forEach((_, i) => areasRow.append(areaEl(view, p, i, sess)));
+    box.append(areasRow);
     opp.append(box);
   }
 
-  // Center table: draw pile, discard, direction.
-  const draw = $('#draw-pile');
-  draw.classList.toggle('can', myTurn);
-  draw.disabled = !myTurn;
-  $('#draw-count').textContent = String(view.drawCount);
-  $('#draw-label').textContent = view.drawCount > 0 ? 'draw' : 'pass';
-
-  const disc = $('#discard');
-  disc.replaceChildren(cardEl(view.top, true));
-
-  const dir = $('#dir');
-  dir.className = `dir ${view.dir}`;
-  $('#dir-arrow').textContent = view.dir === 'up' ? '▲' : '▼';
-  $('#dir-word').textContent = view.dir === 'up' ? 'UP' : 'DOWN';
-
-  // Your hand.
-  const hand = $('#hand');
-  hand.replaceChildren();
-  const legal = new Set(view.legal);
-  for (const c of view.hand) {
-    const b = cardEl(c);
-    const can = myTurn && legal.has(c.id);
-    b.classList.toggle('legal', can);
-    b.disabled = !can;
-    if (can) b.addEventListener('click', () => playCard(c.id));
-    hand.append(b);
-  }
-
-  // Status line.
+  // Center: discard + status.
+  $('#discard-count').textContent = String(view.discardCount);
   const status = $('#status');
   if (view.phase === 'playing') {
     if (myTurn) {
-      const verb = view.drawCount > 0 ? 'draw a card' : 'pass';
-      status.textContent = view.legal.length
-        ? `Your turn — play a glowing card, or ${verb}`
-        : `Your turn — no playable card, ${verb}`;
+      status.textContent =
+        view.mode === 'duel'
+          ? `Your turn — Play Area ${view.turn.area + 1}`
+          : 'Your turn — play a set, add to / take a set, or rotate';
       status.className = 'status mine';
     } else {
-      const cur = view.players.find((p) => p.seat === view.turn);
+      const cur = view.players.find((p) => p.seat === view.turn.seat);
       status.textContent = `Waiting for ${cur ? cur.name : '…'}…`;
       status.className = 'status';
     }
@@ -627,6 +687,49 @@ function renderGame(view, sess) {
     status.textContent = '';
     status.className = 'status';
   }
+
+  // My zone: my area(s) + score.
+  const mine = view.players.find((p) => p.seat === view.you);
+  const zone = $('#my-zone');
+  zone.replaceChildren();
+  if (mine) {
+    const label = el('div', 'zone-label');
+    label.append(el('span', null, view.mode === 'duel' ? 'Your play areas' : 'Your set'));
+    if (view.you === view.starterSeat) label.append(el('span', 'star-badge', '★'));
+    label.append(scoreBadge(view, mine));
+    if (mine.out) label.append(el('span', 'tag win', view.firstOut === view.you ? 'OUT +2' : 'OUT +1'));
+    zone.append(label);
+    const areasRow = el('div', 'areas');
+    mine.areas.forEach((_, i) => areasRow.append(areaEl(view, mine, i, sess)));
+    zone.append(areasRow);
+  }
+
+  // Action bar.
+  const play = $('#btn-play');
+  const rotate = $('#btn-rotate');
+  const hint = $('#sel-hint');
+  rotate.disabled = !myTurn || pendingMove;
+  if (myTurn && sel.size > 0) {
+    const cards = view.hand.filter((c) => sel.has(c.id));
+    const v = activeVal(cards[0]);
+    const verdict = playConflict(flatSets(view.players), cards.length, v);
+    play.disabled = !verdict.ok || pendingMove;
+    play.textContent = `▶ Play ${cards.length} × ${v}`;
+    hint.textContent = verdict.ok
+      ? verdict.bounce
+        ? `Beats the ${verdict.bounce.size}-card set — it bounces back rotated!`
+        : ''
+      : `A ${cards.length}-card set needs a higher value than what's on the table.`;
+  } else {
+    play.disabled = true;
+    play.textContent = '▶ Play set';
+    hint.textContent = myTurn ? 'Tap cards of one value to build a set.' : '';
+  }
+
+  // Hand.
+  const hand = $('#hand');
+  hand.replaceChildren();
+  for (const c of view.hand) hand.append(handCardEl(c, myTurn && !pendingMove));
 
   // Feed.
   const feed = $('#feed');
@@ -637,65 +740,99 @@ function renderGame(view, sess) {
   // One-shot effects.
   if (view.fx && view.fx.seq !== lastFxSeq) {
     lastFxSeq = view.fx.seq;
-    if (view.fx.kind === 'play') {
-      disc.firstChild && disc.firstChild.classList.add('pop');
-      if (view.fx.flipped) {
-        dir.classList.add('pulse');
-        setTimeout(() => dir.classList.remove('pulse'), 700);
-        flash(view.dir === 'up' ? 'GOING UP ▲' : 'GOING DOWN ▼', view.dir);
-      }
-      if (view.fx.dnup) {
-        const who = view.players.find((p) => p.seat === view.fx.seat);
-        const say = () => flash(`${who ? who.name : 'Someone'} calls DNUP!`, 'dnup');
-        view.fx.flipped ? setTimeout(say, 1000) : say();
-      }
+    const who = view.players.find((p) => p.seat === view.fx.seat);
+    if (view.fx.kind === 'play' || view.fx.kind === 'add') {
+      const owner = view.fx.kind === 'add' ? view.fx.targetSeat : view.fx.seat;
+      const t = document.querySelector(`.tset[data-owner="${owner}"][data-area="${view.fx.area}"]`);
+      if (t) t.classList.add('pop');
+      if (view.fx.bounced) flash('DNUP!', 'dnup');
+    } else if (view.fx.kind === 'take' || view.fx.kind === 'rotate') {
+      flash('DNUP!', 'dnup');
+    } else if (view.fx.kind === 'out') {
+      flash(`${who ? who.name : ''} is out — +2!`, 'up');
     }
   }
 
+  // Overlays.
+  if (view.phase === 'roundEnd') showRoundEnd(view, sess);
+  else $('#roundend').classList.add('hidden');
   if (view.phase === 'over') showGameover(view, sess);
+  else $('#gameover').classList.add('hidden');
+}
+
+function standingsList(view, listEl) {
+  listEl.replaceChildren();
+  (view.ranking || []).forEach((r, i) => {
+    const row = el('li', `rank-row${r.seat === view.you ? ' me' : ''}`);
+    const scoreText = view.mode === 'duel' ? `${r.rounds} round${r.rounds === 1 ? '' : 's'}` : `${r.points} pt${r.points === 1 ? '' : 's'}`;
+    row.append(
+      el('span', 'rank-pos', String(i + 1)),
+      avatarEl(r.name, r.seat, r.bot),
+      el('span', 'rank-name', r.name + (r.connected ? '' : ' (left)')),
+      el('span', 'rank-cards', scoreText),
+    );
+    listEl.append(row);
+  });
+}
+
+function showRoundEnd(view, sess) {
+  const m = $('#roundend');
+  m.classList.remove('hidden');
+  const rr = view.roundResult || {};
+  const nameOf = (s) => (view.players.find((p) => p.seat === s) || {}).name || '…';
+  if (rr.kind === 'duel') {
+    $('#re-title').textContent = `${nameOf(rr.winner)} wins round ${view.round}!`;
+    $('#re-sub').textContent = `First to ${view.targetRounds} round wins takes the game.`;
+  } else if (rr.kind === 'stall') {
+    $('#re-title').textContent = 'Round stalled';
+    $('#re-sub').textContent = 'No progress — the cards get redealt.';
+  } else {
+    $('#re-title').textContent = `${nameOf(rr.first)} +2 · ${nameOf(rr.second)} +1`;
+    $('#re-sub').textContent = `First to ${view.targetPoints} points wins the game.`;
+  }
+  standingsList(view, $('#re-rank'));
+  $('#btn-next-round').classList.toggle('hidden', !sess.isHost);
+  $('#re-wait').classList.toggle('hidden', sess.isHost);
 }
 
 function showGameover(view, sess) {
   const m = $('#gameover');
   m.classList.remove('hidden');
   const winner = view.players.find((p) => p.seat === view.winner);
-  $('#go-title').textContent =
-    view.winner == null ? 'Deadlock!' : `${winner ? winner.name : 'Someone'} wins!`;
-  $('#go-sub').textContent = view.forfeit
-    ? 'Everyone else left the game.'
-    : view.stalemate
-      ? 'No moves left anywhere — fewest cards takes it.'
-      : 'First to shed every card.';
-  const list = $('#go-rank');
-  list.replaceChildren();
-  (view.ranking || []).forEach((r, i) => {
-    const row = el('li', `rank-row${r.seat === view.you ? ' me' : ''}`);
-    row.append(
-      el('span', 'rank-pos', String(i + 1)),
-      avatarEl(r.name, r.seat, r.bot),
-      el('span', 'rank-name', r.name + (r.connected ? '' : ' (left)')),
-      el('span', 'rank-cards', r.cardsLeft === 0 ? 'out!' : `${r.cardsLeft} left`),
-    );
-    list.append(row);
-  });
+  $('#go-title').textContent = winner ? `${winner.name} wins the game!` : 'Game over';
+  $('#go-sub').textContent =
+    view.mode === 'duel'
+      ? `${view.targetRounds} round wins — that's the match.`
+      : `First to ${view.targetPoints} points.`;
+  standingsList(view, $('#go-rank'));
   $('#btn-again').classList.toggle('hidden', !sess.isHost);
   $('#btn-golobby').classList.toggle('hidden', !sess.isHost);
   $('#go-wait').classList.toggle('hidden', sess.isHost);
   if (view.winner === view.you) confetti();
 }
 
-// ---------------------------------------------------------------- actions
-
-function playCard(cardId) {
-  if (pendingMove || !session) return;
-  pendingMove = true;
-  session.localMove({ kind: 'play', cardId });
+function hideOverlays() {
+  $('#gameover').classList.add('hidden');
+  $('#roundend').classList.add('hidden');
 }
 
-function drawCard() {
+// ---------------------------------------------------------------- actions
+
+function toggleSelect(card) {
+  if (!lastView || pendingMove) return;
+  const current = lastView.hand.filter((c) => sel.has(c.id));
+  if (current.length && activeVal(current[0]) !== activeVal(card)) sel.clear();
+  if (sel.has(card.id)) sel.delete(card.id);
+  else sel.add(card.id);
+  renderGame(lastView, session);
+}
+
+function sendMove(move) {
   if (pendingMove || !session) return;
   pendingMove = true;
-  session.localMove({ kind: 'draw' });
+  sel.clear();
+  session.localMove(move);
+  if (lastView && !session.isHost) renderGame(lastView, session); // lock UI until state/err
 }
 
 async function createRoom() {
@@ -785,7 +922,12 @@ function init() {
   $('#btn-add-bot').addEventListener('click', () => session && session.isHost && session.addBot());
   $('#btn-again').addEventListener('click', () => session && session.isHost && session.again());
   $('#btn-golobby').addEventListener('click', () => session && session.isHost && session.toLobby());
-  $('#draw-pile').addEventListener('click', drawCard);
+  $('#btn-next-round').addEventListener('click', () => session && session.isHost && session.nextRound());
+  $('#btn-play').addEventListener('click', () => {
+    if (!lastView || !sel.size) return;
+    sendMove({ kind: 'play', cardIds: [...sel] });
+  });
+  $('#btn-rotate').addEventListener('click', () => sendMove({ kind: 'rotate' }));
 
   for (const b of document.querySelectorAll('.btn-leave')) b.addEventListener('click', leave);
   for (const b of document.querySelectorAll('.btn-rules')) {

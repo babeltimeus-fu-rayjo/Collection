@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>DNUP — a down-up card game for 2–5 players</title>
-  <meta name="description" content="DNUP: a fast peer-to-peer card game for 2–5 players. Free, no accounts, no game server — your browsers talk directly over WebRTC.">
+  <title>DNUP — the upside-down card game, online for 2–5 players</title>
+  <meta name="description" content="Play DNUP online with friends or bots: the set-shedding card game where every card has two values and everything you pick up gets turned upside down. Peer-to-peer over WebRTC, no accounts.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='8' y='4' width='84' height='92' rx='14' fill='%23f0a020'/%3E%3Ctext x='50' y='66' font-size='44' font-weight='bold' text-anchor='middle' fill='%23301d00'%3E%E2%87%85%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="style.css">
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -13,8 +13,8 @@
 
   <!-- HOME -->
   <section id="screen-home" class="screen">
-    <h1 class="logo"><span class="dn">DN</span><span class="up">UP</span><span class="arrows"><span class="a-dn">▼</span><span class="a-up">▲</span></span></h1>
-    <p class="tagline">A quick card game for 2–5 players. Shed your hand by riding the direction — down, up, and back again. Peer-to-peer: no accounts, no server, just a room code.</p>
+    <h1 class="logo"><span class="dn">dn</span><span class="up">dn</span><span class="arrows"><span class="a-dn">▼</span><span class="a-up">▲</span></span></h1>
+    <p class="tagline">The upside-down set-shedding game for 2–5 players. Every card has two values — whatever you pick up gets rotated. Play online, peer-to-peer: no accounts, no server, just a room code. Short on friends? Add bots.</p>
     <input id="name-input" class="field" maxlength="16" placeholder="Your name" autocomplete="nickname">
     <button id="btn-create" class="btn primary">Create a room</button>
     <div class="divider">or join one</div>
@@ -24,7 +24,7 @@
     </div>
     <div id="home-status" role="status"></div>
     <button class="btn ghost btn-rules" type="button">How to play</button>
-    <p class="small-print">Multiplayer runs over WebRTC: browsers find each other with Google STUN servers and a free signaling broker, then talk directly. The room lives in the host's browser tab — keep it open!</p>
+    <p class="small-print">An unofficial fan implementation of <a href="https://www.dnup.game" target="_blank" rel="noopener">dnup</a> by Kei Kajino &amp; Gilles-Romain Fonteny (© Asmodee Group). Multiplayer runs over WebRTC: browsers find each other with Google STUN servers and a free signaling broker, then talk directly. The room lives in the host's tab — keep it open!</p>
   </section>
 
   <!-- LOBBY -->
@@ -51,43 +51,60 @@
   <section id="screen-game" class="screen hidden">
     <div class="topbar">
       <span id="room-chip">·····</span>
+      <span id="round-chip">Round 1</span>
       <span class="spacer"></span>
       <button class="btn ghost btn-rules" type="button">Rules</button>
       <button class="btn ghost btn-leave" type="button">Leave</button>
     </div>
     <div id="opponents"></div>
-    <div id="table-center">
-      <button id="draw-pile" type="button" aria-label="Draw a card">
+    <div id="table-mid">
+      <div id="discard-pile" title="Discard pile">
         <span class="stack"></span>
-        <span class="pile-meta"><span id="draw-count">0</span><span id="draw-label">draw</span></span>
-      </button>
-      <div id="discard"></div>
-      <div id="dir" class="dir up" aria-live="polite">
-        <span id="dir-arrow">▲</span>
-        <span id="dir-word">UP</span>
+        <span class="pile-meta"><span id="discard-count">0</span><span class="pile-label">discard</span></span>
       </div>
+      <div id="status" class="status"></div>
     </div>
-    <div id="status" class="status"></div>
-    <div id="feed"></div>
+    <div id="my-zone"></div>
+    <div id="action-bar">
+      <button id="btn-play" class="btn primary slim" type="button" disabled>▶ Play set</button>
+      <button id="btn-rotate" class="btn secondary slim" type="button" disabled>⟲ Rotate hand</button>
+      <span id="sel-hint"></span>
+    </div>
     <div id="hand"></div>
+    <div id="feed"></div>
   </section>
 
   <!-- RULES -->
   <div id="modal-rules" class="modal hidden">
     <div class="panel">
-      <h2>How to play DNUP</h2>
+      <h2>How to play dnup</h2>
       <ol class="rules">
-        <li><b>Goal:</b> be the first to play your last card. Everyone starts with 7.</li>
-        <li>The pile always has a direction: <kbd class="upword">UP ▲</kbd> or <kbd class="dnword">DOWN ▼</kbd>.</li>
-        <li>On your turn, play a card that either <b>follows the direction</b> (higher than the top card when UP, lower when DOWN), <b>matches the color</b>, or <b>matches the number</b>.</li>
-        <li>A <b>number match flips the direction</b> — that's the DNUP move.</li>
-        <li>A <b>10</b> always turns the game <kbd class="dnword">DOWN ▼</kbd>; a <b>1</b> always turns it <kbd class="upword">UP ▲</kbd>.</li>
-        <li>Nothing to play (or holding back)? <b>Draw one card</b> — your turn ends either way. When the draw pile runs dry the discards are reshuffled; if there is truly nothing left to draw, you pass.</li>
-        <li>Down to one card and the table calls <b>DNUP!</b> for you. Play it next turn to win.</li>
-        <li>Deck: numbers 1–10 in four colors (two of each), 80 cards. 2–5 players.</li>
-        <li>Short on people? The host can <b>add bots 🤖</b> in the lobby — any mix of humans and bots up to 5 seats.</li>
+        <li><b>Goal:</b> be the first to empty your hand. Every card has an <b>active value</b> (upright) and an <b>inactive value</b> (upside down).</li>
+        <li><b>The golden rule:</b> any cards you take from the table are rotated 180° as they join your hand — the inactive value becomes active. <i>That's a dnup!</i></li>
+        <li>A <b>set</b> is one or more cards of the same active value. Its <b>size</b> is the card count, its <b>value</b> is that number.</li>
+        <li>All cards are dealt out (8 each). Whoever holds the <b>★ 1/5</b> starts. On your turn: first <b>discard</b> the set in front of you (from your previous turn), then do <b>exactly one</b> action:
+          <b>A — Play a set</b> in front of you. If a same-size set is already on the table, yours must have a <b>higher value</b>, and the beaten set returns to its owner's hand (rotated!).
+          <b>B — Add one card</b> to an opponent's set. It must match the set's value, and if the grown set now ties another set's size, it must beat it (the beaten set bounces back rotated).
+          <b>C — Take an opponent's set</b> into your hand (rotated).
+          <b>D — Rotate your whole hand.</b></li>
+        <li><b>Round end:</b> first player out scores <b>+2</b> and sits out (their last set stays one lap, then is discarded — if it's beaten meanwhile, it's discarded too). Second player out scores <b>+1</b> and ends the round.</li>
+        <li><b>Game end:</b> first to <b>4 points</b> wins immediately.</li>
+        <li><b>2 players:</b> a smaller deck; each player runs <b>two play areas</b> and takes two consecutive turns (one per area) — the ★ holder starts with a single turn at their Area 2. Your sets can clash with your own other area. Emptying your hand wins the round; first to <b>2 round wins</b> takes the match.</li>
+        <li>Setup symbols on cards (3/4/5) mark which player counts use them — handled automatically here. The host can also add <b>bots 🤖</b> in the lobby.</li>
       </ol>
+      <p class="credit">Official rules by Kei Kajino &amp; Gilles-Romain Fonteny — <a href="https://www.dnup.game/rules/rules_en.pdf" target="_blank" rel="noopener">read the full rulebook (PDF)</a>. © Asmodee Group. This is an unofficial fan implementation; the exact card pairings are a reconstruction.</p>
       <button id="btn-rules-close" class="btn secondary" type="button">Got it</button>
+    </div>
+  </div>
+
+  <!-- ROUND END -->
+  <div id="roundend" class="modal hidden">
+    <div class="panel">
+      <h2 id="re-title">Round over</h2>
+      <div id="re-sub"></div>
+      <ol id="re-rank"></ol>
+      <button id="btn-next-round" class="btn primary hidden" type="button">Next round</button>
+      <div id="re-wait">Waiting for the host to deal the next round…</div>
     </div>
   </div>
 

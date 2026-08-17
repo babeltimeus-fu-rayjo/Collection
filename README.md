@@ -2,17 +2,17 @@
 
 Small static web games served from GitHub Pages.
 
-## DNUP
+## dnup
 
 **Play:** https://babeltimeus-fu-rayjo.github.io/Collection/dnup/
 
-DNUP is a "down-up" shedding card game for **2–5 players**:
+An unofficial fan implementation of **dnup** by Kei Kajino & Gilles-Romain Fonteny (© Asmodee Group), following the [official rules](https://www.dnup.game/rules/rules_en.pdf). 2–5 players; the host can fill empty seats with bots.
 
-- Deck: numbers 1–10 in four colors, two copies of each (80 cards). Everyone starts with 7 cards; first to empty their hand wins.
-- The pile always has a direction, **UP** or **DOWN**. Play a card that follows the direction (strictly higher when UP, strictly lower when DOWN), matches the top card's color, or matches its number.
-- A number match **flips the direction**. A 10 always turns the game DOWN, a 1 always turns it UP.
-- Can't play? Draw one card and your turn ends. The discards get reshuffled when the draw pile runs out.
-- **Bots:** the host can add bot players in the lobby (🤖), so any mix of humans and bots can fill the 2–5 seats — including playing solo against up to four bots. Bots run in the host's browser and pick moves with a one-ply lookahead heuristic (`botChoose` in [`dnup/game.js`](dnup/game.js)).
+- Every card has an **active value** (upright) and an **inactive value** (upside down). Anything you take from the table is rotated 180° as it enters your hand — *that's a dnup*.
+- All cards are dealt out (8 each). On your turn you discard the set in front of you, then do exactly one action: **play a set** (must beat any same-size set on the table, which bounces back to its owner rotated), **add one matching card** to an opponent's set, **take an opponent's set** (rotated), or **rotate your whole hand**.
+- First player out scores **+2** (their last set lingers one lap), second out scores **+1** and ends the round. First to **4 points** wins. Two players use the official duel variant: two play areas each, two consecutive turns, first to **2 round wins**.
+- **Deck note:** the rulebook doesn't publish the 40-card pairing manifest, so [`dnup/game.js`](dnup/game.js) uses a reconstruction: all value pairs 1–10 minus five unseen ones, every value appearing exactly 8 times, every card shown in the rulebook examples present, and setup groups (base/3+/4+/5) sized so every player count deals exactly 8 cards. Swap the `DECK_*` arrays if the official list surfaces.
+- **Bots:** the host adds/removes bot players in the lobby (🤖). Bots run in the host's browser and choose among all four actions with simple lookahead heuristics (`botChoose`).
 
 ### How multiplayer works
 
@@ -34,4 +34,4 @@ python3 -m http.server 4179
 
 then open `http://localhost:4179/dnup/`. Multiplayer works between two tabs.
 
-Code layout: [`dnup/game.js`](dnup/game.js) is the pure rules engine (host-authoritative, also used by guests to highlight legal cards); [`dnup/app.js`](dnup/app.js) is networking (PeerJS) + UI; no build step, no dependencies beyond the PeerJS CDN script.
+Code layout: [`dnup/game.js`](dnup/game.js) is the pure rules engine (deck manifest, legality helpers shared with clients, bot brain); [`dnup/app.js`](dnup/app.js) is networking (PeerJS) + UI; no build step, no dependencies beyond the PeerJS CDN script. Engine invariants are fuzz-tested (random-legal and all-bot playouts across every player count).
