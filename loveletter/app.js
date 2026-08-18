@@ -959,6 +959,33 @@ function renderCardRef(playerCount) {
   }
 }
 
+// Card tracker: one chip per card type in the deck, with a filled pip for
+// every copy already face up (discard piles plus the cards removed at setup)
+// and a hollow pip for every copy still unaccounted for.
+function renderTracker(view) {
+  const counts = deckCounts(view.players.length);
+  const seen = {};
+  const bump = (key) => {
+    seen[key] = (seen[key] || 0) + 1;
+  };
+  for (const p of view.players) for (const key of p.discard) bump(key);
+  for (const key of view.faceUp) bump(key);
+
+  const box = $('#tracker');
+  box.replaceChildren(el('span', 'trk-label', 'played'));
+  for (const key of Object.keys(counts).sort((x, y) => cardValue(x) - cardValue(y) || cardName(x).localeCompare(cardName(y)))) {
+    const total = counts[key];
+    const played = Math.min(seen[key] || 0, total);
+    const chip = el('div', `trk${played === total ? ' spent' : ''}`);
+    chip.title = `${cardName(key)} — ${played} of ${total} accounted for`;
+    chip.append(el('span', `trk-val v${cardValue(key)}`, String(cardValue(key))));
+    const pips = el('span', 'trk-pips');
+    for (let i = 0; i < total; i++) pips.append(el('i', i < played ? 'pip on' : 'pip'));
+    chip.append(pips);
+    box.append(chip);
+  }
+}
+
 function renderGame(view, sess) {
   lastView = view;
   chatSetVisible(true);
@@ -1008,6 +1035,8 @@ function renderGame(view, sess) {
     status.textContent = cur && cur.bot ? `${cur.name} is thinking…` : `Waiting for ${cur ? cur.name : '…'}…`;
     status.className = 'status';
   }
+
+  renderTracker(view);
 
   // what you have learned this round
   const info = $('#intel');

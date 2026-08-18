@@ -751,6 +751,81 @@ a {
   to { text-shadow: 0 0 16px rgba(242, 193, 78, 0.6); }
 }
 
+/* card tracker: what has been seen of each card type */
+
+#tracker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  max-width: 780px;
+}
+
+.trk-label {
+  color: var(--dim);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  align-self: center;
+  margin-right: 2px;
+}
+
+.trk {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 9px 3px 4px;
+}
+
+.trk.spent {
+  opacity: 0.45;
+}
+
+.trk-val {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 900;
+  color: #fff;
+  flex: none;
+}
+
+.trk-val.v0 { background: var(--c0); }
+.trk-val.v1 { background: var(--c1); }
+.trk-val.v2 { background: var(--c2); }
+.trk-val.v3 { background: var(--c3); }
+.trk-val.v4 { background: var(--c4); }
+.trk-val.v5 { background: var(--c5); }
+.trk-val.v6 { background: var(--c6); }
+.trk-val.v7 { background: var(--c7); }
+.trk-val.v8 { background: var(--c8); }
+.trk-val.v9 { background: var(--c9); }
+
+.trk-pips {
+  display: flex;
+  gap: 3px;
+}
+
+.pip {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  display: block;
+}
+
+.pip.on {
+  background: var(--gold);
+  border-color: var(--gold);
+}
+
 /* intel chips */
 
 #intel {
