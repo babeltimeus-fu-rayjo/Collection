@@ -23,6 +23,27 @@
   --c7: #8257e6;
   --c8: #d6409f;
   --c9: #e8a33d;
+
+  /* Most numbers are shared by two characters, so each card gets its own
+     shade of that number's hue: the pair reads as one family but never as
+     the same card. */
+  --k-assassin: #5b6675;
+  --k-jester: #97a6bb;
+  --k-guard: #e5484d;
+  --k-priest: #ef7d21;
+  --k-cardinal: #a84a15;
+  --k-baron: #d4a017;
+  --k-baroness: #8a6407;
+  --k-handmaid: #57a83c;
+  --k-sycophant: #276b28;
+  --k-prince: #14b0a0;
+  --k-count: #0a6a60;
+  --k-king: #3b7fe0;
+  --k-constable: #234f8e;
+  --k-countess: #8f63ee;
+  --k-dowager: #55309f;
+  --k-princess: #d6409f;
+  --k-bishop: #e8a33d;
 }
 
 * {
@@ -588,18 +609,28 @@ a {
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
   flex: none;
   overflow: hidden;
+  background-color: var(--kc, #5b6675);
+  background-image: linear-gradient(165deg, rgba(255, 255, 255, 0.22), rgba(0, 0, 0, 0.1));
 }
 
-.card.v0 { background: linear-gradient(165deg, #7d8797, var(--c0)); }
-.card.v1 { background: linear-gradient(165deg, #ef6a6e, var(--c1)); }
-.card.v2 { background: linear-gradient(165deg, #f7943f, var(--c2)); }
-.card.v3 { background: linear-gradient(165deg, #e0b23a, var(--c3)); }
-.card.v4 { background: linear-gradient(165deg, #6bb852, var(--c4)); }
-.card.v5 { background: linear-gradient(165deg, #2ec0af, var(--c5)); }
-.card.v6 { background: linear-gradient(165deg, #5b98ec, var(--c6)); }
-.card.v7 { background: linear-gradient(165deg, #9a75ef, var(--c7)); }
-.card.v8 { background: linear-gradient(165deg, #e660b3, var(--c8)); }
-.card.v9 { background: linear-gradient(165deg, #f2ba5c, var(--c9)); }
+.k-assassin { --kc: var(--k-assassin); }
+.k-jester { --kc: var(--k-jester); }
+.k-guard { --kc: var(--k-guard); }
+.k-priest { --kc: var(--k-priest); }
+.k-cardinal { --kc: var(--k-cardinal); }
+.k-baron { --kc: var(--k-baron); }
+.k-baroness { --kc: var(--k-baroness); }
+.k-handmaid { --kc: var(--k-handmaid); }
+.k-sycophant { --kc: var(--k-sycophant); }
+.k-prince { --kc: var(--k-prince); }
+.k-count { --kc: var(--k-count); }
+.k-king { --kc: var(--k-king); }
+.k-constable { --kc: var(--k-constable); }
+.k-countess { --kc: var(--k-countess); }
+.k-dowager { --kc: var(--k-dowager); }
+.k-princess { --kc: var(--k-princess); }
+.k-bishop { --kc: var(--k-bishop); }
+
 
 .card.mini {
   width: 34px;
@@ -795,18 +826,9 @@ a {
   font-weight: 900;
   color: #fff;
   flex: none;
+  background: var(--kc, #5b6675);
 }
 
-.trk-val.v0 { background: var(--c0); }
-.trk-val.v1 { background: var(--c1); }
-.trk-val.v2 { background: var(--c2); }
-.trk-val.v3 { background: var(--c3); }
-.trk-val.v4 { background: var(--c4); }
-.trk-val.v5 { background: var(--c5); }
-.trk-val.v6 { background: var(--c6); }
-.trk-val.v7 { background: var(--c7); }
-.trk-val.v8 { background: var(--c8); }
-.trk-val.v9 { background: var(--c9); }
 
 .trk-pips {
   display: flex;

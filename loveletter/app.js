@@ -670,7 +670,7 @@ function resetChoice() {
 }
 
 function cardEl(key, size = '', copies = null) {
-  const c = el('div', `card v${cardValue(key)}${size ? ` ${size}` : ''}`);
+  const c = el('div', `card k-${key} v${cardValue(key)}${size ? ` ${size}` : ''}`);
   c.append(el('span', 'card-val', String(cardValue(key))), el('span', 'card-name', cardName(key)));
   if (copies != null) {
     const badge = el('span', 'card-count', `\u00d7${copies}`);
@@ -978,7 +978,7 @@ function renderTracker(view) {
     const played = Math.min(seen[key] || 0, total);
     const chip = el('div', `trk${played === total ? ' spent' : ''}`);
     chip.title = `${cardName(key)} — ${played} of ${total} accounted for`;
-    chip.append(el('span', `trk-val v${cardValue(key)}`, String(cardValue(key))));
+    chip.append(el('span', `trk-val k-${key}`, String(cardValue(key))));
     const pips = el('span', 'trk-pips');
     for (let i = 0; i < total; i++) pips.append(el('i', i < played ? 'pip on' : 'pip'));
     chip.append(pips);
