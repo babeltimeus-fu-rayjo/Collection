@@ -1208,9 +1208,11 @@ function settleOverlay(sel, wanted, show) {
   if (!wanted) {
     if (pending) clearTimeout(pending);
     overlayTimers.delete(sel);
+    overlayPending.delete(sel);
     node.classList.add('hidden');
     return;
   }
+  overlayPending.set(sel, show);
   if (!node.classList.contains('hidden')) {
     show(); // already up: refresh in place
     return;
@@ -1220,14 +1222,34 @@ function settleOverlay(sel, wanted, show) {
     sel,
     setTimeout(() => {
       overlayTimers.delete(sel);
+      overlayPending.delete(sel);
       show();
     }, OVERLAY_DELAY),
   );
 }
 
+// A hidden tab throttles timers, so reveal any pending score screen as soon as
+// the player looks back at the game.
+const overlayPending = new Map();
+
+function flushOverlays() {
+  for (const [sel, show] of overlayPending) {
+    const t = overlayTimers.get(sel);
+    if (t) clearTimeout(t);
+    overlayTimers.delete(sel);
+    show();
+  }
+  overlayPending.clear();
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) flushOverlays();
+});
+
 function hideOverlays() {
   for (const t of overlayTimers.values()) clearTimeout(t);
   overlayTimers.clear();
+  overlayPending.clear();
   $('#gameover').classList.add('hidden');
   $('#roundend').classList.add('hidden');
 }
