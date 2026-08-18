@@ -198,6 +198,7 @@ function addChatMsg(m, self) {
   box.append(row);
   while (box.children.length > 100) box.firstChild.remove();
   box.scrollTop = box.scrollHeight;
+  showChatBubble(m);
   if ($('#chat-panel').classList.contains('hidden') && !self) {
     chatUnread++;
     const b = $('#chat-unread');
@@ -205,6 +206,42 @@ function addChatMsg(m, self) {
     b.classList.remove('hidden');
     peekChatMsg(m);
   }
+}
+
+// Chat also floats briefly over the sender's seat at the table, so you notice
+// who said what without opening the panel. Kept in a map (not the DOM) so
+// bubbles survive the re-render that every state update triggers.
+const chatBubbles = new Map(); // seat -> { text, timer }
+
+function paintChatBubbles() {
+  for (const n of document.querySelectorAll('.chat-bubble')) n.remove();
+  for (const [seat, b] of chatBubbles) {
+    const host =
+      document.querySelector(`.opp[data-seat="${seat}"]`) ||
+      document.querySelector(`#my-zone[data-seat="${seat}"]`);
+    if (!host) continue;
+    host.append(el('div', 'chat-bubble', b.text));
+  }
+}
+
+function showChatBubble(m) {
+  if (m.seat == null) return;
+  const prev = chatBubbles.get(m.seat);
+  if (prev) clearTimeout(prev.timer);
+  chatBubbles.set(m.seat, {
+    text: m.text.length > 110 ? `${m.text.slice(0, 110)}\u2026` : m.text,
+    timer: setTimeout(() => {
+      chatBubbles.delete(m.seat);
+      paintChatBubbles();
+    }, 6500),
+  });
+  paintChatBubbles();
+}
+
+function clearChatBubbles() {
+  for (const b of chatBubbles.values()) clearTimeout(b.timer);
+  chatBubbles.clear();
+  paintChatBubbles();
 }
 
 function confetti() {
@@ -608,8 +645,9 @@ class GuestSession {
 function renderLobby(lob, sess) {
   handOrder = [];
   logLines = [];
-  logMid = null;
+  logKey = null;
   $('#feed').replaceChildren();
+  clearChatBubbles();
   chatSetVisible(true);
   $('#lobby-code').textContent = lob.code;
   const list = $('#lobby-players');
@@ -923,6 +961,7 @@ function renderGame(view, sess) {
     if (!p || p.seat === view.you) continue;
     const turnNow = view.phase === 'playing' && view.turn.seat === p.seat;
     const box = el('div', `opp${turnNow ? ' turn' : ''}${p.connected ? '' : ' offline'}`);
+    box.dataset.seat = p.seat;
     const head = el('div', 'opp-head');
     head.append(avatarEl(p.name, p.seat, p.bot));
     const meta = el('div', 'opp-meta');
@@ -955,8 +994,6 @@ function renderGame(view, sess) {
     opp.append(box);
   }
 
-  // Center: discard + status.
-  $('#discard-count').textContent = String(view.discardCount);
   const status = $('#status');
   if (view.phase === 'playing') {
     if (myTurn) {
@@ -978,6 +1015,7 @@ function renderGame(view, sess) {
   // My zone: my area(s) + score.
   const mine = view.players.find((p) => p.seat === view.you);
   const zone = $('#my-zone');
+  zone.dataset.seat = view.you;
   zone.replaceChildren();
   if (mine) {
     const label = el('div', 'zone-label');
@@ -1017,31 +1055,28 @@ function renderGame(view, sess) {
   renderHand(view, myTurn && !pendingMove);
 
   renderLog(view);
+  paintChatBubbles();
 
   // One-shot effects.
   if (view.fx && view.fx.seq !== lastFxSeq) {
     lastFxSeq = view.fx.seq;
     const who = view.players.find((p) => p.seat === view.fx.seat);
+    // DNUP! marks one thing only: a set flying back into its owner's hand.
+    if (view.fx.bouncedSeat != null) spawnDnupPop(view.fx.bouncedSeat, view.fx.bouncedArea || 0);
     if (view.fx.kind === 'play' || view.fx.kind === 'add') {
       const owner = view.fx.kind === 'add' ? view.fx.targetSeat : view.fx.seat;
       const t = document.querySelector(`.tset[data-owner="${owner}"][data-area="${view.fx.area}"]`);
       if (t) t.classList.add('pop');
-      if (view.fx.bounced) {
-        if (view.fx.bouncedSeat != null) spawnDnupPop(view.fx.bouncedSeat, view.fx.bouncedArea || 0);
-        else flash('DNUP!', 'dnup');
-      }
-    } else if (view.fx.kind === 'take') {
-      flash('DNUP!', 'dnup');
     } else if (view.fx.kind === 'out') {
       flash(`${who ? who.name : ''} is out — +2!`, 'up');
     }
   }
 
   // Overlays.
-  if (view.phase === 'roundEnd') showRoundEnd(view, sess);
-  else $('#roundend').classList.add('hidden');
-  if (view.phase === 'over') showGameover(view, sess);
-  else $('#gameover').classList.add('hidden');
+  // Let the winning play sit on screen for a beat before the score screen
+  // covers the table.
+  settleOverlay('#roundend', view.phase === 'roundEnd', () => showRoundEnd(view, sess));
+  settleOverlay('#gameover', view.phase === 'over', () => showGameover(view, sess));
 }
 
 // Points gained in the round that just ended, per seat.
@@ -1064,9 +1099,15 @@ function standingsList(view, listEl) {
   listEl.replaceChildren();
   const deltas = scoreDeltas(view);
   const unit = (n) => (view.mode === 'duel' ? `round${n === 1 ? '' : 's'}` : `pt${n === 1 ? '' : 's'}`);
+  // Equal scores share a rank (1, 2, 2, 4 …).
+  let prevScore = null;
+  let prevRank = 0;
   (view.ranking || []).forEach((r, i) => {
     const row = el('li', `rank-row${r.seat === view.you ? ' me' : ''}`);
     const total = view.mode === 'duel' ? r.rounds : r.points;
+    const rank = total === prevScore ? prevRank : i + 1;
+    prevScore = total;
+    prevRank = rank;
     const delta = deltas[r.seat] || 0;
     const score = el('span', 'rank-cards');
     if (delta > 0) {
@@ -1079,7 +1120,7 @@ function standingsList(view, listEl) {
       score.textContent = `${total} ${unit(total)}`;
     }
     row.append(
-      el('span', 'rank-pos', String(i + 1)),
+      el('span', 'rank-pos', String(rank)),
       avatarEl(r.name, r.seat, r.bot),
       el('span', 'rank-name', r.name + (r.connected ? '' : ' (left)')),
       score,
@@ -1092,12 +1133,15 @@ function standingsList(view, listEl) {
 // scroll back through. Auto-scrolls only when already parked at the bottom,
 // so reading older lines isn't interrupted by incoming ones.
 let logLines = [];
-let logMid = null;
+let logKey = null;
 
 function renderLog(view) {
-  if (view.mid !== logMid) {
-    logMid = view.mid;
+  // the log is keyed per round, so a new deal starts from an empty panel
+  const key = `${view.mid}:${view.round}`;
+  if (key !== logKey) {
+    logKey = key;
     logLines = [];
+    $('#feed').replaceChildren();
   }
   const have = new Set(logLines.map((l) => l.n));
   let added = false;
@@ -1153,7 +1197,37 @@ function showGameover(view, sess) {
   if (view.winner === view.you) confetti();
 }
 
+// Overlays wait ~1.8s the first time they appear so the last play is visible;
+// once shown they update instantly.
+const OVERLAY_DELAY = 1800;
+const overlayTimers = new Map();
+
+function settleOverlay(sel, wanted, show) {
+  const node = $(sel);
+  const pending = overlayTimers.get(sel);
+  if (!wanted) {
+    if (pending) clearTimeout(pending);
+    overlayTimers.delete(sel);
+    node.classList.add('hidden');
+    return;
+  }
+  if (!node.classList.contains('hidden')) {
+    show(); // already up: refresh in place
+    return;
+  }
+  if (pending) return; // a reveal is already on its way
+  overlayTimers.set(
+    sel,
+    setTimeout(() => {
+      overlayTimers.delete(sel);
+      show();
+    }, OVERLAY_DELAY),
+  );
+}
+
 function hideOverlays() {
+  for (const t of overlayTimers.values()) clearTimeout(t);
+  overlayTimers.clear();
   $('#gameover').classList.add('hidden');
   $('#roundend').classList.add('hidden');
 }
@@ -1161,10 +1235,7 @@ function hideOverlays() {
 // A small DNUP! burst anchored on the play area whose cards just bounced.
 function spawnDnupPop(seat, areaIdx) {
   const t = document.querySelector(`.tset[data-owner="${seat}"][data-area="${areaIdx}"]`);
-  if (!t) {
-    flash('DNUP!', 'dnup');
-    return;
-  }
+  if (!t) return;
   const pop = el('div', 'dnup-pop', 'DNUP!');
   t.append(pop);
   setTimeout(() => pop.remove(), 1400);

@@ -460,9 +460,16 @@ a {
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
+/* Badges hang over the box edge, so keep every box above the turn glow that a
+   neighbouring box paints outside itself. */
+.opp {
+  z-index: 2;
+}
+
 .opp.turn {
   border-color: rgba(255, 197, 61, 0.8);
   box-shadow: 0 0 0 2px rgba(255, 197, 61, 0.35), 0 0 24px rgba(255, 197, 61, 0.25);
+  z-index: 1;
 }
 
 .opp.offline {
@@ -534,6 +541,7 @@ a {
   position: absolute;
   top: -9px;
   right: 10px;
+  z-index: 4;
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -923,45 +931,6 @@ body:not(.my-turn) #hand .pcard .pc-body {
   gap: 22px;
   width: 100%;
   max-width: 900px;
-}
-
-#discard-pile {
-  position: relative;
-  width: 56px;
-  height: 78px;
-  flex: none;
-}
-
-#discard-pile .stack {
-  position: absolute;
-  inset: 0;
-  border-radius: 9px;
-  background: repeating-linear-gradient(135deg, #1c2c50 0 6px, #26386a 6px 12px);
-  border: 2px solid #3c5290;
-  box-shadow: -3px 3px 0 #142142, -6px 6px 0 #101a35;
-}
-
-#discard-pile .pile-meta {
-  position: absolute;
-  left: 50%;
-  bottom: -20px;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 5px;
-  align-items: baseline;
-  white-space: nowrap;
-}
-
-#discard-count {
-  font-weight: 800;
-  font-size: 13px;
-}
-
-.pile-label {
-  color: var(--dim);
-  font-size: 10.5px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
 }
 
 .status {
@@ -1490,5 +1459,52 @@ body:not(.my-turn) #hand .pcard .pc-body {
 
   #round-chip {
     display: none;
+  }
+}
+
+/* chat bubble floating over a player's seat */
+#my-zone {
+  position: relative;
+}
+
+.chat-bubble {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 9px);
+  transform: translateX(-50%);
+  max-width: 210px;
+  width: max-content;
+  background: linear-gradient(180deg, #fff5d6, #ffe9a8);
+  color: #3a2500;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+  padding: 7px 11px;
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+  z-index: 9;
+  pointer-events: none;
+  animation: bubbleIn 0.22s ease;
+}
+
+.chat-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: #ffe9a8;
+}
+
+@keyframes bubbleIn {
+  from {
+    transform: translateX(-50%) translateY(5px) scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) translateY(0) scale(1);
+    opacity: 1;
   }
 }

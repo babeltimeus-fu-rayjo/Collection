@@ -159,6 +159,8 @@ export function newMatch(roster) {
 export function dealRound(G) {
   G.round++;
   G.phase = 'playing';
+  G.feed = []; // each round starts with a clean log
+  G.feedSeq = 0;
   G.firstOut = null;
   G.secondOut = null;
   G.roundResult = null;
@@ -244,16 +246,17 @@ function bounceSet(G, ref) {
   if (owner.out || !owner.connected) {
     G.discardCount += s.cards.length;
     note(G, `${owner.name}'s ${setLabel(s)} is beaten and discarded.`);
-  } else {
-    for (const c of s.cards) {
-      c.flip = !c.flip;
-      owner.hand.push(c);
-    }
-    note(G, `${owner.name} takes back ${setLabel(s)} rotated — dnup!`);
+    return false;
   }
+  for (const c of s.cards) {
+    c.flip = !c.flip;
+    owner.hand.push(c);
+  }
+  note(G, `${owner.name} takes back ${setLabel(s)} rotated — dnup!`);
+  return true;
 }
 
-function afterAction(G, p) {
+function afterAction(G, p, carry = {}) {
   if (p.hand.length === 0) {
     if (G.mode === 'duel') {
       p.rounds += 1;
@@ -273,7 +276,7 @@ function afterAction(G, p) {
       p.out = true;
       p.points += 2;
       note(G, `${p.name} goes out first — +2 points!`);
-      G.fx = { seq: ++G.fxSeq, kind: 'out', seat: p.seat };
+      G.fx = { seq: ++G.fxSeq, kind: 'out', seat: p.seat, ...carry };
       if (p.points >= TARGET_POINTS) {
         G.phase = 'over';
         G.winner = p.seat;
@@ -335,7 +338,7 @@ export function applyMove(G, seat, move) {
       return { ok: false, error: `A set of ${cards.length} needs a value above ${sets.find((s) => s.size === cards.length).value}.` };
     }
     note(G, `${p.name} plays ${setLabel({ value: v, size: cards.length })}.`);
-    if (verdict.bounce) bounceSet(G, verdict.bounce);
+    const returned = verdict.bounce ? bounceSet(G, verdict.bounce) : false;
     p.hand = p.hand.filter((c) => !ids.includes(c.id));
     p.areas[areaIdx] = { value: v, cards };
     G.fx = {
@@ -343,11 +346,14 @@ export function applyMove(G, seat, move) {
       kind: 'play',
       seat,
       area: areaIdx,
-      bounced: !!verdict.bounce,
-      bouncedSeat: verdict.bounce ? verdict.bounce.owner : null,
-      bouncedArea: verdict.bounce ? verdict.bounce.area : null,
+      bouncedSeat: returned ? verdict.bounce.owner : null,
+      bouncedArea: returned ? verdict.bounce.area : null,
     };
-    afterAction(G, p);
+    const bounceCarry = {
+      bouncedSeat: returned ? verdict.bounce.owner : null,
+      bouncedArea: returned ? verdict.bounce.area : null,
+    };
+    afterAction(G, p, bounceCarry);
     return { ok: true };
   }
 
@@ -371,7 +377,7 @@ export function applyMove(G, seat, move) {
     }
     note(G, `${p.name} adds a ${activeVal(card)} to ${tp.name}'s set.`);
     p.notes[areaIdx] = `added a ${activeVal(card)} to ${tp.name}`;
-    if (verdict.bounce) bounceSet(G, verdict.bounce);
+    const returned = verdict.bounce ? bounceSet(G, verdict.bounce) : false;
     p.hand = p.hand.filter((c) => c.id !== card.id);
     target.cards.push(card);
     G.fx = {
@@ -380,11 +386,13 @@ export function applyMove(G, seat, move) {
       seat,
       targetSeat: t.seat,
       area: t.area,
-      bounced: !!verdict.bounce,
-      bouncedSeat: verdict.bounce ? verdict.bounce.owner : null,
-      bouncedArea: verdict.bounce ? verdict.bounce.area : null,
+      bouncedSeat: returned ? verdict.bounce.owner : null,
+      bouncedArea: returned ? verdict.bounce.area : null,
     };
-    afterAction(G, p);
+    afterAction(G, p, {
+      bouncedSeat: returned ? verdict.bounce.owner : null,
+      bouncedArea: returned ? verdict.bounce.area : null,
+    });
     return { ok: true };
   }
 
