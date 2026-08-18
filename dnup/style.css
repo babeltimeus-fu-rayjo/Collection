@@ -575,6 +575,7 @@ a {
 }
 
 .tset {
+  position: relative;
   min-width: 86px;
   min-height: 74px;
   border: 1.5px dashed rgba(255, 255, 255, 0.18);
@@ -677,6 +678,40 @@ a {
 
 .tset.pop {
   animation: pop 0.3s ease;
+}
+
+.dnup-pop {
+  position: absolute;
+  left: 50%;
+  top: -8px;
+  color: var(--gold);
+  font-size: 19px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7), 0 0 18px rgba(255, 197, 61, 0.5);
+  pointer-events: none;
+  z-index: 6;
+  animation: dnupPop 1.4s ease forwards;
+}
+
+@keyframes dnupPop {
+  0% {
+    transform: translate(-50%, 6px) scale(0.4) rotate(-160deg);
+    opacity: 0;
+  }
+  30% {
+    transform: translate(-50%, -6px) scale(1.2) rotate(0deg);
+    opacity: 1;
+  }
+  75% {
+    transform: translate(-50%, -14px) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -26px) scale(0.95);
+    opacity: 0;
+  }
 }
 
 @keyframes pop {
@@ -1173,6 +1208,11 @@ body:not(.my-turn) #hand .pcard .pc-body {
   color: var(--dim);
   font-size: 13px;
   font-weight: 700;
+}
+
+.rank-cards .delta {
+  color: var(--gold);
+  font-weight: 900;
 }
 
 #go-wait,

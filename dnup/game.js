@@ -334,7 +334,15 @@ export function applyMove(G, seat, move) {
     if (verdict.bounce) bounceSet(G, verdict.bounce);
     p.hand = p.hand.filter((c) => !ids.includes(c.id));
     p.areas[areaIdx] = { value: v, cards };
-    G.fx = { seq: ++G.fxSeq, kind: 'play', seat, area: areaIdx, bounced: !!verdict.bounce };
+    G.fx = {
+      seq: ++G.fxSeq,
+      kind: 'play',
+      seat,
+      area: areaIdx,
+      bounced: !!verdict.bounce,
+      bouncedSeat: verdict.bounce ? verdict.bounce.owner : null,
+      bouncedArea: verdict.bounce ? verdict.bounce.area : null,
+    };
     afterAction(G, p);
     return { ok: true };
   }
@@ -362,7 +370,16 @@ export function applyMove(G, seat, move) {
     if (verdict.bounce) bounceSet(G, verdict.bounce);
     p.hand = p.hand.filter((c) => c.id !== card.id);
     target.cards.push(card);
-    G.fx = { seq: ++G.fxSeq, kind: 'add', seat, targetSeat: t.seat, area: t.area, bounced: !!verdict.bounce };
+    G.fx = {
+      seq: ++G.fxSeq,
+      kind: 'add',
+      seat,
+      targetSeat: t.seat,
+      area: t.area,
+      bounced: !!verdict.bounce,
+      bouncedSeat: verdict.bounce ? verdict.bounce.owner : null,
+      bouncedArea: verdict.bounce ? verdict.bounce.area : null,
+    };
     afterAction(G, p);
     return { ok: true };
   }

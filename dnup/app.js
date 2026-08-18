@@ -1018,7 +1018,10 @@ function renderGame(view, sess) {
       const owner = view.fx.kind === 'add' ? view.fx.targetSeat : view.fx.seat;
       const t = document.querySelector(`.tset[data-owner="${owner}"][data-area="${view.fx.area}"]`);
       if (t) t.classList.add('pop');
-      if (view.fx.bounced) flash('DNUP!', 'dnup');
+      if (view.fx.bounced) {
+        if (view.fx.bouncedSeat != null) spawnDnupPop(view.fx.bouncedSeat, view.fx.bouncedArea || 0);
+        else flash('DNUP!', 'dnup');
+      }
     } else if (view.fx.kind === 'take') {
       flash('DNUP!', 'dnup');
     } else if (view.fx.kind === 'out') {
@@ -1033,16 +1036,45 @@ function renderGame(view, sess) {
   else $('#gameover').classList.add('hidden');
 }
 
+// Points gained in the round that just ended, per seat.
+function scoreDeltas(view) {
+  const d = {};
+  const rr = view.roundResult;
+  if (view.mode === 'duel') {
+    if (rr && rr.kind === 'duel') d[rr.winner] = 1;
+  } else if (rr && rr.kind === 'standard') {
+    d[rr.first] = 2;
+    d[rr.second] = 1;
+  } else if (view.phase === 'over' && view.firstOut != null && view.winner === view.firstOut) {
+    // game ended the moment the first player out crossed the target
+    d[view.firstOut] = 2;
+  }
+  return d;
+}
+
 function standingsList(view, listEl) {
   listEl.replaceChildren();
+  const deltas = scoreDeltas(view);
+  const unit = (n) => (view.mode === 'duel' ? `round${n === 1 ? '' : 's'}` : `pt${n === 1 ? '' : 's'}`);
   (view.ranking || []).forEach((r, i) => {
     const row = el('li', `rank-row${r.seat === view.you ? ' me' : ''}`);
-    const scoreText = view.mode === 'duel' ? `${r.rounds} round${r.rounds === 1 ? '' : 's'}` : `${r.points} pt${r.points === 1 ? '' : 's'}`;
+    const total = view.mode === 'duel' ? r.rounds : r.points;
+    const delta = deltas[r.seat] || 0;
+    const score = el('span', 'rank-cards');
+    if (delta > 0) {
+      score.append(
+        el('span', null, `${total - delta} `),
+        el('span', 'delta', `+${delta}`),
+        el('span', null, ` = ${total} ${unit(total)}`),
+      );
+    } else {
+      score.textContent = `${total} ${unit(total)}`;
+    }
     row.append(
       el('span', 'rank-pos', String(i + 1)),
       avatarEl(r.name, r.seat, r.bot),
       el('span', 'rank-name', r.name + (r.connected ? '' : ' (left)')),
-      el('span', 'rank-cards', scoreText),
+      score,
     );
     listEl.append(row);
   });
@@ -1087,6 +1119,18 @@ function showGameover(view, sess) {
 function hideOverlays() {
   $('#gameover').classList.add('hidden');
   $('#roundend').classList.add('hidden');
+}
+
+// A small DNUP! burst anchored on the play area whose cards just bounced.
+function spawnDnupPop(seat, areaIdx) {
+  const t = document.querySelector(`.tset[data-owner="${seat}"][data-area="${areaIdx}"]`);
+  if (!t) {
+    flash('DNUP!', 'dnup');
+    return;
+  }
+  const pop = el('div', 'dnup-pop', 'DNUP!');
+  t.append(pop);
+  setTimeout(() => pop.remove(), 1400);
 }
 
 // ---------------------------------------------------------------- actions
