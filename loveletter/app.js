@@ -718,6 +718,10 @@ function seatTile(view, p) {
   else if (view.sycophant === p.seat) head.append(el('span', 'tag syc', 'TARGET'));
   tile.append(head);
 
+  // What this player did on their last turn. Your own tile stays quiet: you
+  // already know what you did, and the log has the detail.
+  if (p.lastAction && p.seat !== view.you) tile.append(el('div', 'seat-note', p.lastAction));
+
   const pile = el('div', 'pile');
   if (p.discard.length) {
     for (const key of p.discard.slice(-6)) pile.append(cardEl(key, 'mini'));

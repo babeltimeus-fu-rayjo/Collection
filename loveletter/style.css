@@ -556,6 +556,13 @@ a {
   color: #40260a;
 }
 
+.seat-note {
+  color: var(--dim);
+  font-size: 11px;
+  font-style: italic;
+  line-height: 1.35;
+}
+
 .pile {
   display: flex;
   gap: 3px;

@@ -205,6 +205,7 @@ export function newMatch(roster) {
       immune: false,
       reveals: [],
       memory: {},
+      lastAction: null, // short summary shown to the other players
     })),
     deck: [],
     burn: null,
@@ -242,6 +243,7 @@ export function dealRound(G) {
     p.immune = false;
     p.reveals = [];
     p.memory = {};
+    p.lastAction = null;
     if (p.connected) drawFor(G, p);
   }
   let starter = G.starter;
@@ -258,6 +260,7 @@ function beginTurn(G, seat) {
   const p = bySeat(G, seat);
   p.immune = false;
   p.reveals = [];
+  p.lastAction = null;
   drawFor(G, p);
 }
 
@@ -362,9 +365,15 @@ export function applyMove(G, seat, move) {
       toDiscard(p, card);
       forgetHand(G, p.seat);
       note(G, `${p.name} discards ${cardName(card.key)} and draws a new card.`);
-      if (card.key === 'princess') eliminate(G, p, `${p.name} discarded the Princess — out of the round!`);
-      else drawFor(G, p);
+      if (card.key === 'princess') {
+        p.lastAction = 'out — discarded the Princess for the Bishop';
+        eliminate(G, p, `${p.name} discarded the Princess — out of the round!`);
+      } else {
+        p.lastAction = `redrew after the Bishop (dropped ${cardName(card.key)})`;
+        drawFor(G, p);
+      }
     } else {
+      p.lastAction = 'kept their card against the Bishop';
       note(G, `${p.name} keeps their card.`);
     }
     finishTurn(G);
@@ -442,6 +451,7 @@ export function applyMove(G, seat, move) {
   if (G.sycophant != null && spec.targets && spec.targets !== 0) G.sycophant = null;
 
   if (card.key === 'princess') {
+    p.lastAction = 'out — played the Princess';
     eliminate(G, p, `${p.name} played the Princess — out of the round!`);
     finishTurn(G);
     return { ok: true };
@@ -454,6 +464,7 @@ export function applyMove(G, seat, move) {
   switch (card.key) {
     case 'handmaid':
       p.immune = true;
+      p.lastAction = 'played the Handmaid — protected';
       note(G, `${p.name} is protected until their next turn.`);
       break;
 
@@ -464,13 +475,18 @@ export function applyMove(G, seat, move) {
           toDiscard(t0, ass);
           forgetHand(G, t0.seat);
           note(G, `${t0.name} held the Assassin — ${p.name} is struck down!`);
+          t0.lastAction = `Assassin struck down ${p.name}`;
           drawFor(G, t0);
           eliminate(G, p, `${p.name} is out of the round.`);
+          p.lastAction = `Guard hit ${t0.name}'s Assassin — out`;
         } else if (t0.hand[0] && t0.hand[0].key === move.guess) {
           note(G, `${p.name} guesses ${cardName(move.guess)} — correct!`);
+          p.lastAction = `named ${cardName(move.guess)} on ${t0.name} — right`;
           eliminate(G, t0, `${t0.name} is out of the round.`);
+          t0.lastAction = `out — held the ${cardName(move.guess)}`;
         } else {
           note(G, `${p.name} guesses ${cardName(move.guess)} — wrong.`);
+          p.lastAction = `named ${cardName(move.guess)} on ${t0.name} — wrong`;
         }
       }
       break;
@@ -478,6 +494,7 @@ export function applyMove(G, seat, move) {
     case 'priest':
       if (t0) {
         peek(G, p, t0);
+        p.lastAction = `looked at ${t0.name}'s hand`;
         note(G, `${p.name} looks at ${t0.name}'s hand.`);
       }
       break;
@@ -488,7 +505,9 @@ export function applyMove(G, seat, move) {
         peek(G, p, t);
       }
       if (targets.length) {
-        note(G, `${p.name} looks at ${targets.map((s) => nameOf(G, s)).join(' and ')}'s hand${targets.length > 1 ? 's' : ''}.`);
+        const who = targets.map((s) => nameOf(G, s)).join(' and ');
+        p.lastAction = `looked at ${who}'s hand${targets.length > 1 ? 's' : ''}`;
+        note(G, `${p.name} looks at ${who}'s hand${targets.length > 1 ? 's' : ''}.`);
       }
       break;
 
@@ -504,6 +523,7 @@ export function applyMove(G, seat, move) {
         note(G, `${a.name} and ${b.name} swap hands.`);
         const look = move.peek != null ? bySeat(G, move.peek) : a;
         peek(G, p, look);
+        p.lastAction = `swapped ${a.name} & ${b.name}, peeked at ${look.name}`;
         note(G, `${p.name} looks at ${look.name}'s new hand.`);
       }
       break;
@@ -514,9 +534,18 @@ export function applyMove(G, seat, move) {
         const theirs = t0.hand[0] ? cardValue(t0.hand[0].key) : -1;
         p.memory[t0.seat] = t0.hand[0] ? t0.hand[0].key : undefined;
         t0.memory[p.seat] = p.hand[0] ? p.hand[0].key : undefined;
-        if (mine > theirs) eliminate(G, t0, `${t0.name} loses the comparison and is out.`);
-        else if (theirs > mine) eliminate(G, p, `${p.name} loses the comparison and is out.`);
-        else note(G, 'The comparison is a tie — both survive.');
+        if (mine > theirs) {
+          eliminate(G, t0, `${t0.name} loses the comparison and is out.`);
+          p.lastAction = `Baron beat ${t0.name}`;
+          t0.lastAction = `out — lost the Baron to ${p.name}`;
+        } else if (theirs > mine) {
+          eliminate(G, p, `${p.name} loses the comparison and is out.`);
+          p.lastAction = `out — lost their own Baron to ${t0.name}`;
+          t0.lastAction = `survived ${p.name}'s Baron`;
+        } else {
+          note(G, 'The comparison is a tie — both survive.');
+          p.lastAction = `Baron tied with ${t0.name}`;
+        }
       }
       break;
 
@@ -526,9 +555,18 @@ export function applyMove(G, seat, move) {
         const theirs = t0.hand[0] ? cardValue(t0.hand[0].key) : -1;
         p.memory[t0.seat] = t0.hand[0] ? t0.hand[0].key : undefined;
         t0.memory[p.seat] = p.hand[0] ? p.hand[0].key : undefined;
-        if (mine < theirs) eliminate(G, t0, `${t0.name} holds the higher card and is out.`);
-        else if (theirs < mine) eliminate(G, p, `${p.name} holds the higher card and is out.`);
-        else note(G, 'The comparison is a tie — both survive.');
+        if (mine < theirs) {
+          eliminate(G, t0, `${t0.name} holds the higher card and is out.`);
+          p.lastAction = `Dowager Queen took out ${t0.name}`;
+          t0.lastAction = `out — held the higher card`;
+        } else if (theirs < mine) {
+          eliminate(G, p, `${p.name} holds the higher card and is out.`);
+          p.lastAction = `out — held the higher card`;
+          t0.lastAction = `survived ${p.name}'s Dowager Queen`;
+        } else {
+          note(G, 'The comparison is a tie — both survive.');
+          p.lastAction = `Dowager Queen tied with ${t0.name}`;
+        }
       }
       break;
 
@@ -541,6 +579,8 @@ export function applyMove(G, seat, move) {
         forgetHand(G, t0.seat);
         if (t0.hand[0]) p.memory[t0.seat] = t0.hand[0].key;
         if (p.hand[0]) t0.memory[p.seat] = p.hand[0].key;
+        p.lastAction = `traded hands with ${t0.name}`;
+        t0.lastAction = `traded hands with ${p.name}`;
         note(G, `${p.name} and ${t0.name} trade hands.`);
       }
       break;
@@ -552,10 +592,19 @@ export function applyMove(G, seat, move) {
           toDiscard(t0, dumped);
           forgetHand(G, t0.seat);
           note(G, `${t0.name} discards ${cardName(dumped.key)}.`);
+          const self = t0.seat === seat;
           if (dumped.key === 'princess') {
             eliminate(G, t0, `${t0.name} discarded the Princess — out of the round!`);
+            p.lastAction = self
+              ? 'out — Prince made them drop the Princess'
+              : `Prince made ${t0.name} drop the Princess`;
+            if (!self) t0.lastAction = 'out — forced to discard the Princess';
           } else {
             drawFor(G, t0);
+            p.lastAction = self
+              ? `Prince: dropped ${cardName(dumped.key)} and redrew`
+              : `Prince made ${t0.name} drop ${cardName(dumped.key)}`;
+            if (!self) t0.lastAction = `forced to drop ${cardName(dumped.key)}`;
           }
         }
       }
@@ -564,6 +613,7 @@ export function applyMove(G, seat, move) {
     case 'sycophant':
       if (t0) {
         G.sycophant = t0.seat;
+        p.lastAction = `Sycophant: next card must hit ${t0.name}`;
         note(G, `The next targeted card must aim at ${t0.name}.`);
       }
       break;
@@ -571,6 +621,7 @@ export function applyMove(G, seat, move) {
     case 'jester':
       if (t0) {
         G.jesterBets.push({ owner: seat, target: t0.seat });
+        p.lastAction = `Jester: betting on ${t0.name}`;
         note(G, `${p.name} bets on ${t0.name} to win the round.`);
       }
       break;
@@ -582,6 +633,7 @@ export function applyMove(G, seat, move) {
           p.tokens++;
           p.memory[t0.seat] = t0.hand[0].key;
           note(G, `${p.name} names ${move.guess} — right! A token of affection.`);
+          p.lastAction = `Bishop named ${move.guess} at ${t0.name} — right`;
           fx(G, 'token', { seat });
           if (p.tokens >= G.tokensToWin) {
             G.phase = 'over';
@@ -601,6 +653,7 @@ export function applyMove(G, seat, move) {
           }
         } else {
           note(G, `${p.name} names ${move.guess} — no.`);
+          p.lastAction = `Bishop named ${move.guess} at ${t0.name} — wrong`;
         }
         if (!t0.out && t0.hand[0]) {
           G.pending = { kind: 'bishop', seat: t0.seat, actor: seat };
@@ -610,6 +663,7 @@ export function applyMove(G, seat, move) {
       break;
 
     default:
+      p.lastAction = `played the ${spec.name}`;
       break; // assassin, count, constable, countess: no immediate effect
   }
 
@@ -831,6 +885,7 @@ export function viewFor(G, seat, code) {
       out: p.out,
       immune: p.immune,
       handCount: p.hand.length,
+      lastAction: p.lastAction,
       discard: p.discard.map((c) => c.key),
     })),
     hand: me ? me.hand.map((c) => ({ id: c.id, key: c.key })) : [],

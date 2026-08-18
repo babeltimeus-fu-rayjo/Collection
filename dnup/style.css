@@ -80,6 +80,24 @@ a {
   gap: 14px;
 }
 
+.back-home {
+  position: fixed;
+  top: 14px;
+  left: 16px;
+  color: var(--dim);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 14px;
+}
+
+.back-home:hover {
+  color: var(--ink);
+}
+
 /* ---------------------------------------------------------------- home */
 
 .logo {
