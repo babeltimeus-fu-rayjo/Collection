@@ -607,6 +607,9 @@ class GuestSession {
 
 function renderLobby(lob, sess) {
   handOrder = [];
+  logLines = [];
+  logMid = null;
+  $('#feed').replaceChildren();
   chatSetVisible(true);
   $('#lobby-code').textContent = lob.code;
   const list = $('#lobby-players');
@@ -935,7 +938,16 @@ function renderGame(view, sess) {
     head.append(meta);
     if (p.out) head.append(el('span', 'tag win', view.firstOut === p.seat ? 'OUT +2' : 'OUT +1'));
     else if (!p.connected) head.append(el('span', 'tag off', 'OFFLINE'));
-    else if (p.handCount === 1) head.append(el('span', 'tag dnup', '1 CARD!'));
+    else if (p.handCount <= 3) {
+      // Close-to-out warning: louder the fewer cards they hold.
+      head.append(
+        el(
+          'span',
+          `tag ${p.handCount === 1 ? 'dnup' : 'low'}`,
+          p.handCount === 1 ? '1 CARD!' : `${p.handCount} CARDS`,
+        ),
+      );
+    }
     box.append(head);
     const areasRow = el('div', 'areas');
     p.areas.forEach((_, i) => areasRow.append(areaEl(view, p, i, sess)));
@@ -1004,11 +1016,7 @@ function renderGame(view, sess) {
   // Hand (local arrangement + hover state preserved across re-renders).
   renderHand(view, myTurn && !pendingMove);
 
-  // Feed.
-  const feed = $('#feed');
-  feed.replaceChildren();
-  for (const line of view.feed) feed.append(el('div', 'feed-line', line));
-  feed.scrollTop = feed.scrollHeight;
+  renderLog(view);
 
   // One-shot effects.
   if (view.fx && view.fx.seq !== lastFxSeq) {
@@ -1078,6 +1086,35 @@ function standingsList(view, listEl) {
     );
     listEl.append(row);
   });
+}
+
+// Merge each state's log window into one continuous history the player can
+// scroll back through. Auto-scrolls only when already parked at the bottom,
+// so reading older lines isn't interrupted by incoming ones.
+let logLines = [];
+let logMid = null;
+
+function renderLog(view) {
+  if (view.mid !== logMid) {
+    logMid = view.mid;
+    logLines = [];
+  }
+  const have = new Set(logLines.map((l) => l.n));
+  let added = false;
+  for (const item of view.feed || []) {
+    if (item && typeof item === 'object' && !have.has(item.n)) {
+      logLines.push(item);
+      added = true;
+    }
+  }
+  if (!added && logLines.length === $('#feed').children.length) return;
+  logLines.sort((a, b) => a.n - b.n);
+  if (logLines.length > 200) logLines = logLines.slice(-200);
+
+  const feed = $('#feed');
+  const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 24;
+  feed.replaceChildren(...logLines.map((l) => el('div', 'feed-line', l.text)));
+  if (atBottom) feed.scrollTop = feed.scrollHeight;
 }
 
 function showRoundEnd(view, sess) {

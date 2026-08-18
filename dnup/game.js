@@ -107,9 +107,11 @@ export function groupByValue(hand) {
 
 // ------------------------------------------------------------ game state
 
+// Log entries are numbered so clients can merge successive windows into one
+// continuous, scrollable history without duplicating lines.
 function note(G, text) {
-  G.feed.push(text);
-  if (G.feed.length > 9) G.feed.shift();
+  G.feed.push({ n: ++G.feedSeq, text });
+  if (G.feed.length > 40) G.feed.shift();
 }
 
 const bySeat = (G, seat) => G.players.find((p) => p.seat === seat);
@@ -122,6 +124,7 @@ export function setLabel(s) {
 // roster: [{seat, name, bot, connected}]
 export function newMatch(roster) {
   const G = {
+    mid: Math.floor(Math.random() * 1e9), // identifies this match's log stream
     mode: roster.length === 2 ? 'duel' : 'standard',
     phase: 'playing',
     players: roster.map((p) => ({
@@ -145,6 +148,7 @@ export function newMatch(roster) {
     winner: null,
     unitCount: 0,
     feed: [],
+    feedSeq: 0,
     fx: null,
     fxSeq: 0,
   };
@@ -521,6 +525,7 @@ export function viewFor(G, seat, code) {
   return {
     code,
     you: seat,
+    mid: G.mid,
     mode: G.mode,
     phase: G.phase,
     round: G.round,
@@ -554,7 +559,7 @@ export function viewFor(G, seat, code) {
     winner: G.winner,
     roundResult: G.roundResult,
     ranking: G.phase === 'over' || G.phase === 'roundEnd' ? ranking(G) : null,
-    feed: G.feed.slice(-7),
+    feed: G.feed.slice(-15),
     fx: G.fx,
   };
 }

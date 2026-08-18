@@ -547,6 +547,13 @@ a {
   animation: bounce 0.8s ease infinite alternate;
 }
 
+/* 2-3 cards left: a quieter heads-up than the 1-card alarm */
+.tag.low {
+  background: rgba(255, 197, 61, 0.22);
+  color: var(--gold);
+  border: 1px solid rgba(255, 197, 61, 0.5);
+}
+
 .tag.win {
   background: var(--up);
   color: #04321c;
@@ -1016,13 +1023,49 @@ body:not(.my-turn) #hand .pcard .pc-body {
   right: 12px;
   top: 64px;
   width: 230px;
-  max-height: 168px;
-  overflow: hidden;
+  max-height: min(42dvh, 300px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  pointer-events: none;
+  padding: 6px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--line);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
   z-index: 5;
+}
+
+#feed:empty {
+  display: none;
+}
+
+#feed::-webkit-scrollbar {
+  width: 8px;
+}
+
+#feed::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+}
+
+/* keep the docked log clear of the table on wide screens */
+@media (min-width: 1000px) {
+  #screen-game {
+    padding-right: 268px;
+  }
+}
+
+/* below that, the log sits in the flow under the hand rather than overlapping */
+@media (max-width: 999px) {
+  #feed {
+    position: static;
+    width: min(100%, 460px);
+    max-height: 96px;
+    margin: 0 auto;
+  }
 }
 
 .feed-line {
@@ -1031,7 +1074,7 @@ body:not(.my-turn) #hand .pcard .pc-body {
   background: rgba(0, 0, 0, 0.35);
   border-radius: 8px;
   padding: 4px 9px;
-  backdrop-filter: blur(3px);
+  flex: none;
 }
 
 /* ---------------------------------------------------------------- overlays */
@@ -1429,14 +1472,6 @@ body:not(.my-turn) #hand .pcard .pc-body {
 
   #hand .pcard {
     margin-left: -16px;
-  }
-
-  #feed {
-    position: static;
-    width: 100%;
-    max-height: 44px;
-    flex-direction: column-reverse;
-    align-items: center;
   }
 
   .feed-line {
