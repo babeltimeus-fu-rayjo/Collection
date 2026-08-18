@@ -877,6 +877,55 @@ function cancelBtn() {
   return b;
 }
 
+// A hand card is built once per card id and then patched in place, so the card
+// under the cursor is never torn down by an incoming state update.
+function handCardNode(card) {
+  const b = el('button', 'hand-card');
+  b.type = 'button';
+  b.dataset.id = card.id;
+  b.append(cardEl(card.key, 'big'));
+  b.addEventListener('click', () => {
+    if (!b._playable || !b._card || !lastView) return;
+    const view = lastView;
+    const key = b._card.key;
+    choice = { cardId: b._card.id, targets: [], peek: null, guess: null };
+    const opts = targetOptions(view.players, view.you, key);
+    const forced = view.sycophant != null && opts.includes(view.sycophant) ? view.sycophant : null;
+    if (forced != null && CARDS[key].targets && CARDS[key].targets !== 'two') choice.targets = [forced];
+    renderGame(view, session);
+  });
+  return b;
+}
+
+function renderHand(view, myTurn) {
+  const hand = $('#hand');
+  const me = view.players.find((p) => p.seat === view.you);
+  const blocked = me && !me.out && mustPlayCountess(view.hand);
+  const byId = new Map([...hand.querySelectorAll('.hand-card')].map((n) => [n.dataset.id, n]));
+  const desired = view.hand.map((c) => {
+    const node = byId.get(c.id) || handCardNode(c);
+    node._card = c;
+    node._playable = myTurn && !pendingMove && (!blocked || c.key === 'countess');
+    node.disabled = !node._playable;
+    node.classList.toggle('sel', choice.cardId === c.id);
+    return node;
+  });
+  for (const n of [...hand.children]) if (!desired.includes(n)) n.remove();
+  let cursor = hand.firstChild;
+  for (const n of desired) {
+    if (n === cursor) {
+      cursor = cursor.nextSibling;
+      continue;
+    }
+    hand.insertBefore(n, cursor);
+  }
+  if (me && me.out) {
+    hand.append(el('div', 'hand-note', 'You are out of this round — sit tight for the next deal.'));
+  } else if (blocked && myTurn) {
+    hand.append(el('div', 'hand-note', 'You must play the Countess while you hold the King or Prince.'));
+  }
+}
+
 function renderGame(view, sess) {
   lastView = view;
   chatSetVisible(true);
@@ -942,31 +991,7 @@ function renderGame(view, sess) {
     info.append(el('div', 'intel-chip bet', `Jester: backing ${targetName(view, b.target)}`));
   }
 
-  // your hand
-  const hand = $('#hand');
-  hand.replaceChildren();
-  const blocked = me && !me.out && mustPlayCountess(view.hand);
-  for (const c of view.hand) {
-    const wrap = el('button', `hand-card${choice.cardId === c.id ? ' sel' : ''}`);
-    wrap.type = 'button';
-    wrap.append(cardEl(c.key, 'big'));
-    const playable = myTurn && !pendingMove && (!blocked || c.key === 'countess');
-    wrap.disabled = !playable;
-    if (playable) {
-      wrap.addEventListener('click', () => {
-        choice = { cardId: c.id, targets: [], peek: null, guess: null };
-        const opts = targetOptions(view.players, view.you, c.key);
-        const forced = view.sycophant != null && opts.includes(view.sycophant) ? view.sycophant : null;
-        if (forced != null && CARDS[c.key].targets && CARDS[c.key].targets !== 'two') choice.targets = [forced];
-        renderGame(lastView, session);
-      });
-    }
-    hand.append(wrap);
-  }
-  if (me && me.out) hand.append(el('div', 'hand-note', 'You are out of this round — sit tight for the next deal.'));
-  else if (blocked && myTurn) {
-    hand.append(el('div', 'hand-note', 'You must play the Countess while you hold the King or Prince.'));
-  }
+  renderHand(view, myTurn);
 
   renderActionBar(view, myTurn);
   renderLog(view);

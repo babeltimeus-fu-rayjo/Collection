@@ -1020,14 +1020,15 @@ body:not(.my-turn) #hand .pcard .pc-body {
   border-radius: 999px;
 }
 
-/* keep the docked log clear of the table on wide screens */
+/* keep the docked log AND the chat column clear of the table on wide screens */
 @media (min-width: 1000px) {
   #screen-game {
-    padding-right: 268px;
+    padding-right: 320px; /* log is 230px, chat panel 300px + 12px margin */
   }
 }
 
-/* below that, the log sits in the flow under the hand rather than overlapping */
+/* Below that there is no right-hand gutter: the log sits in the flow, and chat
+   moves up beside the topbar buttons so it cannot cover cards or controls. */
 @media (max-width: 999px) {
   #feed {
     position: static;
@@ -1506,5 +1507,41 @@ body:not(.my-turn) #hand .pcard .pc-body {
   to {
     transform: translateX(-50%) translateY(0) scale(1);
     opacity: 1;
+  }
+}
+
+/* Below the docked-log breakpoint there is no right-hand gutter, so a floating
+   chat button would sit on top of the cards and the action buttons. Chat moves
+   up beside the topbar buttons instead, dropping its panel down from there.
+   (This block must come after the base #chat rules to win on order.) */
+@media (max-width: 999px) {
+  #chat {
+    top: 8px;
+    bottom: auto;
+    left: 12px;
+    right: 12px;
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .topbar {
+    padding-right: 52px;
+  }
+
+  #chat-panel {
+    width: min(320px, 100%);
+    align-self: flex-end;
+  }
+
+  #chat-toggle {
+    align-self: flex-end;
+    width: 38px;
+    height: 38px;
+    font-size: 17px;
+  }
+
+  #chat-peek {
+    align-self: flex-end;
+    max-width: min(320px, 100%);
   }
 }

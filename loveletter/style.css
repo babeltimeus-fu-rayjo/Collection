@@ -416,6 +416,8 @@ a {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
 
 #room-chip,
@@ -777,24 +779,37 @@ a {
   align-items: flex-start;
   flex-wrap: wrap;
   min-height: 120px;
+  padding-top: 12px;
 }
 
+/* The button is a stationary hit target; only the artwork inside it lifts, so
+   hovering can never move the card out from under the cursor. */
 .hand-card {
   cursor: pointer;
   border-radius: 12px;
+  position: relative;
+  background: none;
+  padding: 0;
+}
+
+.hand-card .card {
   transition: transform 0.12s ease, box-shadow 0.15s ease, filter 0.2s ease;
 }
 
-.hand-card:hover:not(:disabled) {
+.hand-card:hover:not(:disabled) .card {
   transform: translateY(-6px);
 }
 
 .hand-card.sel .card {
+  transform: translateY(-10px);
   box-shadow: 0 0 0 3px var(--gold), 0 0 20px rgba(242, 193, 78, 0.5);
 }
 
 .hand-card:disabled {
   cursor: default;
+}
+
+.hand-card:disabled .card {
   filter: saturate(0.8) brightness(0.88);
 }
 
@@ -890,7 +905,7 @@ a {
   right: 12px;
   top: 60px;
   width: 234px;
-  max-height: min(44dvh, 320px);
+  max-height: min(32dvh, 240px);
   overflow-y: auto;
   overscroll-behavior: contain;
   display: flex;
@@ -929,16 +944,23 @@ a {
 
 @media (min-width: 1080px) {
   #screen-game {
-    padding-right: 272px;
+    padding-right: 320px; /* log is 234px, chat panel 300px + 12px margin */
   }
 }
 
+/* Below the docked-log breakpoint there is no right-hand gutter, so a floating
+   chat button would sit on top of the cards and the action buttons. Chat moves
+   up beside the topbar buttons instead and drops its panel down from there. */
 @media (max-width: 1079px) {
   #feed {
     position: static;
     width: min(100%, 460px);
     max-height: 96px;
     margin: 0 auto;
+  }
+
+  #screen-game {
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
   }
 }
 
@@ -1006,7 +1028,7 @@ a {
 }
 
 #chat-msgs {
-  height: 220px;
+  height: min(26dvh, 200px);
   overflow-y: auto;
   padding: 10px 12px;
   display: flex;
@@ -1447,6 +1469,15 @@ a {
 /* ---------------------------------------------------------------- responsive */
 
 @media (max-width: 640px) {
+  /* the round chip is the least important thing in a cramped topbar */
+  #round-chip {
+    display: none;
+  }
+
+  #chat-msgs {
+    height: min(22dvh, 150px);
+  }
+
   .card.big {
     width: 132px;
     min-height: 190px;
@@ -1468,5 +1499,41 @@ a {
 
   .ref-text {
     grid-area: text;
+  }
+}
+
+/* Below the docked-log breakpoint there is no right-hand gutter, so a floating
+   chat button would sit on top of the cards and the action buttons. Chat moves
+   up beside the topbar buttons instead, dropping its panel down from there.
+   (This block must come after the base #chat rules to win on order.) */
+@media (max-width: 1079px) {
+  #chat {
+    top: 8px;
+    bottom: auto;
+    left: 12px;
+    right: 12px;
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .topbar {
+    padding-right: 52px;
+  }
+
+  #chat-panel {
+    width: min(320px, 100%);
+    align-self: flex-end;
+  }
+
+  #chat-toggle {
+    align-self: flex-end;
+    width: 38px;
+    height: 38px;
+    font-size: 17px;
+  }
+
+  #chat-peek {
+    align-self: flex-end;
+    max-width: min(320px, 100%);
   }
 }

@@ -784,7 +784,8 @@ export function botChoose(G, seat) {
         if (!pool.includes(s)) pool.push(s);
       }
       move.targets = pool.slice(0, 2);
-      move.peek = move.targets[0];
+      // peeking at your own hand tells you nothing: look at the other player
+      move.peek = move.targets.find((t) => t !== seat) ?? move.targets[0];
     }
   }
 
