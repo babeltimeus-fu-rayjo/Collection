@@ -399,7 +399,7 @@ class HostSession {
         else if (me && me.hand[0]) applyMove(g, seat, { kind: 'play', cardId: me.hand[0].id });
       }
       this.broadcast();
-    }, 1700 + Math.random() * 1100);
+    }, 2600 + Math.random() * 1600);
   }
 
   lobbyMsg() {
@@ -669,9 +669,14 @@ function resetChoice() {
   choice = { cardId: null, targets: [], peek: null, guess: null };
 }
 
-function cardEl(key, size = '') {
+function cardEl(key, size = '', copies = null) {
   const c = el('div', `card v${cardValue(key)}${size ? ` ${size}` : ''}`);
   c.append(el('span', 'card-val', String(cardValue(key))), el('span', 'card-name', cardName(key)));
+  if (copies != null) {
+    const badge = el('span', 'card-count', `\u00d7${copies}`);
+    badge.title = `${copies} ${cardName(key)}${copies === 1 ? '' : 's'} in this deck`;
+    c.append(badge);
+  }
   if (size === 'big') c.append(el('span', 'card-text', CARDS[key].text));
   return c;
 }
@@ -879,11 +884,11 @@ function cancelBtn() {
 
 // A hand card is built once per card id and then patched in place, so the card
 // under the cursor is never torn down by an incoming state update.
-function handCardNode(card) {
+function handCardNode(card, copies) {
   const b = el('button', 'hand-card');
   b.type = 'button';
   b.dataset.id = card.id;
-  b.append(cardEl(card.key, 'big'));
+  b.append(cardEl(card.key, 'big', copies));
   b.addEventListener('click', () => {
     if (!b._playable || !b._card || !lastView) return;
     const view = lastView;
@@ -902,8 +907,9 @@ function renderHand(view, myTurn) {
   const me = view.players.find((p) => p.seat === view.you);
   const blocked = me && !me.out && mustPlayCountess(view.hand);
   const byId = new Map([...hand.querySelectorAll('.hand-card')].map((n) => [n.dataset.id, n]));
+  const counts = deckCounts(view.players.length);
   const desired = view.hand.map((c) => {
-    const node = byId.get(c.id) || handCardNode(c);
+    const node = byId.get(c.id) || handCardNode(c, counts[c.key] || 0);
     node._card = c;
     node._playable = myTurn && !pendingMove && (!blocked || c.key === 'countess');
     node.disabled = !node._playable;
@@ -926,12 +932,36 @@ function renderHand(view, myTurn) {
   }
 }
 
+// Card reference, including how many copies the current deck holds. Cards that
+// only appear at larger tables are marked as unused.
+let refFor = null;
+
+function renderCardRef(playerCount) {
+  if (refFor === playerCount) return;
+  refFor = playerCount;
+  const counts = deckCounts(playerCount);
+  const ref = $('#card-ref');
+  ref.replaceChildren();
+  for (const [key, spec] of Object.entries(CARDS).sort((a, b) => a[1].value - b[1].value)) {
+    const copies = counts[key] || 0;
+    const row = el('li', `ref-row${copies ? '' : ' absent'}`);
+    row.append(
+      cardEl(key, 'mini'),
+      el('span', 'ref-name', spec.name),
+      el('span', 'ref-count', copies ? `\u00d7${copies}` : 'not in this deck'),
+      el('span', 'ref-text', spec.text),
+    );
+    ref.append(row);
+  }
+}
+
 function renderGame(view, sess) {
   lastView = view;
   chatSetVisible(true);
   $('#room-chip').textContent = view.code;
   $('#round-chip').textContent = `Round ${view.round} · first to ${view.tokensToWin} ♥`;
 
+  renderCardRef(view.players.length);
   const myTurn = view.phase === 'playing' && view.turn === view.you && !view.pending;
   const me = view.players.find((p) => p.seat === view.you);
   document.body.classList.toggle('my-turn', myTurn);
@@ -1325,13 +1355,7 @@ function init() {
     if (e.target === $('#modal-rules')) $('#modal-rules').classList.add('hidden');
   });
 
-  // reference list of every character in the box
-  const ref = $('#card-ref');
-  for (const [key, spec] of Object.entries(CARDS).sort((a, b) => a[1].value - b[1].value)) {
-    const row = el('li', 'ref-row');
-    row.append(cardEl(key, 'mini'), el('span', 'ref-name', spec.name), el('span', 'ref-text', spec.text));
-    ref.append(row);
-  }
+  renderCardRef(MAX_PLAYERS); // full box until a table size is known
 
   window.addEventListener('beforeunload', () => {
     if (session) session.destroy();

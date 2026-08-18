@@ -626,6 +626,20 @@ a {
   padding: 10px 11px;
   border-radius: 12px;
   border-width: 3px;
+  position: relative;
+}
+
+/* how many copies of this card the deck in play holds */
+.card-count {
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  font-size: 12px;
+  font-weight: 800;
+  background: rgba(0, 0, 0, 0.26);
+  border-radius: 999px;
+  padding: 2px 7px;
+  letter-spacing: 0.02em;
 }
 
 .card.big .card-val {
@@ -660,27 +674,27 @@ a {
   max-width: 1180px;
 }
 
+/* The deck and its label live in normal flow: an absolutely positioned label
+   escapes this box and lands on whatever follows (the intel row). */
 #deck {
-  position: relative;
-  width: 44px;
-  height: 62px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
   flex: none;
 }
 
 #deck .stack {
-  position: absolute;
-  inset: 0;
+  width: 44px;
+  height: 62px;
   border-radius: 8px;
   background: repeating-linear-gradient(135deg, #4a1f3d 0 6px, #5d2a4d 6px 12px);
   border: 2px solid #7b4268;
   box-shadow: -3px 3px 0 #2f1428, -6px 6px 0 #23101f;
+  flex: none;
 }
 
 .deck-meta {
-  position: absolute;
-  left: 50%;
-  bottom: -20px;
-  transform: translateX(-50%);
   display: flex;
   gap: 5px;
   align-items: baseline;
@@ -1299,12 +1313,27 @@ a {
 
 .ref-row {
   display: grid;
-  grid-template-columns: auto 8.5em 1fr;
+  grid-template-columns: auto 8.5em 5.5em 1fr;
   align-items: center;
   gap: 10px;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 10px;
   padding: 6px 10px;
+}
+
+.ref-row.absent {
+  opacity: 0.45;
+}
+
+.ref-count {
+  font-weight: 800;
+  font-size: 12px;
+  color: var(--gold);
+}
+
+.ref-row.absent .ref-count {
+  color: var(--dim);
+  font-weight: 600;
 }
 
 .ref-name {
@@ -1493,12 +1522,16 @@ a {
   }
 
   .ref-row {
-    grid-template-columns: auto 1fr;
-    grid-template-areas: 'card name' 'text text';
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas: 'card name count' 'text text text';
   }
 
   .ref-text {
     grid-area: text;
+  }
+
+  .ref-count {
+    grid-area: count;
   }
 }
 

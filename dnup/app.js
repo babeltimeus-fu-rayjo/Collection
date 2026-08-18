@@ -423,7 +423,7 @@ class HostSession {
       const res = applyMove(this.G, seat, botChoose(this.G, seat));
       if (!res.ok) applyMove(this.G, seat, { kind: 'rotate' }); // safety net
       this.broadcast();
-    }, 1700 + Math.random() * 1100); // deliberate pause so consecutive bot turns read clearly
+    }, 2600 + Math.random() * 1600); // deliberate pause so consecutive bot turns read clearly
   }
 
   lobbyMsg() {
