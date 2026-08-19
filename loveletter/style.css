@@ -993,6 +993,12 @@ a {
   cursor: default;
 }
 
+/* a guess that cannot possibly be right: every copy is already face up */
+.pick.spent {
+  opacity: 0.3;
+  text-decoration: line-through;
+}
+
 /* out pop */
 
 .out-pop {

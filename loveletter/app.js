@@ -818,16 +818,27 @@ function renderActionBar(view, myTurn) {
   if (enough && spec.guess === 'card') {
     bar.append(el('span', 'ask', 'guess their card:'));
     const grow = el('div', 'pickrow wrap');
-    const keys = Object.keys(deckCounts(view.players.length))
+    const counts = deckCounts(view.players.length);
+    const seen = seenCounts(view);
+    const keys = Object.keys(counts)
       .filter((k) => k !== 'guard')
       .sort((a, b) => cardValue(a) - cardValue(b));
+    // a card whose every copy is already face up cannot be in anyone's hand
+    const spentKeys = new Set(keys.filter((k) => (seen[k] || 0) >= counts[k]));
+    const allSpent = spentKeys.size === keys.length; // never leave nothing to pick
     for (const k of keys) {
-      const b = el('button', `pick${choice.guess === k ? ' on' : ''}`, `${cardValue(k)} ${cardName(k)}`);
+      const spent = !allSpent && spentKeys.has(k);
+      const b = el('button', `pick${choice.guess === k ? ' on' : ''}${spent ? ' spent' : ''}`, `${cardValue(k)} ${cardName(k)}`);
       b.type = 'button';
-      b.addEventListener('click', () => {
-        choice.guess = k;
-        renderGame(lastView, session);
-      });
+      if (spent) {
+        b.disabled = true;
+        b.title = `all ${counts[k]} already face up`;
+      } else {
+        b.addEventListener('click', () => {
+          choice.guess = k;
+          renderGame(lastView, session);
+        });
+      }
       grow.append(b);
     }
     bar.append(grow);
@@ -836,14 +847,27 @@ function renderActionBar(view, myTurn) {
   if (enough && spec.guess === 'value') {
     bar.append(el('span', 'ask', 'guess their number:'));
     const vrow = el('div', 'pickrow');
-    const values = [...new Set(Object.keys(deckCounts(view.players.length)).map(cardValue))].sort((a, b) => a - b);
+    const counts = deckCounts(view.players.length);
+    const seen = seenCounts(view);
+    const keys = Object.keys(counts);
+    const values = [...new Set(keys.map(cardValue))].sort((a, b) => a - b);
+    const totalOf = (v) => keys.filter((k) => cardValue(k) === v).reduce((n, k) => n + counts[k], 0);
+    const seenOf = (v) => keys.filter((k) => cardValue(k) === v).reduce((n, k) => n + (seen[k] || 0), 0);
+    const spentValues = new Set(values.filter((v) => seenOf(v) >= totalOf(v)));
+    const allSpent = spentValues.size === values.length;
     for (const v of values) {
-      const b = el('button', `pick${choice.guess === v ? ' on' : ''}`, String(v));
+      const spent = !allSpent && spentValues.has(v);
+      const b = el('button', `pick${choice.guess === v ? ' on' : ''}${spent ? ' spent' : ''}`, String(v));
       b.type = 'button';
-      b.addEventListener('click', () => {
-        choice.guess = v;
-        renderGame(lastView, session);
-      });
+      if (spent) {
+        b.disabled = true;
+        b.title = `every ${v} is already face up`;
+      } else {
+        b.addEventListener('click', () => {
+          choice.guess = v;
+          renderGame(lastView, session);
+        });
+      }
       vrow.append(b);
     }
     bar.append(vrow);
@@ -959,17 +983,24 @@ function renderCardRef(playerCount) {
   }
 }
 
-// Card tracker: one chip per card type in the deck, with a filled pip for
-// every copy already face up (discard piles plus the cards removed at setup)
-// and a hollow pip for every copy still unaccounted for.
-function renderTracker(view) {
-  const counts = deckCounts(view.players.length);
+// Copies of each card that are already face up for everyone to see: the
+// discard piles plus the cards removed at setup.
+function seenCounts(view) {
   const seen = {};
   const bump = (key) => {
     seen[key] = (seen[key] || 0) + 1;
   };
   for (const p of view.players) for (const key of p.discard) bump(key);
   for (const key of view.faceUp) bump(key);
+  return seen;
+}
+
+// Card tracker: one chip per card type in the deck, with a filled pip for
+// every copy already face up and a hollow pip for every copy still
+// unaccounted for.
+function renderTracker(view) {
+  const counts = deckCounts(view.players.length);
+  const seen = seenCounts(view);
 
   const box = $('#tracker');
   box.replaceChildren(el('span', 'trk-label', 'played'));
