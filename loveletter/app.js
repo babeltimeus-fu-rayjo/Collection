@@ -1086,9 +1086,12 @@ let logLines = [];
 let logMid = null;
 
 function renderLog(view) {
-  if (view.mid !== logMid) {
-    logMid = view.mid;
+  // keyed per round, so a new deal starts from an empty panel
+  const key = `${view.mid}:${view.round}`;
+  if (key !== logMid) {
+    logMid = key;
     logLines = [];
+    $('#feed').replaceChildren();
   }
   const have = new Set(logLines.map((l) => l.n));
   let added = false;

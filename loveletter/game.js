@@ -91,6 +91,8 @@ export const TOKENS_TO_WIN = { 2: 6, 3: 5, 4: 4, 5: 3, 6: 3, 7: 3, 8: 3 };
 
 export const cardValue = (key) => CARDS[key].value;
 export const cardName = (key) => CARDS[key].name;
+// Logs always name a card with its number, e.g. "Guard (1)".
+export const cardLabel = (key) => `${CARDS[key].name} (${CARDS[key].value})`;
 
 export function deckCounts(playerCount) {
   const counts = { ...DECK_BASE };
@@ -229,6 +231,8 @@ export function newMatch(roster) {
 export function dealRound(G) {
   G.round++;
   G.phase = 'playing';
+  G.log = []; // each round reads on its own
+  G.logSeq = 0;
   G.roundResult = null;
   G.sycophant = null;
   G.pending = null;
@@ -364,7 +368,7 @@ export function applyMove(G, seat, move) {
       const card = p.hand.pop();
       toDiscard(p, card);
       forgetHand(G, p.seat);
-      note(G, `${p.name} discards ${cardName(card.key)} and draws a new card.`);
+      note(G, `${p.name} discards ${cardLabel(card.key)} and draws a new card.`);
       if (card.key === 'princess') {
         p.lastAction = 'out — discarded the Princess for the Bishop';
         eliminate(G, p, `${p.name} discarded the Princess — out of the round!`);
@@ -446,7 +450,12 @@ export function applyMove(G, seat, move) {
   p.hand.splice(idx, 1);
   toDiscard(p, card);
   forgetHand(G, seat);
-  note(G, `${p.name} plays ${spec.name}.`);
+  const aimed = targets.length
+    ? targets.length === 1 && targets[0] === seat
+      ? ' on themselves'
+      : ` on ${targets.map((t) => nameOf(G, t)).join(' & ')}`
+    : '';
+  note(G, `${p.name} plays ${cardLabel(card.key)}${aimed}.`);
   fx(G, 'play', { seat, key: card.key });
   if (G.sycophant != null && spec.targets && spec.targets !== 0) G.sycophant = null;
 
@@ -480,12 +489,12 @@ export function applyMove(G, seat, move) {
           eliminate(G, p, `${p.name} is out of the round.`);
           p.lastAction = `Guard hit ${t0.name}'s Assassin — out`;
         } else if (t0.hand[0] && t0.hand[0].key === move.guess) {
-          note(G, `${p.name} guesses ${cardName(move.guess)} — correct!`);
+          note(G, `${p.name} guesses ${cardLabel(move.guess)} — correct!`);
           p.lastAction = `named ${cardName(move.guess)} on ${t0.name} — right`;
           eliminate(G, t0, `${t0.name} is out of the round.`);
           t0.lastAction = `out — held the ${cardName(move.guess)}`;
         } else {
-          note(G, `${p.name} guesses ${cardName(move.guess)} — wrong.`);
+          note(G, `${p.name} guesses ${cardLabel(move.guess)} — wrong.`);
           p.lastAction = `named ${cardName(move.guess)} on ${t0.name} — wrong`;
         }
       }
@@ -591,7 +600,7 @@ export function applyMove(G, seat, move) {
         if (dumped) {
           toDiscard(t0, dumped);
           forgetHand(G, t0.seat);
-          note(G, `${t0.name} discards ${cardName(dumped.key)}.`);
+          note(G, `${t0.name} discards ${cardLabel(dumped.key)}.`);
           const self = t0.seat === seat;
           if (dumped.key === 'princess') {
             eliminate(G, t0, `${t0.name} discarded the Princess — out of the round!`);
@@ -632,7 +641,7 @@ export function applyMove(G, seat, move) {
         if (theirs === move.guess) {
           p.tokens++;
           p.memory[t0.seat] = t0.hand[0].key;
-          note(G, `${p.name} names ${move.guess} — right! A token of affection.`);
+          note(G, `${p.name} names ${move.guess} for ${t0.name} — right! A token of affection.`);
           p.lastAction = `Bishop named ${move.guess} at ${t0.name} — right`;
           fx(G, 'token', { seat });
           if (p.tokens >= G.tokensToWin) {
@@ -652,7 +661,7 @@ export function applyMove(G, seat, move) {
             return { ok: true };
           }
         } else {
-          note(G, `${p.name} names ${move.guess} — no.`);
+          note(G, `${p.name} names ${move.guess} for ${t0.name} — no.`);
           p.lastAction = `Bishop named ${move.guess} at ${t0.name} — wrong`;
         }
         if (!t0.out && t0.hand[0]) {
