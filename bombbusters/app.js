@@ -37,7 +37,6 @@ const RTC_CONFIG = {
 
 const PEER_OPTS = { debug: 1, config: RTC_CONFIG };
 const ID_PREFIX = 'bmb-v1-';
-const BOT_NAMES = ['Sarge', 'Gadget', 'Fuse', 'Twitch', 'Socket', 'Dyna', 'Sparks', 'Bleep'];
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 function genCode(len = 5) {
@@ -371,27 +370,6 @@ class HostSession {
     this.relayChat(0, me ? me.name : 'Host', text);
   }
 
-  addBot() {
-    if (this.G) return;
-    if (this.roster.length >= MAX_PLAYERS) {
-      toast('The squad is full');
-      return;
-    }
-    let seat = 0;
-    while (this.roster.some((p) => p.seat === seat)) seat++;
-    const used = new Set(this.roster.map((p) => p.name));
-    const name = BOT_NAMES.find((n) => !used.has(n)) || `Bot ${seat + 1}`;
-    this.roster.push({ seat, name, connected: true, bot: true });
-    this.pushLobby();
-  }
-
-  removeBot(seat) {
-    if (this.G) return;
-    if (!this.roster.some((r) => r.seat === seat && r.bot)) return;
-    this.roster = this.roster.filter((r) => r.seat !== seat);
-    this.pushLobby();
-  }
-
   setMission(key) {
     if (this.G) return;
     this.missionKey = missionByKey(key).key;
@@ -408,21 +386,22 @@ class HostSession {
     return g.turn;
   }
 
-  // Bots think in the host's browser; the pause keeps consecutive bot turns
-  // readable. The same loop covers disconnected players so the squad never stalls.
+  // No bots in this game — but a co-op mission cannot go on without a player's
+  // rack, so the host's browser quietly covers the turns of anyone who
+  // disconnects (same brain the tests use) until they are gone for good.
   scheduleBots() {
     clearTimeout(this.botTimer);
     if (!this.G) return;
     const actor = this.actorOf();
     if (actor == null) return;
     const cur = this.roster.find((p) => p.seat === actor);
-    if (!cur || (!cur.bot && cur.connected)) return;
+    if (!cur || cur.connected) return;
     this.botTimer = setTimeout(() => {
       if (!this.G) return;
       const seat = this.actorOf();
       if (seat == null) return;
       const p = this.roster.find((q) => q.seat === seat);
-      if (!p || (!p.bot && p.connected)) return;
+      if (!p || p.connected) return;
       const g = this.G;
       const res = applyMove(g, seat, botChoose(g, seat) || {});
       if (!res.ok) {
@@ -442,7 +421,7 @@ class HostSession {
     return {
       t: 'lobby',
       code: this.code,
-      players: this.roster.map((p) => ({ seat: p.seat, name: p.name, bot: !!p.bot })),
+      players: this.roster.map((p) => ({ seat: p.seat, name: p.name })),
       min: MIN_PLAYERS,
       max: MAX_PLAYERS,
       mission: this.missionKey,
@@ -474,7 +453,7 @@ class HostSession {
 
   retry() {
     if (!this.G || this.G.phase === 'playing' || this.G.phase === 'setup') return;
-    this.roster = this.roster.filter((p) => p.connected || p.bot);
+    this.roster = this.roster.filter((p) => p.connected);
     if (this.roster.length < MIN_PLAYERS) {
       this.toLobby();
       toast('Not enough players — back to the lobby');
@@ -488,7 +467,7 @@ class HostSession {
 
   toLobby() {
     this.G = null;
-    this.roster = this.roster.filter((p) => p.connected || p.bot);
+    this.roster = this.roster.filter((p) => p.connected);
     hideOverlays();
     this.pushLobby();
     showScreen('lobby');
@@ -662,18 +641,10 @@ function renderLobby(lob, sess) {
     const p = lob.players[i];
     const row = el('li', `seat-row${p ? '' : ' empty'}`);
     if (p) {
-      row.append(avatarEl(p.name, p.seat, p.bot));
+      row.append(avatarEl(p.name, p.seat));
       row.append(el('span', 'seat-name', p.name));
       if (p.seat === 0) row.append(el('span', 'chip', 'host'));
-      if (p.bot) row.append(el('span', 'chip bot', 'bot'));
       if (p.seat === mySeat) row.append(el('span', 'chip you', 'you'));
-      if (p.bot && sess.isHost) {
-        const kick = el('button', 'kick', '✕');
-        kick.type = 'button';
-        kick.title = `Remove ${p.name}`;
-        kick.addEventListener('click', () => sess.removeBot(p.seat));
-        row.append(kick);
-      }
     } else {
       row.append(el('div', 'av empty', '·'), el('span', 'seat-name dim', 'Empty seat'));
     }
@@ -692,15 +663,13 @@ function renderLobby(lob, sess) {
   $('#mission-blurb').textContent = missionByKey(lob.mission).blurb;
 
   $('#btn-start').classList.toggle('hidden', !sess.isHost);
-  $('#btn-add-bot').classList.toggle('hidden', !sess.isHost);
   if (sess.isHost) {
     $('#btn-start').disabled = lob.players.length < lob.min;
-    $('#btn-add-bot').disabled = lob.players.length >= lob.max;
   }
   const n = lob.players.length;
   $('#lobby-hint').textContent = sess.isHost
     ? n < lob.min
-      ? 'Share the code or link — or add a bot to fill the squad.'
+      ? 'Share the code or invite link — the squad needs at least one more expert.'
       : `${n} in the squad — you can afford ${n - 1} wrong call${n === 2 ? '' : 's'}. Good luck!`
     : 'Waiting for the host to start the mission…';
 }
@@ -1113,7 +1082,7 @@ function seatPanel(container, view, p) {
     panel = el('div', 'seat');
     panel.dataset.seat = String(p.seat);
     const head = el('div', 'seat-head');
-    head.append(avatarEl(p.name, p.seat, p.bot));
+    head.append(avatarEl(p.name, p.seat));
     head.append(el('span', 'nm', p.seat === view.you ? `${p.name} (you)` : p.name));
     head.append(el('span', 'seat-note'));
     head.append(el('div', 'right'));
@@ -1652,7 +1621,6 @@ function init() {
   $('#btn-copy-code').addEventListener('click', () => copyText(session ? session.code : ''));
   $('#btn-copy-link').addEventListener('click', () => copyText(session ? roomLink(session.code) : ''));
   $('#btn-start').addEventListener('click', () => session && session.isHost && session.start());
-  $('#btn-add-bot').addEventListener('click', () => session && session.isHost && session.addBot());
   $('#btn-retry').addEventListener('click', () => session && session.isHost && session.retry());
   $('#btn-golobby').addEventListener('click', () => session && session.isHost && session.toLobby());
 
