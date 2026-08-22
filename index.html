@@ -87,6 +87,7 @@
 
     .art.dnup { background: linear-gradient(150deg, #1d4535, #0e2b21); }
     .art.love { background: linear-gradient(150deg, #4a1f3d, #2a1230); }
+    .art.bomb { background: linear-gradient(150deg, #1c2f47, #101b2b); }
 
     /* dnup art: the flipped wordmark */
     .wordmark {
@@ -132,6 +133,33 @@
     .fan i:nth-child(2) { background: #b91c5c; transform: rotate(-4deg) translateY(-4px); }
     .fan i:nth-child(3) { background: #7c3aed; transform: rotate(4deg) translateY(-4px); }
     .fan i:nth-child(4) { background: #be185d; transform: rotate(12deg); }
+
+    /* bomb busters art: a rack of numbered wire tiles, one red */
+    .rack {
+      display: flex;
+      align-items: flex-end;
+      gap: 5px;
+    }
+
+    .rack i {
+      width: 30px;
+      height: 46px;
+      border-radius: 5px;
+      display: grid;
+      place-items: center;
+      font-style: normal;
+      font-weight: 900;
+      font-size: 16px;
+      color: #fff;
+      background: linear-gradient(180deg, #56b7ff, #1f7fd1);
+      border: 1px solid rgba(0, 0, 0, 0.45);
+      box-shadow: 0 5px 12px rgba(0, 0, 0, 0.4);
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+    }
+
+    .rack i.y { background: linear-gradient(180deg, #ffdd80, #f0b429); color: #4a3407; text-shadow: none; }
+    .rack i.r { background: linear-gradient(180deg, #ff7a7a, #d92f34); }
+    .rack i.up { translate: 0 -7px; }
 
     .body {
       padding: 16px 18px 18px;
@@ -219,6 +247,21 @@
       </div>
     </a>
 
+    <a class="game" href="./bombbusters/">
+      <div class="art bomb">
+        <span class="rack"><i>2</i><i class="up">4</i><i class="y">Y</i><i class="up">7</i><i class="r">☠</i><i>11</i></span>
+      </div>
+      <div class="body">
+        <div class="title-row">
+          <span class="name">Bomb Busters</span>
+          <span class="players">2–5 players</span>
+        </div>
+        <p class="blurb">Co-op: your squad shares one bomb. Everyone's wires are sorted but hidden from their owner's teammates — call the right numbers, cut together, and never, ever touch a red wire.</p>
+        <div class="tags"><span class="tag">co-op deduction</span><span class="tag">bots</span><span class="tag">~20 min</span></div>
+        <span class="play">Play Bomb Busters →</span>
+      </div>
+    </a>
+
     <a class="game" href="./loveletter/">
       <div class="art love">
         <span class="fan"><i>1</i><i>5</i><i>8</i><i>9</i></span>
@@ -236,7 +279,7 @@
   </main>
 
   <footer>
-    Unofficial fan implementations, built for play between friends. <a href="https://www.dnup.game" target="_blank" rel="noopener">dnup</a> is by Kei Kajino &amp; Gilles-Romain Fonteny (© Asmodee Group); Love Letter is by Seiji Kanai (© Z-Man Games / Asmodee). Multiplayer runs over WebRTC — browsers talk directly to each other.
+    Unofficial fan implementations, built for play between friends. <a href="https://www.dnup.game" target="_blank" rel="noopener">dnup</a> is by Kei Kajino &amp; Gilles-Romain Fonteny (© Asmodee Group); Love Letter is by Seiji Kanai (© Z-Man Games / Asmodee); Bomb Busters is by Hisashi Hayashi (© Cocktail Games / Pegasus Spiele). Multiplayer runs over WebRTC — browsers talk directly to each other.
   </footer>
 </body>
 </html>
