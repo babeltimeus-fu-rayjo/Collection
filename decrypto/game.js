@@ -201,16 +201,11 @@ export function newMatch(roster) {
 
 function pickEncryptor(G, ti) {
   const team = G.teams[ti];
-  // each team member takes the role in turn order, skipping the disconnected
-  for (let k = 0; k < team.seats.length; k++) {
-    const seat = team.seats[(team.encPtr + k) % team.seats.length];
-    const p = playerBySeat(G, seat);
-    if (p && p.connected) {
-      team.encPtr = (team.encPtr + k + 1) % team.seats.length;
-      return seat;
-    }
-  }
-  return team.seats[0];
+  // strict turn order — if the duty lands on a disconnected player the game
+  // waits for them (the host can hand the code to a teammate instead)
+  const seat = team.seats[team.encPtr % team.seats.length];
+  team.encPtr = (team.encPtr + 1) % team.seats.length;
+  return seat;
 }
 
 function startExchange(G) {
@@ -428,23 +423,20 @@ export function markDisconnected(G, seat) {
   const p = playerBySeat(G, seat);
   if (!p || !p.connected) return false;
   p.connected = false;
-  addLog(G, `${p.name} disconnected.`);
-  if (G.phase === 'playing' || G.phase === 'showdown') {
-    // a team with nobody left forfeits
-    for (let i = 0; i < 2; i++) {
-      if (connectedSeats(G, i).length === 0) {
-        finish(G, 1 - i, 'forfeit');
-        return true;
-      }
-    }
-  }
-  if (G.phase === 'playing' && G.current && G.current.encryptor === seat && !G.current.clues) {
-    const next = connectedSeats(G, G.current.team).find((s) => s !== seat);
-    if (next != null) {
-      G.current.encryptor = next;
-      addLog(G, `${playerBySeat(G, next).name} takes over as encryptor.`);
-    }
-  }
+  addLog(G, `${p.name} disconnected — the game waits for them.`);
+  return true;
+}
+
+// Host-only remedy when the pending encryptor is disconnected: hand the
+// current exchange (same code) to a connected teammate.
+export function passEncryptor(G, seat) {
+  const p = playerBySeat(G, seat);
+  if (!p || p.connected) return false;
+  if (G.phase !== 'playing' || !G.current || G.current.encryptor !== seat || G.current.clues) return false;
+  const next = connectedSeats(G, G.current.team).find((s) => s !== seat);
+  if (next == null) return false;
+  G.current.encryptor = next;
+  addLog(G, `The host hands the code to ${playerBySeat(G, next).name} — they take over as encryptor.`);
   return true;
 }
 

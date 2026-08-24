@@ -722,6 +722,7 @@ export function markReconnected(G, seat) {
   const p = playerBySeat(G, seat);
   if (!p || p.connected) return false;
   p.connected = true;
+  p.botFor = false;
   addLog(G, `${p.name} reconnected — welcome back!`);
   return true;
 }
@@ -730,7 +731,17 @@ export function markDisconnected(G, seat) {
   const p = playerBySeat(G, seat);
   if (!p || !p.connected) return false;
   p.connected = false;
-  addLog(G, `${p.name} disconnected — the wind tends their landscape.`);
+  p.botFor = false;
+  addLog(G, `${p.name} disconnected — the game waits for them.`);
+  return true;
+}
+
+// Host-only remedy for a stalled seat: hand it to a bot until they return.
+export function markBotTakeover(G, seat) {
+  const p = playerBySeat(G, seat);
+  if (!p || p.connected || p.botFor) return false;
+  p.botFor = true;
+  addLog(G, `The host hands ${p.name}'s seat to a bot until they return.`);
   return true;
 }
 
@@ -763,6 +774,7 @@ export function viewFor(G, seat, code) {
       name: p.name,
       bot: p.bot,
       connected: p.connected,
+      botFor: !!p.botFor,
       board: p.board,
       tray: p.tray,
       tookTokens: p.tookTokens,

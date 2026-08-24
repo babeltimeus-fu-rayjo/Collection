@@ -20,6 +20,7 @@ import {
   botChoose,
   markDisconnected,
   markReconnected,
+  markBotTakeover,
 } from './game.js';
 
 // ---------------------------------------------------------------- networking
@@ -372,9 +373,21 @@ class HostSession {
       this.pushLobby();
     } else {
       p.connected = false;
-      if (markDisconnected(this.G, seat)) toast(`${p.name} disconnected — the squad covers for them`);
+      if (markDisconnected(this.G, seat)) toast(`${p.name} disconnected — the mission waits for them`);
       this.broadcast();
     }
+  }
+
+  // The squad stalls on a disconnected player's turn until they return —
+  // unless the host hands their seat to a bot.
+  seatCovered(seat) {
+    const p = this.G && this.G.players.find((q) => q.seat === seat);
+    return !!p && (p.bot || (p.botFor && !p.connected));
+  }
+
+  botTakeover(seat) {
+    if (!this.G) return;
+    if (markBotTakeover(this.G, seat)) this.broadcast();
   }
 
   sweep() {
@@ -421,21 +434,19 @@ class HostSession {
   }
 
   // No bots in this game — but a co-op mission cannot go on without a player's
-  // rack, so the host's browser quietly covers the turns of anyone who
-  // disconnects (same brain the tests use) until they are gone for good.
+  // rack. If the host hands a disconnected player's seat to a bot, the same
+  // brain the tests use plays it until they return.
   scheduleBots() {
     clearTimeout(this.botTimer);
     if (!this.G) return;
     const actor = this.actorOf();
     if (actor == null) return;
-    const cur = this.roster.find((p) => p.seat === actor);
-    if (!cur || cur.connected) return;
+    if (!this.seatCovered(actor)) return;
     this.botTimer = setTimeout(() => {
       if (!this.G) return;
       const seat = this.actorOf();
       if (seat == null) return;
-      const p = this.roster.find((q) => q.seat === seat);
-      if (!p || p.connected) return;
+      if (!this.seatCovered(seat)) return;
       const g = this.G;
       const res = applyMove(g, seat, botChoose(g, seat) || {});
       if (!res.ok) {
@@ -1448,8 +1459,43 @@ function renderActionBar(view) {
 
 // ---------------------------------------------------------------- main render
 
+// While a human is disconnected mid-game the squad stalls; tell everyone
+// why, and give the host the remedy (hand the seat to a bot).
+function renderDcBanner(view, sess) {
+  let bar = $('#dc-banner');
+  if (!bar) {
+    bar = el('div', '');
+    bar.id = 'dc-banner';
+    const anchor = $('#action-bar');
+    anchor.parentNode.insertBefore(bar, anchor);
+  }
+  bar.replaceChildren();
+  const live = view.phase === 'setup' || view.phase === 'playing';
+  const gone = live ? view.players.filter((p) => !p.connected && !p.bot) : [];
+  bar.classList.toggle('on', gone.length > 0);
+  for (const p of gone) {
+    const row = el('div', 'dc-row' + (p.botFor ? ' covered' : ''));
+    row.append(
+      el(
+        'span',
+        'dc-msg',
+        p.botFor
+          ? `🤖 A bot is playing for ${p.name} until they return.`
+          : `⚠️ ${p.name} lost connection — the mission is waiting for them.`,
+      ),
+    );
+    if (!p.botFor && sess && sess.isHost) {
+      const b = el('button', 'dc-btn', '🤖 Let a bot take over');
+      b.onclick = () => sess.botTakeover(p.seat);
+      row.append(b);
+    }
+    bar.append(row);
+  }
+}
+
 function renderGame(view, sess) {
   lastView = view;
+  renderDcBanner(view, sess);
   $('#room-chip').textContent = view.code || '·····';
   $('#mission-chip').textContent = `${view.mission.name} · ${view.mission.red} red · ${view.mission.yellow} yellow`;
 

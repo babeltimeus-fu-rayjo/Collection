@@ -21,6 +21,7 @@ import {
   viewFor,
   markDisconnected,
   markReconnected,
+  passEncryptor,
 } from './game.js';
 
 // ---------------------------------------------------------------- networking
@@ -388,6 +389,13 @@ class HostSession {
       if (markDisconnected(this.G, seat)) toast(`${p.name} disconnected`);
       this.broadcast();
     }
+  }
+
+  // A round stalls while its encryptor is disconnected — the host can hand
+  // the code to a connected teammate instead (Decrypto has no bots).
+  passCode(seat) {
+    if (!this.G) return;
+    if (passEncryptor(this.G, seat)) this.broadcast();
   }
 
   sweep() {
@@ -1088,8 +1096,45 @@ function renderActionBar(view, sess) {
 
 // ---------------------------------------------------------------- main render
 
+// While a player is disconnected the table may stall (hard-stall when they
+// are the pending encryptor); tell everyone why, and give the host the
+// remedy — Decrypto has no bots, so the code passes to a teammate instead.
+function renderDcBanner(view, sess) {
+  let bar = $('#dc-banner');
+  if (!bar) {
+    bar = el('div', '');
+    bar.id = 'dc-banner';
+    const anchor = $('#action-bar');
+    anchor.parentNode.insertBefore(bar, anchor);
+  }
+  bar.replaceChildren();
+  const gone = view.phase !== 'over' ? view.players.filter((p) => !p.connected) : [];
+  bar.classList.toggle('on', gone.length > 0);
+  for (const p of gone) {
+    const enc =
+      view.phase === 'playing' && view.current && !view.current.clues && view.current.encryptor === p.seat;
+    const row = el('div', 'dc-row');
+    row.append(
+      el(
+        'span',
+        'dc-msg',
+        enc
+          ? `⚠️ ${p.name} lost connection — the game is waiting for their clues.`
+          : `⚠️ ${p.name} lost connection — the game may wait for them.`,
+      ),
+    );
+    if (enc && sess && sess.isHost) {
+      const b = el('button', 'dc-btn', 'Hand the code to a teammate');
+      b.onclick = () => sess.passCode(p.seat);
+      row.append(b);
+    }
+    bar.append(row);
+  }
+}
+
 function renderGame(view, sess) {
   lastView = view;
+  renderDcBanner(view, sess);
   $('#room-chip').textContent = view.code || '·····';
   $('#round-chip').textContent =
     view.phase === 'showdown' ? 'TIEBREAKER' : view.phase === 'over' ? 'Game over' : `Round ${view.round}/${view.maxRounds}`;

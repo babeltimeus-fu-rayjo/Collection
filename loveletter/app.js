@@ -22,6 +22,7 @@ import {
   applyMove,
   markDisconnected,
   markReconnected,
+  markBotTakeover,
   viewFor,
   botChoose,
 } from './game.js';
@@ -358,9 +359,21 @@ class HostSession {
       this.pushLobby();
     } else {
       p.connected = false;
-      if (markDisconnected(this.G, seat)) toast(`${p.name} disconnected`);
+      if (markDisconnected(this.G, seat)) toast(`${p.name} disconnected — the game waits for them`);
       this.broadcast();
     }
+  }
+
+  // The table stalls on a disconnected player's turn until they return —
+  // unless the host hands their seat to a bot.
+  seatCovered(seat) {
+    const p = this.G && this.G.players.find((q) => q.seat === seat);
+    return !!p && (p.bot || (p.botFor && !p.connected));
+  }
+
+  botTakeover(seat) {
+    if (!this.G) return;
+    if (markBotTakeover(this.G, seat)) this.broadcast();
   }
 
   sweep() {
@@ -417,14 +430,12 @@ class HostSession {
     clearTimeout(this.botTimer);
     if (!this.G || this.G.phase !== 'playing') return;
     const actor = this.G.pending ? this.G.pending.seat : this.G.turn;
-    const cur = this.roster.find((p) => p.seat === actor);
-    if (!cur || !cur.bot) return;
+    if (!this.seatCovered(actor)) return;
     this.botTimer = setTimeout(() => {
       if (!this.G || this.G.phase !== 'playing') return;
       const g = this.G;
       const seat = g.pending ? g.pending.seat : g.turn;
-      const p = this.roster.find((q) => q.seat === seat);
-      if (!p || !p.bot) return;
+      if (!this.seatCovered(seat)) return;
       const res = applyMove(g, seat, botChoose(g, seat));
       if (!res.ok) {
         // never stall the table: fall back to the plainest legal action
@@ -1149,8 +1160,42 @@ function renderTracker(view) {
   }
 }
 
+// While a human is disconnected mid-game the table stalls; tell everyone
+// why, and give the host the remedy (hand the seat to a bot).
+function renderDcBanner(view, sess) {
+  let bar = $('#dc-banner');
+  if (!bar) {
+    bar = el('div', '');
+    bar.id = 'dc-banner';
+    const anchor = $('#action-bar');
+    anchor.parentNode.insertBefore(bar, anchor);
+  }
+  bar.replaceChildren();
+  const gone = view.phase !== 'over' ? view.players.filter((p) => !p.connected && !p.bot) : [];
+  bar.classList.toggle('on', gone.length > 0);
+  for (const p of gone) {
+    const row = el('div', 'dc-row' + (p.botFor ? ' covered' : ''));
+    row.append(
+      el(
+        'span',
+        'dc-msg',
+        p.botFor
+          ? `🤖 A bot is playing for ${p.name} until they return.`
+          : `⚠️ ${p.name} lost connection — the game is waiting for them.`,
+      ),
+    );
+    if (!p.botFor && sess && sess.isHost) {
+      const b = el('button', 'dc-btn', '🤖 Let a bot take over');
+      b.onclick = () => sess.botTakeover(p.seat);
+      row.append(b);
+    }
+    bar.append(row);
+  }
+}
+
 function renderGame(view, sess) {
   lastView = view;
+  renderDcBanner(view, sess);
   chatSetVisible(true);
   $('#room-chip').textContent = view.code;
   $('#round-chip').textContent = `Round ${view.round} · first to ${view.tokensToWin} ♥`;
@@ -1195,7 +1240,7 @@ function renderGame(view, sess) {
     status.className = 'status mine';
   } else {
     const cur = view.players.find((p) => p.seat === view.turn);
-    status.textContent = cur && cur.bot ? `${cur.name} is thinking…` : `Waiting for ${cur ? cur.name : '…'}…`;
+    status.textContent = cur && (cur.bot || cur.botFor) ? `${cur.name} is thinking…` : `Waiting for ${cur ? cur.name : '…'}…`;
     status.className = 'status';
   }
 

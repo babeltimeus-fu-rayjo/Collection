@@ -1286,3 +1286,12 @@ a {
     grid-template-columns: 1fr;
   }
 }
+
+/* Disconnect banner: the table stalls until the player returns or the host
+   resolves it (neutral tones so it reads on any of our palettes) */
+#dc-banner { display: none; }
+#dc-banner.on { display: flex; flex-direction: column; gap: 6px; margin: 10px auto 2px; max-width: 620px; padding: 0 10px; }
+#dc-banner .dc-row { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; background: rgba(255, 92, 92, 0.14); border: 1px solid rgba(255, 92, 92, 0.55); border-radius: 10px; padding: 7px 12px; font-size: 13px; line-height: 1.35; }
+#dc-banner .dc-row.covered { background: rgba(127, 127, 127, 0.12); border-color: rgba(127, 127, 127, 0.45); }
+#dc-banner .dc-btn { border: 1px solid rgba(127, 127, 127, 0.55); background: rgba(127, 127, 127, 0.16); color: inherit; border-radius: 8px; padding: 4px 10px; font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+#dc-banner .dc-btn:hover { background: rgba(127, 127, 127, 0.28); }

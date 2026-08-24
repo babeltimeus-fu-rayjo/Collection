@@ -243,12 +243,12 @@ export function dealRound(G) {
   for (const p of G.players) {
     p.hand = [];
     p.discard = [];
-    p.out = !p.connected;
+    p.out = false;
     p.immune = false;
     p.reveals = [];
     p.memory = {};
     p.lastAction = null;
-    if (p.connected) drawFor(G, p);
+    drawFor(G, p);
   }
   let starter = G.starter;
   if (starter == null || !G.players.some((p) => p.seat === starter && !p.out)) {
@@ -684,6 +684,7 @@ export function markReconnected(G, seat) {
   const p = bySeat(G, seat);
   if (!p || p.connected) return false;
   p.connected = true;
+  p.botFor = false;
   note(G, `${p.name} reconnected — welcome back!`);
   return true;
 }
@@ -692,30 +693,17 @@ export function markDisconnected(G, seat) {
   const p = bySeat(G, seat);
   if (!p || !p.connected) return false;
   p.connected = false;
-  note(G, `${p.name} disconnected.`);
-  if (G.phase !== 'playing') return true;
-  if (!p.out) {
-    p.out = true;
-    while (p.hand.length) toDiscard(p, p.hand.pop());
-  }
-  if (G.sycophant === seat) G.sycophant = null;
-  const live = G.players.filter((q) => q.connected);
-  if (live.length <= 1) {
-    G.phase = 'over';
-    G.winner = live.length ? live[0].seat : null;
-    G.roundResult = { reason: 'forfeit', winners: live.map((q) => q.seat), hands: [] };
-    note(G, live.length ? `${live[0].name} wins — everyone else left.` : 'Everyone left.');
-    return true;
-  }
-  if (G.pending && G.pending.seat === seat) {
-    G.pending = null;
-    finishTurn(G);
-  } else if (G.turn === seat) {
-    finishTurn(G);
-  } else {
-    const alive = alivePlayers(G);
-    if (alive.length <= 1) endRound(G);
-  }
+  p.botFor = false;
+  note(G, `${p.name} disconnected — the game waits for them.`);
+  return true;
+}
+
+// Host-only remedy for a stalled seat: hand it to a bot until they return.
+export function markBotTakeover(G, seat) {
+  const p = bySeat(G, seat);
+  if (!p || p.connected || p.botFor) return false;
+  p.botFor = true;
+  note(G, `The host hands ${p.name}'s seat to a bot until they return.`);
   return true;
 }
 
@@ -898,6 +886,7 @@ export function viewFor(G, seat, code) {
       name: p.name,
       bot: p.bot,
       connected: p.connected,
+      botFor: !!p.botFor,
       tokens: p.tokens,
       out: p.out,
       immune: p.immune,

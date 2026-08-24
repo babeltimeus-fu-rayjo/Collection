@@ -27,6 +27,7 @@ import {
   botChoose,
   markDisconnected,
   markReconnected,
+  markBotTakeover,
   turnSeat,
 } from './game.js';
 
@@ -373,9 +374,21 @@ class HostSession {
       this.pushLobby();
     } else {
       p.connected = false;
-      if (markDisconnected(this.G, seat)) toast(`${p.name} disconnected — a bot mans their station`);
+      if (markDisconnected(this.G, seat)) toast(`${p.name} disconnected — the game waits for them`);
       this.broadcast();
     }
+  }
+
+  // The table stalls on a disconnected player's bid or play until they
+  // return — unless the host hands their seat to a bot.
+  seatCovered(seat) {
+    const p = this.G && this.G.players.find((q) => q.seat === seat);
+    return !!p && (p.bot || (p.botFor && !p.connected));
+  }
+
+  botTakeover(seat) {
+    if (!this.G) return;
+    if (markBotTakeover(this.G, seat)) this.broadcast();
   }
 
   sweep() {
@@ -437,10 +450,7 @@ class HostSession {
   botActor() {
     const g = this.G;
     if (!g) return null;
-    const needsCover = (p) => {
-      const r = this.roster.find((q) => q.seat === p.seat);
-      return r && (r.bot || !r.connected);
-    };
+    const needsCover = (p) => this.seatCovered(p.seat);
     if (g.phase === 'bid') {
       const pending = g.players.filter((p) => p.bid == null && needsCover(p));
       return pending.length ? pending[0].seat : null;
@@ -1125,8 +1135,42 @@ function renderActionBar(view) {
 
 // ---------------------------------------------------------------- main render
 
+// While a human is disconnected mid-game the table stalls; tell everyone
+// why, and give the host the remedy (hand the seat to a bot).
+function renderDcBanner(view, sess) {
+  let bar = $('#dc-banner');
+  if (!bar) {
+    bar = el('div', '');
+    bar.id = 'dc-banner';
+    const anchor = $('#action-bar');
+    anchor.parentNode.insertBefore(bar, anchor);
+  }
+  bar.replaceChildren();
+  const gone = view.phase !== 'over' ? view.players.filter((p) => !p.connected && !p.bot) : [];
+  bar.classList.toggle('on', gone.length > 0);
+  for (const p of gone) {
+    const row = el('div', 'dc-row' + (p.botFor ? ' covered' : ''));
+    row.append(
+      el(
+        'span',
+        'dc-msg',
+        p.botFor
+          ? `🤖 A bot is playing for ${p.name} until they return.`
+          : `⚠️ ${p.name} lost connection — the game is waiting for them.`,
+      ),
+    );
+    if (!p.botFor && sess && sess.isHost) {
+      const b = el('button', 'dc-btn', '🤖 Let a bot take over');
+      b.onclick = () => sess.botTakeover(p.seat);
+      row.append(b);
+    }
+    bar.append(row);
+  }
+}
+
 function renderGame(view, sess) {
   lastView = view;
+  renderDcBanner(view, sess);
   $('#room-chip').textContent = view.code || '·····';
   const cap = view.dealt < view.round ? ` (${view.dealt} cards)` : '';
   $('#round-chip').textContent =

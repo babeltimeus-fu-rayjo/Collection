@@ -210,7 +210,7 @@ export function advanceTurn(G) {
   for (let guard = 0; guard < 24; guard++) {
     ({ seat, area } = nextUnit(G, seat, area));
     const p = bySeat(G, seat);
-    if (p.out || !p.connected) {
+    if (p.out) {
       let had = false;
       p.areas.forEach((s, i) => {
         if (s) {
@@ -243,7 +243,7 @@ function bounceSet(G, ref) {
   if (!s) return;
   owner.areas[ref.area] = null;
   owner.notes[ref.area] = `${setLabel(s)} beaten`;
-  if (owner.out || !owner.connected) {
+  if (owner.out) {
     G.discardCount += s.cards.length;
     note(G, `${owner.name}'s ${setLabel(s)} is beaten and discarded.`);
     return false;
@@ -432,6 +432,7 @@ export function markReconnected(G, seat) {
   const p = bySeat(G, seat);
   if (!p || p.connected) return false;
   p.connected = true;
+  p.botFor = false;
   note(G, `${p.name} reconnected — welcome back!`);
   return true;
 }
@@ -440,17 +441,17 @@ export function markDisconnected(G, seat) {
   const p = bySeat(G, seat);
   if (!p || !p.connected) return false;
   p.connected = false;
-  note(G, `${p.name} disconnected.`);
-  if (G.phase !== 'playing') return true;
-  const live = G.players.filter((q) => q.connected);
-  if (live.length === 1) {
-    G.phase = 'over';
-    G.winner = live[0].seat;
-    G.roundResult = { kind: 'forfeit' };
-    note(G, `${live[0].name} wins — everyone else left.`);
-    return true;
-  }
-  if (G.turn.seat === seat) advanceTurn(G);
+  p.botFor = false;
+  note(G, `${p.name} disconnected — the game waits for them.`);
+  return true;
+}
+
+// Host-only remedy for a stalled seat: hand it to a bot until they return.
+export function markBotTakeover(G, seat) {
+  const p = bySeat(G, seat);
+  if (!p || p.connected || p.botFor) return false;
+  p.botFor = true;
+  note(G, `The host hands ${p.name}'s seat to a bot until they return.`);
   return true;
 }
 
@@ -555,6 +556,7 @@ export function viewFor(G, seat, code) {
       name: p.name,
       bot: p.bot,
       connected: p.connected,
+      botFor: !!p.botFor,
       out: p.out,
       points: p.points,
       rounds: p.rounds,

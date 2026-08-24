@@ -29,6 +29,7 @@ import {
   botChoose,
   markDisconnected,
   markReconnected,
+  markBotTakeover,
 } from './game.js';
 
 // ---------------------------------------------------------------- networking
@@ -368,9 +369,21 @@ class HostSession {
       this.pushLobby();
     } else {
       p.connected = false;
-      if (markDisconnected(this.G, seat)) toast(`${p.name} disconnected — a bot tends their landscape`);
+      if (markDisconnected(this.G, seat)) toast(`${p.name} disconnected — the game waits for them`);
       this.broadcast();
     }
+  }
+
+  // The table stalls on a disconnected player's turn until they return —
+  // unless the host hands their seat to a bot.
+  seatCovered(seat) {
+    const p = this.G && this.G.players.find((q) => q.seat === seat);
+    return !!p && (p.bot || (p.botFor && !p.connected));
+  }
+
+  botTakeover(seat) {
+    if (!this.G) return;
+    if (markBotTakeover(this.G, seat)) this.broadcast();
   }
 
   sweep() {
@@ -434,16 +447,14 @@ class HostSession {
     clearTimeout(this.botTimer);
     if (!this.G || this.G.phase !== 'playing') return;
     const seat = this.G.turn;
-    const r = this.roster.find((q) => q.seat === seat);
-    if (!r || (!r.bot && r.connected)) return;
+    if (!this.seatCovered(seat)) return;
     const p = this.G.players.find((q) => q.seat === seat);
     const midTurn = p && (p.tookTokens || p.tray.length);
     const delay = midTurn ? 650 + Math.random() * 550 : 2400 + Math.random() * 1400;
     this.botTimer = setTimeout(() => {
       if (!this.G || this.G.phase !== 'playing') return;
       const seat2 = this.G.turn;
-      const r2 = this.roster.find((q) => q.seat === seat2);
-      if (!r2 || (!r2.bot && r2.connected)) return;
+      if (!this.seatCovered(seat2)) return;
       const move = botChoose(this.G, seat2);
       if (move) {
         const res = applyMove(this.G, seat2, move);
@@ -1324,8 +1335,42 @@ function renderActionBar(view) {
 
 // ---------------------------------------------------------------- main render
 
+// While a human is disconnected mid-game the table stalls; tell everyone
+// why, and give the host the remedy (hand the seat to a bot).
+function renderDcBanner(view, sess) {
+  let bar = $('#dc-banner');
+  if (!bar) {
+    bar = el('div', '');
+    bar.id = 'dc-banner';
+    const anchor = $('#action-bar');
+    anchor.parentNode.insertBefore(bar, anchor);
+  }
+  bar.replaceChildren();
+  const gone = view.phase !== 'over' ? view.players.filter((p) => !p.connected && !p.bot) : [];
+  bar.classList.toggle('on', gone.length > 0);
+  for (const p of gone) {
+    const row = el('div', 'dc-row' + (p.botFor ? ' covered' : ''));
+    row.append(
+      el(
+        'span',
+        'dc-msg',
+        p.botFor
+          ? `🤖 A bot is playing for ${p.name} until they return.`
+          : `⚠️ ${p.name} lost connection — the game is waiting for them.`,
+      ),
+    );
+    if (!p.botFor && sess && sess.isHost) {
+      const b = el('button', 'dc-btn', '🤖 Let a bot take over');
+      b.onclick = () => sess.botTakeover(p.seat);
+      row.append(b);
+    }
+    bar.append(row);
+  }
+}
+
 function renderGame(view, sess) {
   lastView = view;
+  renderDcBanner(view, sess);
   if (viewMid !== view.mid) {
     viewMid = view.mid;
     viewSeat = view.you;
