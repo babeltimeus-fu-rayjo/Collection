@@ -744,6 +744,13 @@ function cardEl(card, as = null, mini = false) {
     const v = el('div', 'cv');
     v.append(valSpan(card.v));
     c.append(v);
+    if (card.v === 14) {
+      // the 14s carry a capture bonus (for whoever takes the trick, on an
+      // exact bid): +10 in the three standard suits, +20 for black
+      const b = el('div', 'cbonus', card.suit === 'black' ? '+20' : '+10');
+      b.title = `Capturing this card is worth ${card.suit === 'black' ? '+20' : '+10'} bonus points (with an exact bid)`;
+      c.append(b);
+    }
   } else {
     c.append(el('div', 'ck', KIND_META[card.kind].icon));
     const name =
