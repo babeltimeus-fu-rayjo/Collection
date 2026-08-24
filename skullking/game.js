@@ -21,8 +21,39 @@
 
 export const PROTO = 1;
 export const MIN_PLAYERS = 2;
-export const MAX_PLAYERS = 6;
+export const MAX_PLAYERS = 8;
 export const ROUNDS = 10;
+
+// Official scoring systems, selectable when creating a room:
+//   classic    — Skull King's scoring from the rule sheet (the default).
+//   rascal     — The Rascal's Scoring: every round has the same potential,
+//                10 points per card dealt; an exact bid earns all of it (and
+//                all bonuses), off-by-one earns half of both, off by 2+ earns
+//                nothing. No negative scores.
+//   cannonball — the rulebook's high-stakes Rascal variant: 15 points per
+//                card dealt and full bonuses, but ONLY on an exact bid;
+//                off by even one earns nothing.
+export const SCORING = [
+  {
+    key: 'classic',
+    name: "Skull King's scoring",
+    blurb: 'The classic: +20 per trick on an exact bid, −10 per trick off. Zero bids pay ±10 × the cards dealt. Bonuses only on exact bids.',
+  },
+  {
+    key: 'rascal',
+    name: "The Rascal's scoring",
+    blurb: 'Even-keeled: every round is worth 10 × the cards dealt, whatever you bid. Exact = all of it, off-by-one = half (bonuses too), off by 2+ = nothing. Never negative.',
+  },
+  {
+    key: 'cannonball',
+    name: 'Cannonball',
+    blurb: 'All or nothing: 15 × the cards dealt plus full bonuses on an exact bid — and zero if you are off, even by one.',
+  },
+];
+
+export function scoringByKey(key) {
+  return SCORING.find((s) => s.key === key) || SCORING[0];
+}
 
 export const SUITS = ['green', 'yellow', 'purple', 'black'];
 
@@ -93,7 +124,7 @@ function effKind(play) {
 
 // ---------------------------------------------------------------- setup
 
-export function newMatch(roster) {
+export function newMatch(roster, scoringKey) {
   const players = roster
     .map((r) => ({
       seat: r.seat,
@@ -112,8 +143,10 @@ export function newMatch(roster) {
   const G = {
     proto: PROTO,
     mid: Math.random().toString(36).slice(2, 10),
+    scoring: scoringByKey(scoringKey).key,
     phase: 'bid',
     round: 0,
+    dealt: 0,
     dealerIdx: Math.floor(Math.random() * players.length),
     players,
     trick: null,
@@ -136,15 +169,19 @@ export function dealRound(G) {
   G.roundResult = null;
   G.dealerIdx = (G.dealerIdx + 1) % G.players.length;
   const deck = shuffle(buildDeck());
+  // with a big crew the deck runs short late: everyone gets the same, capped
+  // number of cards (official note: 8 players get 8 cards in rounds 9 and 10)
+  G.dealt = Math.min(G.round, Math.floor(deck.length / G.players.length));
   for (const p of G.players) {
-    p.hand = deck.splice(0, G.round).sort(handOrder);
+    p.hand = deck.splice(0, G.dealt).sort(handOrder);
     p.bid = null;
     p.tricksWon = 0;
     p.captured = [];
     p.lastAction = null;
   }
   const dealer = G.players[G.dealerIdx];
-  addLog(G, `— Round ${G.round} of ${ROUNDS} — ${dealer.name} deals ${G.round} card${G.round === 1 ? '' : 's'}. Yo-ho-ho, place your bids!`);
+  const capped = G.dealt < G.round ? ` (the deck caps a crew of ${G.players.length} at ${G.dealt})` : '';
+  addLog(G, `— Round ${G.round} of ${ROUNDS} — ${dealer.name} deals ${G.dealt} card${G.dealt === 1 ? '' : 's'}${capped}. Yo-ho-ho, place your bids!`);
   setFx(G, { kind: 'deal', round: G.round });
 }
 
@@ -199,8 +236,8 @@ function doBid(G, p, move) {
   if (G.phase !== 'bid') return { ok: false, error: 'Bidding is over' };
   if (p.bid != null) return { ok: false, error: 'Your bid is locked' };
   const n = move.n;
-  if (!Number.isInteger(n) || n < 0 || n > G.round) {
-    return { ok: false, error: `Bid between 0 and ${G.round}` };
+  if (!Number.isInteger(n) || n < 0 || n > G.dealt) {
+    return { ok: false, error: `Bid between 0 and ${G.dealt}` };
   }
   p.bid = n;
   addLog(G, `${p.name} locks in a bid.`);
@@ -305,16 +342,27 @@ export function trickBonus(plays, winnerPlay) {
 function scoreRound(G) {
   const lines = [];
   for (const p of G.players) {
-    const exact = p.tricksWon === p.bid;
-    let bidPts;
-    if (p.bid === 0) bidPts = exact ? 10 * G.round : -10 * G.round;
-    else bidPts = exact ? 20 * p.bid : -10 * Math.abs(p.tricksWon - p.bid);
+    const off = Math.abs(p.tricksWon - p.bid);
+    const exact = off === 0;
+    let rawBonus = 0;
+    for (const trick of p.captured) {
+      const winnerPlay = trick.find((pl) => pl.seat === p.seat);
+      rawBonus += trickBonus(trick, winnerPlay);
+    }
+    let bidPts = 0;
     let bonusPts = 0;
-    if (exact) {
-      for (const trick of p.captured) {
-        const winnerPlay = trick.find((pl) => pl.seat === p.seat);
-        bonusPts += trickBonus(trick, winnerPlay);
-      }
+    if (G.scoring === 'rascal') {
+      // every round has the same potential: 10 x cards dealt; exact earns all
+      // of it (and all bonuses), off-by-one earns half of both, else nothing
+      bidPts = exact ? 10 * G.dealt : off === 1 ? 5 * G.dealt : 0;
+      bonusPts = exact ? rawBonus : off === 1 ? rawBonus / 2 : 0;
+    } else if (G.scoring === 'cannonball') {
+      bidPts = exact ? 15 * G.dealt : 0;
+      bonusPts = exact ? rawBonus : 0;
+    } else {
+      if (p.bid === 0) bidPts = exact ? 10 * G.dealt : -10 * G.dealt;
+      else bidPts = exact ? 20 * p.bid : -10 * off;
+      bonusPts = exact ? rawBonus : 0;
     }
     p.score += bidPts + bonusPts;
     p.history.push({ round: G.round, bid: p.bid, tricks: p.tricksWon, bidPts, bonusPts, total: p.score });
@@ -366,6 +414,8 @@ export function viewFor(G, seat, code) {
     phase: G.phase,
     round: G.round,
     rounds: ROUNDS,
+    dealt: G.dealt,
+    scoring: G.scoring,
     dealer: G.players[G.dealerIdx].seat,
     turn: turnSeat(G),
     trickNo: G.trickNo,
@@ -435,7 +485,7 @@ export function botChoose(G, seat) {
     // crowded tables split the tricks more ways
     est *= 5 / (3 + G.players.length * 0.5);
     let n = Math.round(est + (Math.random() * 0.5 - 0.25));
-    n = Math.max(0, Math.min(G.round, n));
+    n = Math.max(0, Math.min(G.dealt, n));
     return { kind: 'bid', n };
   }
 

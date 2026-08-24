@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Skull King — bidding trick-taker for 2–6 players</title>
-  <meta name="description" content="Play Skull King online: bid exactly how many tricks you'll win, then make it happen with pirates, mermaids, escapes and the Skull King himself. 2–6 players, peer-to-peer, with bots.">
+  <title>Skull King — bidding trick-taker for 2–8 players</title>
+  <meta name="description" content="Play Skull King online: bid exactly how many tricks you'll win, then make it happen with pirates, mermaids, escapes and the Skull King himself. 2–8 players, peer-to-peer, with bots. Three official scoring systems.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='16' y='10' width='68' height='80' rx='10' fill='%23131a2b'/%3E%3Ctext x='50' y='66' font-size='44' text-anchor='middle'%3E%E2%98%A0%EF%B8%8F%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="style.css">
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -15,7 +15,7 @@
   <section id="screen-home" class="screen">
     <a class="back-home" href="../">← Collection</a>
     <h1 class="logo">SKULL<span class="skull">☠</span>KING</h1>
-    <p class="tagline">Ten rounds, one more card each time. Look at your hand, bid exactly how many tricks you'll win — then make it come true. Pirates beat numbers, the Skull King beats pirates, and the mermaids beat the King. Nail your bid for glory; miss it and walk the plank. 2–6 players, peer-to-peer: no accounts, no server, just a room code. Short on crew? Add bots.</p>
+    <p class="tagline">Ten rounds, one more card each time. Look at your hand, bid exactly how many tricks you'll win — then make it come true. Pirates beat numbers, the Skull King beats pirates, and the mermaids beat the King. Nail your bid for glory; miss it and walk the plank. 2–8 players, peer-to-peer: no accounts, no server, just a room code. Short on crew? Add bots.</p>
     <input id="name-input" class="field" maxlength="16" placeholder="Your name" autocomplete="nickname">
     <button id="btn-create" class="btn primary">Create a room</button>
     <div class="divider">or join one</div>
@@ -38,6 +38,9 @@
         <button id="btn-copy-link" class="btn ghost" type="button">Copy invite link</button>
       </div>
       <ul id="lobby-players"></ul>
+      <div class="lobby-label">Scoring</div>
+      <div id="scoring-picker"></div>
+      <div id="scoring-blurb"></div>
       <div id="lobby-hint"></div>
       <button id="btn-add-bot" class="btn secondary hidden" type="button">🦜 Add a bot</button>
       <button id="btn-start" class="btn primary hidden" type="button">Set sail</button>
@@ -53,6 +56,7 @@
     <div class="topbar">
       <span id="room-chip">·····</span>
       <span id="round-chip">Round 1</span>
+      <span id="scoring-chip"></span>
       <span class="spacer"></span>
       <button class="btn ghost btn-rules" type="button">Rules</button>
       <button class="btn ghost btn-leave" type="button">Leave</button>
@@ -72,13 +76,16 @@
     <div class="panel wide">
       <h2>How to play Skull King</h2>
       <ol class="rules">
-        <li><b>Ten rounds:</b> round N deals N cards. Everyone secretly bids how many tricks they'll win (0 to N); bids are revealed together — yo, ho, ho!</li>
+        <li><b>Ten rounds:</b> round N deals N cards. Everyone secretly bids how many tricks they'll win (0 to N); bids are revealed together — yo, ho, ho! With 8 players the 70-card deck runs short, so rounds 9 and 10 deal 8 cards each (per the official note).</li>
         <li><b>Following suit:</b> the first number played sets the suit, and you must follow it if you can. The black Jolly Roger suit beats the other three — but it's still a suit: you can only play black when you're out of the led colour (or when black leads). Special cards may be played anytime.</li>
         <li><b>Specials:</b> Pirates beat all numbers. The <b>Skull King</b> beats the pirates. A <b>Mermaid</b> beats the Skull King — even if pirates are there too. Between equals, first played wins. The <b>Tigress</b> is played as a pirate or an escape — your choice, declared as you play her.</li>
         <li><b>Escapes</b> always lose — that's the point. If everyone escapes, the first card takes the trick.</li>
         <li><b>Leads:</b> a pirate, mermaid or Skull King lead makes the whole trick suit-free. An escape lead passes suit-setting to the next player.</li>
-        <li><b>Scoring:</b> hit your bid exactly for <b>+20 per trick</b>; miss it for <b>−10 per trick off</b>. A zero bid pays <b>±10 × the round number</b> — brave in round nine.</li>
-        <li><b>Bonuses (only with an exact bid):</b> each captured 14 is +10 (the black 14 is +20); the Skull King earns +30 per pirate played before him; capturing the Skull King with a mermaid is +50.</li>
+        <li><b>Scoring</b> — the host picks one of the three official systems in the lobby:
+          <br>· <b>Skull King's scoring</b> (classic): hit your bid exactly for <b>+20 per trick</b>; miss it for <b>−10 per trick off</b>. A zero bid pays <b>±10 × the cards dealt</b> — brave in round nine.
+          <br>· <b>The Rascal's scoring</b>: every round is worth <b>10 × the cards dealt</b> for everyone, whatever they bid. A direct hit earns all of it, off-by-one earns half, off by 2+ earns nothing. Never negative.
+          <br>· <b>Cannonball</b>: <b>15 × the cards dealt</b> on a direct hit — and nothing at all if you're off, even by one.</li>
+        <li><b>Bonuses (with an exact bid — or halved on a Rascal's glancing blow):</b> each captured 14 is +10 (the black 14 is +20); the Skull King earns +30 per pirate played before him; capturing the Skull King with a mermaid is +50.</li>
         <li>Highest total after round ten rules the seas.</li>
       </ol>
       <p class="credit">Skull King is by Brent Beck (© Grandpa Beck's Games). This unofficial fan implementation uses the modern 70-card deck — four suits of 1–14, five pirates, five escapes, two mermaids, the Tigress, and the King himself. The Legendary expansion menu (Loot, Kraken, White Whale) is not included.</p>

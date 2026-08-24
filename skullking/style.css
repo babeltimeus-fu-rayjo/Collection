@@ -376,6 +376,54 @@ a {
   min-height: 20px;
 }
 
+#scoring-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: center;
+}
+
+.scoring-pick {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--dim);
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scoring-pick.on {
+  background: var(--gold-dim);
+  border-color: rgba(242, 185, 80, 0.6);
+  color: var(--gold);
+}
+
+.scoring-pick:disabled {
+  cursor: default;
+}
+
+#scoring-blurb {
+  color: var(--dim);
+  font-size: 13px;
+  text-align: center;
+  max-width: 34em;
+  line-height: 1.5;
+  min-height: 18px;
+}
+
+#scoring-chip {
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--line);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  color: var(--dim);
+}
+
 .av {
   width: 34px;
   height: 34px;

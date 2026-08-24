@@ -14,6 +14,8 @@ import {
   MIN_PLAYERS,
   MAX_PLAYERS,
   ROUNDS,
+  SCORING,
+  scoringByKey,
   SUIT_META,
   KIND_META,
   cardLabel,
@@ -259,6 +261,7 @@ class HostSession {
     this.roster = [{ seat: 0, name, connected: true }];
     this.conns = new Map();
     this.G = null;
+    this.scoringKey = 'classic';
     this.botTimer = null;
     this.chatLog = [];
     peer.on('connection', (conn) => this.accept(conn));
@@ -389,6 +392,12 @@ class HostSession {
     this.pushLobby();
   }
 
+  setScoring(key) {
+    if (this.G) return;
+    this.scoringKey = scoringByKey(key).key;
+    this.pushLobby();
+  }
+
   // Whose input the game waits on. Bidding is simultaneous, so any unbid bot
   // (or disconnected player) is fair game; tricks have a single turn seat.
   botActor() {
@@ -447,6 +456,7 @@ class HostSession {
       players: this.roster.map((p) => ({ seat: p.seat, name: p.name, bot: !!p.bot })),
       min: MIN_PLAYERS,
       max: MAX_PLAYERS,
+      scoring: this.scoringKey,
     };
   }
 
@@ -468,7 +478,7 @@ class HostSession {
       toast(`Need at least ${MIN_PLAYERS} players`);
       return;
     }
-    this.G = newMatch(this.roster);
+    this.G = newMatch(this.roster, this.scoringKey);
     this.broadcast();
   }
 
@@ -488,7 +498,7 @@ class HostSession {
       toast('Not enough players — back to the lobby');
       return;
     }
-    this.G = newMatch(this.roster);
+    this.G = newMatch(this.roster, this.scoringKey);
     hideOverlays();
     this.broadcast();
   }
@@ -592,7 +602,7 @@ class GuestSession {
       case 'deny': {
         const why =
           {
-            full: 'That crew is full (6 players max).',
+            full: 'That crew is full (8 players max).',
             'in-progress': 'That voyage has already set sail.',
             version: 'Version mismatch — ask everyone to refresh the page.',
           }[msg.reason] || 'Could not join that room.';
@@ -696,6 +706,17 @@ function renderLobby(lob, sess) {
     }
     list.append(row);
   }
+  const sp = $('#scoring-picker');
+  sp.replaceChildren();
+  for (const s of SCORING) {
+    const b = el('button', `scoring-pick${s.key === lob.scoring ? ' on' : ''}`, s.name);
+    b.type = 'button';
+    b.disabled = !sess.isHost;
+    if (sess.isHost) b.addEventListener('click', () => sess.setScoring(s.key));
+    sp.append(b);
+  }
+  $('#scoring-blurb').textContent = scoringByKey(lob.scoring).blurb;
+
   $('#btn-start').classList.toggle('hidden', !sess.isHost);
   $('#btn-add-bot').classList.toggle('hidden', !sess.isHost);
   if (sess.isHost) {
@@ -811,7 +832,7 @@ function renderTrick(view) {
     box.append(label);
     return;
   }
-  label.append(el('span', '', showLast ? 'Trick taken!' : `Trick ${view.trickNo} of ${view.round}`));
+  label.append(el('span', '', showLast ? 'Trick taken!' : `Trick ${view.trickNo} of ${view.dealt}`));
   if (!showLast && view.trick) {
     if (view.trick.suit) {
       const chip = el('span', `suitchip`, `follow ${view.trick.suit} ${SUIT_ICON[view.trick.suit]}`);
@@ -913,9 +934,10 @@ function renderActionBar(view) {
   if (view.phase === 'bid') {
     const me = view.players.find((p) => p.seat === view.you);
     if (me && !me.hasBid) {
-      row().append(label(`How many of the ${view.round} trick${view.round === 1 ? '' : 's'} will you take? Look hard at your hand.`));
+      const capNote = view.dealt < view.round ? ` (the deck caps this round at ${view.dealt})` : '';
+      row().append(label(`How many of the ${view.dealt} trick${view.dealt === 1 ? '' : 's'} will you take${capNote}? Look hard at your hand.`));
       const r = row();
-      for (let n = 0; n <= view.round; n++) {
+      for (let n = 0; n <= view.dealt; n++) {
         r.append(pickBtn(valSpan(n).textContent === String(n) ? valSpan(n) : String(n), {
           on: selBid === n,
           click: () => {
@@ -969,10 +991,14 @@ function renderActionBar(view) {
 function renderGame(view, sess) {
   lastView = view;
   $('#room-chip').textContent = view.code || '·····';
+  const cap = view.dealt < view.round ? ` (${view.dealt} cards)` : '';
   $('#round-chip').textContent =
     view.phase === 'over'
       ? 'Game over'
-      : `Round ${view.round}/${view.rounds}${view.phase === 'play' ? ` · trick ${view.trickNo}` : ''}`;
+      : `Round ${view.round}/${view.rounds}${cap}${view.phase === 'play' ? ` · trick ${view.trickNo}` : ''}`;
+  const sc = $('#scoring-chip');
+  sc.textContent = scoringByKey(view.scoring).name;
+  sc.title = scoringByKey(view.scoring).blurb;
 
   renderTable(view);
   renderTrick(view);
