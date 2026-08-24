@@ -1,0 +1,485 @@
+// game.js — Skull King rules engine (pure logic, no DOM, no network).
+//
+// An unofficial fan implementation of Skull King by Brent Beck
+// (© Grandpa Beck's Games). Rules follow the official rule sheet:
+//   - 10 rounds; round N deals N cards. Everyone secretly bids the number of
+//     tricks they'll win, then bids are revealed together.
+//   - 4 suits 1-14; black (Jolly Roger) outranks the other three but obeys
+//     the same follow-suit duty. Specials may be played at any time.
+//   - Pirates beat numbers, the Skull King beats pirates, and a Mermaid
+//     beats the Skull King — if all three are in one trick, the mermaid wins.
+//     First-played wins among equal specials. Escapes never win, except an
+//     all-escape trick, which the first card takes.
+//   - Lead rules: a number lead sets the suit; a pirate/mermaid/Skull King
+//     lead frees the whole trick; an escape lead passes suit-setting on.
+//   - Scoring: exact bid ≥1 → +20/trick; miss → −10 per trick off; a zero
+//     bid pays ±10 × the round number. Bonuses only with an exact bid:
+//     captured 14s +10 (black +20), Skull King +30 per pirate played before
+//     him, a mermaid capturing the Skull King +50.
+//   - Deck: the modern 70-card deck (mermaids included). The Legendary
+//     expansion menu (Loot, Kraken, White Whale) is not implemented.
+
+export const PROTO = 1;
+export const MIN_PLAYERS = 2;
+export const MAX_PLAYERS = 6;
+export const ROUNDS = 10;
+
+export const SUITS = ['green', 'yellow', 'purple', 'black'];
+
+export const SUIT_META = {
+  green: { name: 'Parrot', short: 'green' },
+  yellow: { name: 'Chest', short: 'yellow' },
+  purple: { name: 'Map', short: 'purple' },
+  black: { name: 'Jolly Roger', short: 'black' },
+};
+
+export const KIND_META = {
+  pirate: { name: 'Pirate', icon: '⚔' },
+  escape: { name: 'Escape', icon: '🏳' },
+  sk: { name: 'Skull King', icon: '☠' },
+  mermaid: { name: 'Mermaid', icon: '🧜' },
+  tigress: { name: 'Tigress', icon: '🐯' },
+};
+
+export function buildDeck() {
+  const deck = [];
+  let id = 1;
+  for (const suit of SUITS) {
+    for (let v = 1; v <= 14; v++) deck.push({ id: id++, kind: 'num', suit, v });
+  }
+  for (let i = 0; i < 5; i++) deck.push({ id: id++, kind: 'pirate' });
+  for (let i = 0; i < 5; i++) deck.push({ id: id++, kind: 'escape' });
+  for (let i = 0; i < 2; i++) deck.push({ id: id++, kind: 'mermaid' });
+  deck.push({ id: id++, kind: 'sk' });
+  deck.push({ id: id++, kind: 'tigress' });
+  return deck;
+}
+
+export function cardLabel(card, as) {
+  if (!card) return '?';
+  if (card.kind === 'num') return `${SUIT_META[card.suit].short} ${card.v}`;
+  if (card.kind === 'tigress') return `Tigress${as ? ` (as ${as === 'pirate' ? 'Pirate' : 'Escape'})` : ''}`;
+  return KIND_META[card.kind].name;
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+export function playerBySeat(G, seat) {
+  return G.players.find((p) => p.seat === seat);
+}
+
+function addLog(G, text) {
+  G.feedSeq += 1;
+  G.log.push({ n: G.feedSeq, text });
+  if (G.log.length > 250) G.log.shift();
+}
+
+function setFx(G, fx) {
+  G.fxSeq += 1;
+  G.fx = { seq: G.fxSeq, ...fx };
+}
+
+// effective kind of a played card (the Tigress becomes what was declared)
+function effKind(play) {
+  if (play.card.kind === 'tigress') return play.as === 'pirate' ? 'pirate' : 'escape';
+  return play.card.kind;
+}
+
+// ---------------------------------------------------------------- setup
+
+export function newMatch(roster) {
+  const players = roster
+    .map((r) => ({
+      seat: r.seat,
+      name: r.name,
+      bot: !!r.bot,
+      connected: r.connected !== false,
+      hand: [],
+      bid: null,
+      tricksWon: 0,
+      captured: [],
+      score: 0,
+      history: [],
+      lastAction: null,
+    }))
+    .sort((a, b) => a.seat - b.seat);
+  const G = {
+    proto: PROTO,
+    mid: Math.random().toString(36).slice(2, 10),
+    phase: 'bid',
+    round: 0,
+    dealerIdx: Math.floor(Math.random() * players.length),
+    players,
+    trick: null,
+    trickNo: 0,
+    log: [],
+    feedSeq: 0,
+    fx: null,
+    fxSeq: 0,
+    roundResult: null,
+  };
+  dealRound(G);
+  return G;
+}
+
+export function dealRound(G) {
+  G.round += 1;
+  G.phase = 'bid';
+  G.trick = null;
+  G.trickNo = 0;
+  G.roundResult = null;
+  G.dealerIdx = (G.dealerIdx + 1) % G.players.length;
+  const deck = shuffle(buildDeck());
+  for (const p of G.players) {
+    p.hand = deck.splice(0, G.round).sort(handOrder);
+    p.bid = null;
+    p.tricksWon = 0;
+    p.captured = [];
+    p.lastAction = null;
+  }
+  const dealer = G.players[G.dealerIdx];
+  addLog(G, `— Round ${G.round} of ${ROUNDS} — ${dealer.name} deals ${G.round} card${G.round === 1 ? '' : 's'}. Yo-ho-ho, place your bids!`);
+  setFx(G, { kind: 'deal', round: G.round });
+}
+
+function handOrder(a, b) {
+  const rank = (c) => (c.kind === 'num' ? SUITS.indexOf(c.suit) * 20 + c.v : 100 + ['escape', 'tigress', 'mermaid', 'pirate', 'sk'].indexOf(c.kind) * 5);
+  return rank(a) - rank(b);
+}
+
+function leaderSeat(G) {
+  // player left of the dealer opens the round; trick winners lead afterwards
+  return G.players[(G.dealerIdx + 1) % G.players.length].seat;
+}
+
+// ---------------------------------------------------------------- legality
+
+export function turnSeat(G) {
+  if (G.phase !== 'play' || !G.trick) return null;
+  const order = trickOrder(G);
+  return order[G.trick.plays.length] ?? null;
+}
+
+function trickOrder(G) {
+  const seats = G.players.map((p) => p.seat);
+  const li = seats.indexOf(G.trick.leader);
+  return seats.map((_, k) => seats[(li + k) % seats.length]);
+}
+
+// which of `seat`'s cards may legally be played right now
+export function legalPlays(G, seat) {
+  const p = playerBySeat(G, seat);
+  if (!p) return [];
+  const t = G.trick;
+  if (!t || !t.suit) return p.hand.slice(); // leading, or a suit-free trick
+  const hasSuit = p.hand.some((c) => c.kind === 'num' && c.suit === t.suit);
+  if (!hasSuit) return p.hand.slice();
+  return p.hand.filter((c) => c.kind !== 'num' || c.suit === t.suit);
+}
+
+// ---------------------------------------------------------------- moves
+
+export function applyMove(G, seat, move) {
+  if (!G || !move || typeof move !== 'object') return { ok: false, error: 'Bad move' };
+  const p = playerBySeat(G, seat);
+  if (!p) return { ok: false, error: 'Not at the table' };
+  if (G.phase === 'over') return { ok: false, error: 'The game is over' };
+  if (move.kind === 'bid') return doBid(G, p, move);
+  if (move.kind === 'play') return doPlay(G, p, move);
+  return { ok: false, error: 'Unknown action' };
+}
+
+function doBid(G, p, move) {
+  if (G.phase !== 'bid') return { ok: false, error: 'Bidding is over' };
+  if (p.bid != null) return { ok: false, error: 'Your bid is locked' };
+  const n = move.n;
+  if (!Number.isInteger(n) || n < 0 || n > G.round) {
+    return { ok: false, error: `Bid between 0 and ${G.round}` };
+  }
+  p.bid = n;
+  addLog(G, `${p.name} locks in a bid.`);
+  if (G.players.every((q) => q.bid != null)) {
+    G.phase = 'play';
+    G.trick = { leader: leaderSeat(G), plays: [], suit: null, free: false };
+    G.trickNo = 1;
+    const bidLine = G.players.map((q) => `${q.name} ${q.bid}`).join(' · ');
+    addLog(G, `Yo, ho, ho! Bids are up: ${bidLine}.`);
+    addLog(G, `${playerBySeat(G, G.trick.leader).name} leads the first trick.`);
+    setFx(G, { kind: 'bids' });
+  }
+  return { ok: true };
+}
+
+function doPlay(G, p, move) {
+  if (G.phase !== 'play') return { ok: false, error: 'Not in the trick phase' };
+  if (turnSeat(G) !== p.seat) return { ok: false, error: 'Not your turn' };
+  const card = p.hand.find((c) => c.id === move.cardId);
+  if (!card) return { ok: false, error: 'That card is not in your hand' };
+  if (!legalPlays(G, p.seat).some((c) => c.id === card.id)) {
+    return { ok: false, error: `You must follow ${G.trick.suit} — specials are always allowed` };
+  }
+  let as = null;
+  if (card.kind === 'tigress') {
+    as = move.as === 'pirate' ? 'pirate' : move.as === 'escape' ? 'escape' : null;
+    if (!as) return { ok: false, error: 'Declare the Tigress: pirate or escape' };
+  }
+  p.hand = p.hand.filter((c) => c.id !== card.id);
+  const t = G.trick;
+  t.plays.push({ seat: p.seat, card, as });
+
+  // suit-setting: a number sets the suit only while every earlier card was an
+  // escape; once a pirate, mermaid, or the King appears first, the trick is free
+  if (!t.suit && !t.free) {
+    const k = effKind(t.plays[t.plays.length - 1]);
+    if (card.kind === 'num') t.suit = card.suit;
+    else if (k !== 'escape') t.free = true;
+  }
+  p.lastAction = `played ${cardLabel(card, as)}`;
+  addLog(G, `${p.name} plays ${cardLabel(card, as)}.`);
+
+  if (t.plays.length === G.players.length) resolveTrick(G);
+  return { ok: true };
+}
+
+function resolveTrick(G) {
+  const t = G.trick;
+  const winnerPlay = trickWinner(t);
+  const winner = playerBySeat(G, winnerPlay.seat);
+  winner.tricksWon += 1;
+  winner.captured.push(t.plays.map((pl) => ({ seat: pl.seat, card: pl.card, as: pl.as })));
+  const withCard = cardLabel(winnerPlay.card, winnerPlay.as);
+  addLog(G, `${winner.name} takes trick ${G.trickNo} with ${withCard} (${winner.tricksWon} so far, bid ${winner.bid}).`);
+  winner.lastAction = `took trick ${G.trickNo} with ${withCard}`;
+  setFx(G, { kind: 'trick', seat: winner.seat, trick: t.plays, winnerCard: winnerPlay.card.id });
+
+  if (G.players.every((p) => p.hand.length === 0)) {
+    scoreRound(G);
+    return;
+  }
+  G.trickNo += 1;
+  G.trick = { leader: winner.seat, plays: [], suit: null, free: false };
+}
+
+// exported for tests: decide who wins a completed trick
+export function trickWinner(t) {
+  const plays = t.plays;
+  const sk = plays.find((pl) => effKind(pl) === 'sk');
+  const mermaid = plays.find((pl) => effKind(pl) === 'mermaid');
+  const pirate = plays.find((pl) => effKind(pl) === 'pirate');
+  if (sk && mermaid) return mermaid; // the mermaid always snares the King
+  if (sk) return sk;
+  if (pirate) return pirate;
+  if (mermaid) return mermaid;
+  const nums = plays.filter((pl) => pl.card.kind === 'num');
+  if (!nums.length) return plays[0]; // all escapes: the first card takes it
+  const black = nums.filter((pl) => pl.card.suit === 'black');
+  if (black.length) return black.reduce((a, b) => (b.card.v > a.card.v ? b : a));
+  const led = nums.filter((pl) => pl.card.suit === t.suit);
+  const pool = led.length ? led : nums; // suit is always set when numbers exist
+  return pool.reduce((a, b) => (b.card.v > a.card.v ? b : a));
+}
+
+// exported for tests: bonus points for one captured trick won with `winnerPlay`
+export function trickBonus(plays, winnerPlay) {
+  let bonus = 0;
+  for (const pl of plays) {
+    if (pl.card.kind === 'num' && pl.card.v === 14) bonus += pl.card.suit === 'black' ? 20 : 10;
+  }
+  const wk = effKind(winnerPlay);
+  if (wk === 'sk') {
+    const skIdx = plays.indexOf(winnerPlay);
+    for (let i = 0; i < skIdx; i++) {
+      if (effKind(plays[i]) === 'pirate') bonus += 30;
+    }
+  }
+  if (wk === 'mermaid' && plays.some((pl) => effKind(pl) === 'sk')) bonus += 50;
+  return bonus;
+}
+
+function scoreRound(G) {
+  const lines = [];
+  for (const p of G.players) {
+    const exact = p.tricksWon === p.bid;
+    let bidPts;
+    if (p.bid === 0) bidPts = exact ? 10 * G.round : -10 * G.round;
+    else bidPts = exact ? 20 * p.bid : -10 * Math.abs(p.tricksWon - p.bid);
+    let bonusPts = 0;
+    if (exact) {
+      for (const trick of p.captured) {
+        const winnerPlay = trick.find((pl) => pl.seat === p.seat);
+        bonusPts += trickBonus(trick, winnerPlay);
+      }
+    }
+    p.score += bidPts + bonusPts;
+    p.history.push({ round: G.round, bid: p.bid, tricks: p.tricksWon, bidPts, bonusPts, total: p.score });
+    lines.push({ seat: p.seat, bid: p.bid, tricks: p.tricksWon, bidPts, bonusPts, total: p.score });
+  }
+  G.roundResult = { round: G.round, lines };
+  addLog(
+    G,
+    `Round ${G.round} scored: ` +
+      lines.map((l) => `${playerBySeat(G, l.seat).name} ${l.bidPts + l.bonusPts >= 0 ? '+' : ''}${l.bidPts + l.bonusPts}`).join(' · '),
+  );
+  if (G.round >= ROUNDS) {
+    G.phase = 'over';
+    const best = Math.max(...G.players.map((p) => p.score));
+    const winners = G.players.filter((p) => p.score === best);
+    addLog(G, `Game over — ${winners.map((w) => w.name).join(' & ')} rule${winners.length === 1 ? 's' : ''} the seas with ${best} points!`);
+    setFx(G, { kind: 'over' });
+  } else {
+    G.phase = 'roundEnd';
+    setFx(G, { kind: 'roundEnd' });
+  }
+}
+
+export function nextRound(G) {
+  if (G.phase !== 'roundEnd') return false;
+  dealRound(G);
+  return true;
+}
+
+// ---------------------------------------------------------------- lifecycle
+
+export function markDisconnected(G, seat) {
+  const p = playerBySeat(G, seat);
+  if (!p || !p.connected) return false;
+  p.connected = false;
+  addLog(G, `${p.name} disconnected — the ship's parrot plays their cards.`);
+  return true;
+}
+
+// ---------------------------------------------------------------- views
+
+export function viewFor(G, seat, code) {
+  const allBids = G.phase !== 'bid';
+  return {
+    t: 'state',
+    code,
+    you: seat,
+    mid: G.mid,
+    phase: G.phase,
+    round: G.round,
+    rounds: ROUNDS,
+    dealer: G.players[G.dealerIdx].seat,
+    turn: turnSeat(G),
+    trickNo: G.trickNo,
+    trick: G.trick
+      ? {
+          leader: G.trick.leader,
+          suit: G.trick.suit,
+          free: G.trick.free,
+          plays: G.trick.plays.map((pl) => ({ seat: pl.seat, card: pl.card, as: pl.as })),
+        }
+      : null,
+    players: G.players.map((p) => ({
+      seat: p.seat,
+      name: p.name,
+      bot: p.bot,
+      connected: p.connected,
+      handCount: p.hand.length,
+      bid: allBids ? p.bid : p.seat === seat ? p.bid : null,
+      hasBid: p.bid != null,
+      tricksWon: p.tricksWon,
+      score: p.score,
+      lastAction: p.lastAction,
+      history: p.history,
+    })),
+    hand: playerBySeat(G, seat) ? playerBySeat(G, seat).hand : [],
+    legal: G.phase === 'play' && turnSeat(G) === seat ? legalPlays(G, seat).map((c) => c.id) : [],
+    roundResult: G.roundResult,
+    log: G.log.slice(-60),
+    fx: G.fx,
+  };
+}
+
+// ---------------------------------------------------------------- bots
+
+// rough expected tricks for a single card
+function cardStrength(c) {
+  if (c.kind === 'sk') return 1.0;
+  if (c.kind === 'pirate') return 0.8;
+  if (c.kind === 'tigress') return 0.65; // flexible either way
+  if (c.kind === 'mermaid') return 0.55;
+  if (c.kind === 'escape') return 0;
+  if (c.suit === 'black') {
+    if (c.v >= 12) return 0.75;
+    if (c.v >= 8) return 0.5;
+    return 0.25;
+  }
+  if (c.v === 14) return 0.5;
+  if (c.v >= 12) return 0.3;
+  if (c.v >= 10) return 0.12;
+  return 0.02;
+}
+
+// would `cand` beat the current best play if the trick ended here?
+function beatsSoFar(t, plays, cand, as) {
+  const virt = { seat: -1, card: cand, as };
+  const test = { suit: t.suit, plays: [...plays, virt] };
+  return trickWinner(test) === virt;
+}
+
+export function botChoose(G, seat) {
+  const p = playerBySeat(G, seat);
+  if (!p) return null;
+
+  if (G.phase === 'bid') {
+    if (p.bid != null) return null;
+    let est = p.hand.reduce((s, c) => s + cardStrength(c), 0);
+    // crowded tables split the tricks more ways
+    est *= 5 / (3 + G.players.length * 0.5);
+    let n = Math.round(est + (Math.random() * 0.5 - 0.25));
+    n = Math.max(0, Math.min(G.round, n));
+    return { kind: 'bid', n };
+  }
+
+  if (G.phase !== 'play' || turnSeat(G) !== seat) return null;
+  const legal = legalPlays(G, seat);
+  const t = G.trick;
+  const need = p.bid - p.tricksWon;
+  const isLast = t.plays.length === G.players.length - 1;
+
+  const options = [];
+  for (const c of legal) {
+    if (c.kind === 'tigress') {
+      options.push({ c, as: 'pirate' }, { c, as: 'escape' });
+    } else {
+      options.push({ c, as: null });
+    }
+  }
+  const winning = options.filter((o) => beatsSoFar(t, t.plays, o.c, o.as));
+  const losing = options.filter((o) => !winning.includes(o));
+  const power = (o) => (o.c.kind === 'tigress' ? (o.as === 'pirate' ? 0.7 : 0) : cardStrength(o.c)) * 100 + (o.c.kind === 'num' ? o.c.v : 50);
+
+  let pick = null;
+  if (need > 0) {
+    if (winning.length) {
+      // cheapest card that currently wins; when not last, prefer some muscle
+      winning.sort((a, b) => power(a) - power(b));
+      pick = isLast ? winning[0] : winning[Math.min(winning.length - 1, Math.floor(winning.length / 2))];
+    } else {
+      // can't win this one: dump the weakest
+      losing.sort((a, b) => power(a) - power(b));
+      pick = losing[0];
+    }
+  } else {
+    if (losing.length) {
+      // ditch the most dangerous card that still loses
+      losing.sort((a, b) => power(b) - power(a));
+      pick = losing[0];
+    } else {
+      winning.sort((a, b) => power(a) - power(b));
+      pick = winning[0];
+    }
+  }
+  if (!pick) pick = options[0];
+  const move = { kind: 'play', cardId: pick.c.id };
+  if (pick.as) move.as = pick.as;
+  return move;
+}

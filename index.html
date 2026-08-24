@@ -89,6 +89,7 @@
     .art.love { background: linear-gradient(150deg, #4a1f3d, #2a1230); }
     .art.bomb { background: linear-gradient(150deg, #1c2f47, #101b2b); }
     .art.decrypto { background: linear-gradient(150deg, #12271d, #071009); }
+    .art.skull { background: linear-gradient(150deg, #1b2a47, #0d1526); }
 
     /* dnup art: the flipped wordmark */
     .wordmark {
@@ -199,6 +200,31 @@
       font-family: 'SF Mono', Menlo, Consolas, monospace;
     }
 
+    /* skull king art: a trick mid-capture */
+    .skfan { display: flex; align-items: flex-end; }
+
+    .skfan i {
+      width: 40px;
+      height: 58px;
+      border-radius: 6px;
+      margin-left: -10px;
+      display: grid;
+      place-items: center;
+      font-style: normal;
+      font-weight: 900;
+      font-size: 17px;
+      color: #fff;
+      border: 1px solid rgba(0, 0, 0, 0.5);
+      box-shadow: 0 5px 12px rgba(0, 0, 0, 0.4);
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    }
+
+    .skfan i:first-child { margin-left: 0; }
+    .skfan i.g { background: linear-gradient(180deg, #2fae5f, #1e7f42); transform: rotate(-10deg); }
+    .skfan i.p { background: linear-gradient(180deg, #8f63ee, #6a3fc4); transform: rotate(-3deg) translateY(-4px); }
+    .skfan i.pi { background: linear-gradient(180deg, #c4403f, #8f2626); transform: rotate(4deg) translateY(-6px); font-size: 15px; }
+    .skfan i.sk { background: linear-gradient(180deg, #23232e, #0c0c12); border-color: #f2b950; color: #f2b950; transform: rotate(12deg); font-size: 19px; }
+
     .body {
       padding: 16px 18px 18px;
       display: flex;
@@ -300,6 +326,21 @@
       </div>
     </a>
 
+    <a class="game" href="./skullking/">
+      <div class="art skull">
+        <span class="skfan"><i class="g">7</i><i class="p">14</i><i class="pi">⚔</i><i class="sk">☠</i></span>
+      </div>
+      <div class="body">
+        <div class="title-row">
+          <span class="name">Skull King</span>
+          <span class="players">2–6 players</span>
+        </div>
+        <p class="blurb">Bid exactly how many tricks you'll win, then sail through ten rounds of pirates, mermaids and cowardly escapes. Nail the bid for glory — miss it and walk the plank.</p>
+        <div class="tags"><span class="tag">trick taking</span><span class="tag">bots</span><span class="tag">~30 min</span></div>
+        <span class="play">Play Skull King →</span>
+      </div>
+    </a>
+
     <a class="game" href="./decrypto/">
       <div class="art decrypto">
         <span class="cipher">
@@ -335,7 +376,7 @@
   </main>
 
   <footer>
-    Unofficial fan implementations, built for play between friends. <a href="https://www.dnup.game" target="_blank" rel="noopener">dnup</a> is by Kei Kajino &amp; Gilles-Romain Fonteny (© Asmodee Group); Love Letter is by Seiji Kanai (© Z-Man Games / Asmodee); Bomb Busters is by Hisashi Hayashi (© Cocktail Games / Pegasus Spiele); Decrypto is by Thomas Dagenais-Lespérance (© Le Scorpion Masqué). Multiplayer runs over WebRTC — browsers talk directly to each other.
+    Unofficial fan implementations, built for play between friends. <a href="https://www.dnup.game" target="_blank" rel="noopener">dnup</a> is by Kei Kajino &amp; Gilles-Romain Fonteny (© Asmodee Group); Love Letter is by Seiji Kanai (© Z-Man Games / Asmodee); Bomb Busters is by Hisashi Hayashi (© Cocktail Games / Pegasus Spiele); Decrypto is by Thomas Dagenais-Lespérance (© Le Scorpion Masqué); Skull King is by Brent Beck (© Grandpa Beck's Games). Multiplayer runs over WebRTC — browsers talk directly to each other.
   </footer>
 </body>
 </html>
