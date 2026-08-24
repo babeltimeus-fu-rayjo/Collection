@@ -14,6 +14,8 @@ import {
   MIN_PLAYERS,
   MAX_PLAYERS,
   HAND_LIMIT,
+  BOARD_SIDES,
+  sideByKey,
   CELLS,
   stackType,
   ANIMALS,
@@ -254,6 +256,7 @@ class HostSession {
     this.roster = [{ seat: 0, name, connected: true }];
     this.conns = new Map();
     this.G = null;
+    this.sideKey = 'A';
     this.botTimer = null;
     this.chatLog = [];
     peer.on('connection', (conn) => this.accept(conn));
@@ -383,6 +386,12 @@ class HostSession {
     this.pushLobby();
   }
 
+  setSide(key) {
+    if (this.G) return;
+    this.sideKey = sideByKey(key).key;
+    this.pushLobby();
+  }
+
   // The turn player acts in several small steps (take, three placements,
   // maybe a card, cubes, end). Bots pause longer before a fresh turn, then
   // move briskly through the steps so the table stays readable.
@@ -429,6 +438,7 @@ class HostSession {
       players: this.roster.map((p) => ({ seat: p.seat, name: p.name, bot: !!p.bot })),
       min: MIN_PLAYERS,
       max: MAX_PLAYERS,
+      side: this.sideKey,
     };
   }
 
@@ -450,7 +460,7 @@ class HostSession {
       toast(`Need at least ${MIN_PLAYERS} players`);
       return;
     }
-    this.G = newMatch(this.roster);
+    this.G = newMatch(this.roster, this.sideKey);
     this.broadcast();
   }
 
@@ -462,7 +472,7 @@ class HostSession {
       toast('Not enough players — back to the lobby');
       return;
     }
-    this.G = newMatch(this.roster);
+    this.G = newMatch(this.roster, this.sideKey);
     hideOverlays();
     this.broadcast();
   }
@@ -660,6 +670,17 @@ function renderLobby(lob, sess) {
     }
     list.append(row);
   }
+  const sp = $('#side-picker');
+  sp.replaceChildren();
+  for (const s of BOARD_SIDES) {
+    const b = el('button', `side-pick${s.key === lob.side ? ' on' : ''}`, s.name);
+    b.type = 'button';
+    b.disabled = !sess.isHost;
+    if (sess.isHost) b.addEventListener('click', () => sess.setSide(s.key));
+    sp.append(b);
+  }
+  $('#side-blurb').textContent = sideByKey(lob.side).blurb;
+
   $('#btn-start').classList.toggle('hidden', !sess.isHost);
   $('#btn-add-bot').classList.toggle('hidden', !sess.isHost);
   if (sess.isHost) {
@@ -950,6 +971,80 @@ function renderMyCards(view) {
   }
 }
 
+// ---------------------------------------------------------------- cheatsheet
+// Every animal still in the draw pile (the full set minus the display and
+// everyone's visible cards — all public information), filterable by the
+// terrain a habitat needs.
+
+const CHEAT_FILTERS = [
+  { t: 'water', label: 'Water', dot: 'water' },
+  { t: 'field', label: 'Field', dot: 'field' },
+  { t: 'tree1', label: 'Tree ×1', dot: 'tree' },
+  { t: 'tree2', label: 'Tree ×2', dot: 'tree' },
+  { t: 'tree3', label: 'Tree ×3', dot: 'tree' },
+  { t: 'mtn1', label: 'Mountain ×1', dot: 'mtn' },
+  { t: 'mtn2', label: 'Mountain ×2', dot: 'mtn' },
+  { t: 'mtn3', label: 'Mountain ×3', dot: 'mtn' },
+  { t: 'bld', label: 'Building', dot: 'bld' },
+];
+
+const cheatSel = new Set();
+
+function deckRemainder(view) {
+  const gone = new Set(view.display);
+  for (const p of view.players) {
+    for (const c of p.cards) gone.add(c.key);
+    for (const c of p.done) gone.add(c.key);
+  }
+  return ANIMALS.filter((a) => !gone.has(a.key)).map((a) => a.key);
+}
+
+function renderCheatsheet(view) {
+  if ($('#modal-cheat').classList.contains('hidden')) return;
+  const remaining = deckRemainder(view);
+  $('#cheat-sub').textContent =
+    `${remaining.length} of ${ANIMALS.length} animals are still in the deck — the rest are on display or already claimed. ` +
+    'Filter by the terrain a habitat needs to plan your landscape ahead.';
+
+  const fbox = $('#cheat-filters');
+  fbox.replaceChildren();
+  for (const f of CHEAT_FILTERS) {
+    const b = el('button', `cfilter${cheatSel.has(f.t) ? ' on' : ''}`);
+    b.type = 'button';
+    b.append(el('span', `dotmini dot-${f.dot}`), el('span', '', f.label));
+    b.addEventListener('click', () => {
+      if (cheatSel.has(f.t)) cheatSel.delete(f.t);
+      else cheatSel.add(f.t);
+      renderCheatsheet(lastView);
+    });
+    fbox.append(b);
+  }
+  if (cheatSel.size) {
+    const clear = el('button', 'cfilter clear', '✕ clear filters');
+    clear.type = 'button';
+    clear.addEventListener('click', () => {
+      cheatSel.clear();
+      renderCheatsheet(lastView);
+    });
+    fbox.append(clear);
+  }
+
+  const grid = $('#cheat-grid');
+  grid.replaceChildren();
+  const filtered = remaining.filter((key) => {
+    if (!cheatSel.size) return true;
+    const types = new Set(animalByKey(key).pattern.map((p) => p.t));
+    return [...cheatSel].every((t) => types.has(t));
+  });
+  const sorted = filtered
+    .map((k) => animalByKey(k))
+    .sort((a, b) => a.pattern.length - b.pattern.length || a.name.localeCompare(b.name));
+  for (const card of sorted) grid.append(animalCardEl(view, card.key, {}));
+  if (!sorted.length) {
+    grid.append(el('div', 'cheat-empty', 'No animal left in the deck needs exactly that combination — loosen a filter.'));
+  }
+}
+
 // ---------------------------------------------------------------- action bar
 
 function pickBtn(label, opts = {}) {
@@ -1054,6 +1149,10 @@ function renderGame(view, sess) {
   }
   $('#room-chip').textContent = view.code || '·····';
   $('#pouch-chip').textContent = `${view.pouchCount} in pouch`;
+  const sideMeta = sideByKey(view.side);
+  const sideChip = $('#side-chip');
+  sideChip.textContent = view.side === 'B' ? 'Side B · Islands' : 'Side A · River';
+  sideChip.title = sideMeta.blurb;
   $('#last-chip').classList.toggle('hidden', !(view.lastRound && view.phase === 'playing'));
 
   renderSeats(view);
@@ -1063,6 +1162,7 @@ function renderGame(view, sess) {
   renderMyCards(view);
   renderActionBar(view);
   renderLog(view);
+  renderCheatsheet(view);
   paintChatBubbles();
 
   if (view.fx && view.fx.seq !== lastFxSeq) {
@@ -1362,6 +1462,15 @@ function init() {
     const text = inp.value.trim();
     if (text && session) session.sendChat(text);
     inp.value = '';
+  });
+
+  $('#btn-cheatsheet').addEventListener('click', () => {
+    $('#modal-cheat').classList.remove('hidden');
+    if (lastView) renderCheatsheet(lastView);
+  });
+  $('#btn-cheat-close').addEventListener('click', () => $('#modal-cheat').classList.add('hidden'));
+  $('#modal-cheat').addEventListener('click', (e) => {
+    if (e.target === $('#modal-cheat')) $('#modal-cheat').classList.add('hidden');
   });
 
   for (const b of document.querySelectorAll('.btn-leave')) b.addEventListener('click', leave);

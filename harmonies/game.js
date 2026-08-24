@@ -22,6 +22,9 @@
 //     exact tree/mountain heights, buildings on any base) and move the
 //     card's bottom cube onto the pattern's cube token, which must be
 //     cube-free. A card scores the value of its topmost cube-free space.
+//   - Side B boards score water differently: the blue tokens carve the board
+//     into ISLANDS — each connected group of non-blue spaces (empty spaces
+//     included) is worth 5 points, and an unseparated board is 1 island.
 //   - End: the pouch is empty at refill time, or a player ends a turn with
 //     2 or fewer empty spaces; the round is completed so turns are equal.
 //     Ties: most cubes placed, then shared victory.
@@ -35,6 +38,24 @@ export const HAND_LIMIT = 4;
 export const DISPLAY = 5;
 
 export const TOKEN_COUNTS = { gray: 23, blue: 23, brown: 21, green: 19, yellow: 19, red: 15 };
+
+// which side of the personal boards the table plays with (water scoring)
+export const BOARD_SIDES = [
+  {
+    key: 'A',
+    name: 'Side A — The River',
+    blurb: 'Water scores your single best river: 2/5/8/11/15 points for 2-6 tokens measured end-to-end by the shortest path, then +4 per extra token.',
+  },
+  {
+    key: 'B',
+    name: 'Side B — The Islands',
+    blurb: 'Water scores by division: every group of spaces your blue tokens cut off is an island worth 5 points — an unseparated board is a single island.',
+  },
+];
+
+export function sideByKey(key) {
+  return BOARD_SIDES.find((s) => s.key === key) || BOARD_SIDES[0];
+}
 export const COLORS = ['blue', 'gray', 'brown', 'green', 'yellow', 'red'];
 
 // ---------------------------------------------------------------- board
@@ -199,7 +220,7 @@ export function cubeTargets(G, seat, cardKey) {
 
 // ---------------------------------------------------------------- scoring
 
-export function scoreBoard(board) {
+export function scoreBoard(board, side = 'A') {
   const s = { trees: 0, mountains: 0, fields: 0, water: 0, buildings: 0 };
   const type = board.map((c) => stackType(c.stack));
 
@@ -238,42 +259,68 @@ export function scoreBoard(board) {
     if (group.length >= 2) s.fields += 5;
   }
 
-  // water: best river = longest shortest-path between two blues in one group
-  const RIVER = [0, 0, 2, 5, 8, 11, 15];
-  let best = 0;
-  const wseen = new Set();
-  for (let i = 0; i < board.length; i++) {
-    if (type[i] !== 'water' || wseen.has(i)) continue;
-    const group = [i];
-    wseen.add(i);
-    for (let k = 0; k < group.length; k++) {
-      for (const n of NEIGHBORS[group[k]]) {
-        if (type[n] === 'water' && !wseen.has(n)) {
-          wseen.add(n);
-          group.push(n);
-        }
-      }
-    }
-    // BFS from every node of the group: diameter in tokens
-    let diameter = 1;
-    for (const start of group) {
-      const dist = new Map([[start, 1]]);
-      const q = [start];
-      while (q.length) {
-        const cur = q.shift();
-        for (const n of NEIGHBORS[cur]) {
-          if (type[n] === 'water' && !dist.has(n) && group.includes(n)) {
-            dist.set(n, dist.get(cur) + 1);
-            q.push(n);
+  if (side === 'B') {
+    // Side B: the blue tokens carve the board into islands — each connected
+    // group of non-blue spaces (empty spaces included) is worth 5 points
+    let islands = 0;
+    const iseen = new Set();
+    for (let i = 0; i < board.length; i++) {
+      if (type[i] === 'water' || iseen.has(i)) continue;
+      islands += 1;
+      const group = [i];
+      iseen.add(i);
+      for (let k = 0; k < group.length; k++) {
+        for (const n of NEIGHBORS[group[k]]) {
+          if (type[n] !== 'water' && !iseen.has(n)) {
+            iseen.add(n);
+            group.push(n);
           }
         }
       }
-      for (const d of dist.values()) diameter = Math.max(diameter, d);
     }
-    const pts = diameter <= 6 ? RIVER[diameter] : 15 + 4 * (diameter - 6);
-    best = Math.max(best, pts);
+    s.water = islands * 5;
+  } else {
+    // Side A: best river = longest shortest-path between two blues in a group
+    const RIVER = [0, 0, 2, 5, 8, 11, 15];
+    let best = 0;
+    const groups = [];
+    const gseen = new Set();
+    for (let i = 0; i < board.length; i++) {
+      if (type[i] !== 'water' || gseen.has(i)) continue;
+      const group = [i];
+      gseen.add(i);
+      for (let k = 0; k < group.length; k++) {
+        for (const n of NEIGHBORS[group[k]]) {
+          if (type[n] === 'water' && !gseen.has(n)) {
+            gseen.add(n);
+            group.push(n);
+          }
+        }
+      }
+      groups.push(group);
+    }
+    for (const group of groups) {
+      let diameter = 1;
+      const inGroup = new Set(group);
+      for (const start of group) {
+        const dist = new Map([[start, 1]]);
+        const q = [start];
+        while (q.length) {
+          const cur = q.shift();
+          for (const n of NEIGHBORS[cur]) {
+            if (inGroup.has(n) && !dist.has(n)) {
+              dist.set(n, dist.get(cur) + 1);
+              q.push(n);
+            }
+          }
+        }
+        for (const d of dist.values()) diameter = Math.max(diameter, d);
+      }
+      const pts = diameter <= 6 ? RIVER[diameter] : 15 + 4 * (diameter - 6);
+      best = Math.max(best, pts);
+    }
+    s.water = best;
   }
-  s.water = best;
 
   s.landscape = s.trees + s.mountains + s.fields + s.water + s.buildings;
   return s;
@@ -294,7 +341,7 @@ export function scoreAnimals(p) {
 
 export function scoreFor(G, seat) {
   const p = playerBySeat(G, seat);
-  const land = scoreBoard(p.board);
+  const land = scoreBoard(p.board, G.side);
   const animals = scoreAnimals(p);
   return { ...land, animals: animals.total, total: land.landscape + animals.total, animalRows: animals.rows };
 }
@@ -324,7 +371,7 @@ function setFx(G, fx) {
   G.fx = { seq: G.fxSeq, ...fx };
 }
 
-export function newMatch(roster) {
+export function newMatch(roster, sideKey) {
   const pouch = [];
   for (const [color, n] of Object.entries(TOKEN_COUNTS)) {
     for (let i = 0; i < n; i++) pouch.push(color);
@@ -334,6 +381,7 @@ export function newMatch(roster) {
   const G = {
     proto: PROTO,
     mid: Math.random().toString(36).slice(2, 10),
+    side: sideByKey(sideKey).key,
     phase: 'playing',
     players: roster
       .map((r) => ({
@@ -369,7 +417,7 @@ export function newMatch(roster) {
   G.display = G.deck.splice(0, DISPLAY);
   G.first = G.players[Math.floor(Math.random() * G.players.length)].seat;
   G.turn = G.first;
-  addLog(G, `The pouch holds 120 tokens. ${playerBySeat(G, G.first).name} saw the most magnificent landscape and starts.`);
+  addLog(G, `The pouch holds 120 tokens — playing ${sideByKey(G.side).name}. ${playerBySeat(G, G.first).name} saw the most magnificent landscape and starts.`);
   return G;
 }
 
@@ -558,6 +606,7 @@ export function viewFor(G, seat, code) {
     you: seat,
     mid: G.mid,
     phase: G.phase,
+    side: G.side,
     turn: G.turn,
     first: G.first,
     turnNo: G.turnNo,
@@ -594,7 +643,7 @@ export function viewFor(G, seat, code) {
 // score delta (terrain + animal ladders + small shaping heuristics).
 
 function boardScoreWithPotential(G, p) {
-  const land = scoreBoard(p.board);
+  const land = scoreBoard(p.board, G.side);
   let potential = 0;
   // nudge toward finishing held cards: partial credit per matched pattern cell
   for (const held of p.cards) {

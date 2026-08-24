@@ -360,6 +360,54 @@ a {
   min-height: 20px;
 }
 
+#side-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: center;
+}
+
+.side-pick {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--dim);
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.side-pick.on {
+  background: var(--accent-dim);
+  border-color: rgba(143, 214, 168, 0.6);
+  color: var(--accent);
+}
+
+.side-pick:disabled {
+  cursor: default;
+}
+
+#side-blurb {
+  color: var(--dim);
+  font-size: 13px;
+  text-align: center;
+  max-width: 34em;
+  line-height: 1.5;
+  min-height: 18px;
+}
+
+#side-chip {
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--line);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  color: var(--dim);
+}
+
 .av {
   width: 34px;
   height: 34px;
@@ -1290,6 +1338,76 @@ a {
 #go-wait {
   color: var(--dim);
   font-size: 13.5px;
+}
+
+/* ---------------------------------------------------------------- cheatsheet */
+
+.cheat-sub {
+  color: var(--dim);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+#cheat-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cfilter {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--dim);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.cfilter .dotmini {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+}
+
+.dotmini.dot-water { background: var(--t-blue); }
+.dotmini.dot-field { background: var(--t-yellow); }
+.dotmini.dot-tree { background: var(--t-green); }
+.dotmini.dot-mtn { background: var(--t-gray); }
+.dotmini.dot-bld { background: var(--t-red); }
+
+.cfilter.on {
+  background: var(--accent-dim);
+  border-color: rgba(143, 214, 168, 0.6);
+  color: var(--accent);
+}
+
+.cfilter.clear {
+  border-style: dashed;
+}
+
+#cheat-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 46dvh;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+#cheat-grid .acard {
+  cursor: default;
+}
+
+.cheat-empty {
+  color: var(--dim);
+  font-size: 13.5px;
+  padding: 14px;
 }
 
 /* ---------------------------------------------------------------- toasts, flash */

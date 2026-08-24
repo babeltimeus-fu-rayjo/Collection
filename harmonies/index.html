@@ -38,6 +38,9 @@
         <button id="btn-copy-link" class="btn ghost" type="button">Copy invite link</button>
       </div>
       <ul id="lobby-players"></ul>
+      <div class="lobby-label">Board side</div>
+      <div id="side-picker"></div>
+      <div id="side-blurb"></div>
       <div id="lobby-hint"></div>
       <button id="btn-add-bot" class="btn secondary hidden" type="button">🦔 Add a bot</button>
       <button id="btn-start" class="btn primary hidden" type="button">Start growing</button>
@@ -53,8 +56,10 @@
     <div class="topbar">
       <span id="room-chip">·····</span>
       <span id="pouch-chip">120 in pouch</span>
+      <span id="side-chip"></span>
       <span id="last-chip" class="hidden">FINAL ROUND</span>
       <span class="spacer"></span>
+      <button id="btn-cheatsheet" class="btn ghost" type="button">🦔 Animals</button>
       <button class="btn ghost btn-rules" type="button">Rules</button>
       <button class="btn ghost btn-leave" type="button">Leave</button>
     </div>
@@ -89,7 +94,9 @@
         <li><b>Your turn:</b> take all 3 tokens from one spot on the central board and place them on your 23-hex landscape — that part is mandatory. Any time during your turn you may also take <b>1 animal card</b> (max 4 in progress) and settle <b>any number of animal cubes</b>. The spot refills when your turn ends.</li>
         <li><b>Placing tokens:</b> any token can go on an empty space. Stacking exists only to build three things — a <b>tree</b> (green on top of 0, 1, or 2 browns), a <b>mountain</b> (2 or 3 grays), or a <b>building</b> (red on top of exactly one brown, gray, or red). Blue and yellow always stay on the ground, and nothing lands on a space where an animal has settled.</li>
         <li><b>Animals:</b> each card shows a small habitat pattern. Build it anywhere on your board — any rotation, tree and mountain heights exact, buildings on any base — and move the card's bottom cube onto the pattern's marked token (it must be cube-free). One token can serve several habitats. More cubes placed = higher card score; a card with no cubes placed scores 0.</li>
-        <li><b>Landscape scoring:</b> trees <b>1/3/5</b> by height · mountains <b>1/3/7</b>, but only when adjacent to another mountain · each group of 2+ yellows <b>5</b> · buildings <b>5</b> when at least 3 different colors top the surrounding spaces · water scores only your <b>best river</b>: <b>2/5/8/11/15</b> for 2–6 tokens measured end-to-end by the <i>shortest</i> path, then <b>+4</b> per extra token.</li>
+        <li><b>Landscape scoring:</b> trees <b>1/3/5</b> by height · mountains <b>1/3/7</b>, but only when adjacent to another mountain · each group of 2+ yellows <b>5</b> · buildings <b>5</b> when at least 3 different colors top the surrounding spaces.</li>
+        <li><b>Water</b> depends on the board side the host picks in the lobby. <b>Side A — The River:</b> only your best river scores, <b>2/5/8/11/15</b> for 2–6 tokens measured end-to-end by the <i>shortest</i> path, then <b>+4</b> per extra token. <b>Side B — The Islands:</b> your blue tokens carve the board into islands — every separated group of spaces (empty or built) is worth <b>5</b>, and an unseparated board is a single island.</li>
+        <li><b>Plan ahead:</b> the 🦔 Animals button opens the cheatsheet — every animal still in the deck, filterable by the terrain its habitat needs.</li>
         <li><b>Game end:</b> the pouch runs dry, or someone ends a turn with 2 or fewer empty spaces. The round finishes so everyone gets equal turns, then landscapes and animals are tallied. Ties go to the most animal cubes settled.</li>
       </ol>
       <p class="credit">Harmonies is by Johan Benvenuto, published by Libellud. This is an unofficial fan implementation of the base rules (Side A boards; the Nature's Spirit module and solo mode aren't included). The animal deck here is an original design in the game's style — patterns, cube colors, and point ladders of our own making.</p>
@@ -111,6 +118,17 @@
       <div class="btn-row">
         <button class="btn ghost btn-leave" type="button">Leave game</button>
       </div>
+    </div>
+  </div>
+
+  <!-- CHEATSHEET -->
+  <div id="modal-cheat" class="modal hidden">
+    <div class="panel wide">
+      <h2>The animals</h2>
+      <div id="cheat-sub" class="cheat-sub"></div>
+      <div id="cheat-filters"></div>
+      <div id="cheat-grid"></div>
+      <button id="btn-cheat-close" class="btn secondary" type="button">Back to the meadow</button>
     </div>
   </div>
 
