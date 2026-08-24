@@ -703,10 +703,10 @@ function renderLobby(lob, sess) {
 let viewSeat = null;
 let viewMid = null;
 // choice: traySel (index into my tray) · cubeSel (card key) · cardSel (display key)
-let choice = { traySel: null, cubeSel: null, cardSel: null };
+let choice = { traySel: null, cubeSel: null, cardSel: null, resetArm: false };
 
 function resetChoice() {
-  choice = { traySel: null, cubeSel: null, cardSel: null };
+  choice = { traySel: null, cubeSel: null, cardSel: null, resetArm: false };
 }
 
 function me(view) {
@@ -1088,6 +1088,32 @@ function pickBtn(label, opts = {}) {
   return b;
 }
 
+function resetButton(view) {
+  const my = me(view);
+  if (!my || !(my.tookTokens || my.tookCard)) return null;
+  if (!choice.resetArm) {
+    return pickBtn('↺ Start my turn over', {
+      cls: 'warn',
+      title: 'Take back everything you did this turn — tokens, card, cubes — and begin it again.',
+      click: () => {
+        choice.resetArm = true;
+        renderGame(lastView, session);
+      },
+    });
+  }
+  const wrap = el('span', 'abar-row');
+  wrap.append(
+    pickBtn('Really start over?', { cls: 'warn', click: () => sendMove({ kind: 'reset' }) }),
+    pickBtn('Keep playing', {
+      click: () => {
+        choice.resetArm = false;
+        renderGame(lastView, session);
+      },
+    }),
+  );
+  return wrap;
+}
+
 function renderActionBar(view) {
   const bar = $('#action-bar');
   bar.replaceChildren();
@@ -1147,6 +1173,8 @@ function renderActionBar(view) {
     } else {
       r.append(label(`Place your token${my.tray.length > 1 ? 's' : ''} — highlighted spaces are legal.`));
     }
+    const rb = resetButton(view);
+    if (rb) row().append(rb);
     return;
   }
 
@@ -1158,6 +1186,8 @@ function renderActionBar(view) {
   }
   r.append(label('All tokens placed. Grab a card or settle cubes — then:'));
   r.append(pickBtn('End my turn', { cls: 'go', click: () => sendMove({ kind: 'end' }) }));
+  const rb = resetButton(view);
+  if (rb) r.append(rb);
 }
 
 // ---------------------------------------------------------------- main render
@@ -1208,6 +1238,8 @@ function renderGame(view, sess) {
       }
     } else if (fx.kind === 'lastround') {
       flash('FINAL ROUND', 'plain');
+    } else if (fx.kind === 'reset' && fx.seat === view.you) {
+      toast('Turn rewound — take it from the top.');
     }
   }
 

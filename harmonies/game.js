@@ -505,6 +505,7 @@ export function newMatch(roster, sideKey) {
   G.display = G.deck.splice(0, DISPLAY);
   G.first = G.players[Math.floor(Math.random() * G.players.length)].seat;
   G.turn = G.first;
+  snapshotTurn(G);
   addLog(G, `The pouch holds 120 tokens — playing ${sideByKey(G.side).name}. ${playerBySeat(G, G.first).name} saw the most magnificent landscape and starts.`);
   return G;
 }
@@ -532,12 +533,53 @@ function emptyCount(p) {
 
 // ---------------------------------------------------------------- moves
 
+// Everything a turn can touch, frozen at the moment the turn begins, so a
+// misclicked turn can be started over. Nothing hidden is revealed mid-turn
+// (refills happen at end of turn), so a full rewind is information-safe.
+function snapshotTurn(G) {
+  const p = playerBySeat(G, G.turn);
+  if (!p) return;
+  G.turnSnap = JSON.stringify({
+    board: p.board,
+    tray: p.tray,
+    tookTokens: p.tookTokens,
+    tookCard: p.tookCard,
+    tookSlot: p.tookSlot ?? null,
+    cards: p.cards,
+    done: p.done,
+    cubesPlaced: p.cubesPlaced,
+    lastAction: p.lastAction,
+    slots: G.slots,
+    display: G.display,
+  });
+}
+
+function doReset(G, p) {
+  if (!G.turnSnap) return { ok: false, error: 'Nothing to reset' };
+  const s = JSON.parse(G.turnSnap);
+  p.board = s.board;
+  p.tray = s.tray;
+  p.tookTokens = s.tookTokens;
+  p.tookCard = s.tookCard;
+  p.tookSlot = s.tookSlot;
+  p.cards = s.cards;
+  p.done = s.done;
+  p.cubesPlaced = s.cubesPlaced;
+  p.lastAction = s.lastAction;
+  G.slots = s.slots;
+  G.display = s.display;
+  addLog(G, `${p.name} starts their turn over.`);
+  setFx(G, { kind: 'reset', seat: p.seat });
+  return { ok: true };
+}
+
 export function applyMove(G, seat, move) {
   if (!G || !move || typeof move !== 'object') return { ok: false, error: 'Bad move' };
   if (G.phase !== 'playing') return { ok: false, error: 'The game is over' };
   const p = playerBySeat(G, seat);
   if (!p) return { ok: false, error: 'Not at the table' };
   if (G.turn !== seat) return { ok: false, error: 'Not your turn' };
+  if (move.kind === 'reset') return doReset(G, p);
   if (move.kind === 'take') return doTake(G, p, move);
   if (move.kind === 'place') return doPlace(G, p, move);
   if (move.kind === 'discard') return doDiscard(G, p, move);
@@ -655,6 +697,7 @@ function doEnd(G, p) {
   }
   const seats = G.players.map((q) => q.seat);
   G.turn = seats[(seats.indexOf(p.seat) + 1) % seats.length];
+  snapshotTurn(G);
   return { ok: true };
 }
 
