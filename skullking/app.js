@@ -734,8 +734,6 @@ function renderLobby(lob, sess) {
 
 // ---------------------------------------------------------------- cards
 
-const SUIT_ICON = { green: '🦜', yellow: '💰', purple: '🗺', black: '🏴' };
-
 function cardEl(card, as = null, mini = false) {
   const cls = ['card'];
   if (card.kind === 'num') cls.push(card.suit);
@@ -745,7 +743,7 @@ function cardEl(card, as = null, mini = false) {
   if (card.kind === 'num') {
     const v = el('div', 'cv');
     v.append(valSpan(card.v));
-    c.append(v, el('div', 'ci', SUIT_ICON[card.suit]));
+    c.append(v);
   } else {
     c.append(el('div', 'ck', KIND_META[card.kind].icon));
     const name =
@@ -835,7 +833,7 @@ function renderTrick(view) {
   label.append(el('span', '', showLast ? 'Trick taken!' : `Trick ${view.trickNo} of ${view.dealt}`));
   if (!showLast && view.trick) {
     if (view.trick.suit) {
-      const chip = el('span', `suitchip`, `follow ${view.trick.suit} ${SUIT_ICON[view.trick.suit]}`);
+      const chip = el('span', `suitchip`, `follow ${view.trick.suit}`);
       chip.style.background = `var(--s-${view.trick.suit})`;
       chip.style.color = '#fff';
       label.append(chip);
