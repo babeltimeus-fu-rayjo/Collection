@@ -22,6 +22,7 @@ import {
   markDisconnected,
   markReconnected,
   passEncryptor,
+  passDecider,
 } from './game.js';
 
 // ---------------------------------------------------------------- networking
@@ -396,6 +397,11 @@ class HostSession {
   passCode(seat) {
     if (!this.G) return;
     if (passEncryptor(this.G, seat)) this.broadcast();
+  }
+
+  passFinal(seat) {
+    if (!this.G) return;
+    if (passDecider(this.G, seat)) this.broadcast();
   }
 
   sweep() {
@@ -801,13 +807,18 @@ function renderLobby(lob, sess) {
 
 // ---------------------------------------------------------------- game UI
 
-// local picker state for code guesses; reset whenever the exchange changes
-let choice = { key: '', digits: [null, null, null] };
+// local picker state for code guesses — one picker per target team's code,
+// reset when the round moves on
+let choiceMap = new Map();
 
-function choiceFor(view) {
-  const key = `${view.mid}:${view.round}:${view.current ? view.current.team : 'x'}:${view.phase}`;
-  if (choice.key !== key) choice = { key, digits: [null, null, null] };
-  return choice;
+function choiceFor(view, target) {
+  const prefix = `${view.mid}:${view.round}:`;
+  const key = prefix + target;
+  if (!choiceMap.has(key)) {
+    for (const k of [...choiceMap.keys()]) if (!k.startsWith(prefix)) choiceMap.delete(k);
+    choiceMap.set(key, [null, null, null]);
+  }
+  return choiceMap.get(key);
 }
 
 function teamName(view, ti) {
@@ -836,7 +847,8 @@ function renderTeams(view) {
   box.replaceChildren();
   for (const ti of [0, 1]) {
     const t = view.teams[ti];
-    const acting = view.current && view.current.team === ti && view.phase === 'playing';
+    const ex = view.exchanges ? view.exchanges[ti] : null;
+    const acting = !!ex && !ex.resolved && view.phase === 'playing';
     const panel = el('div', `teampanel t${ti}${acting ? ' acting' : ''}`);
 
     const head = el('div', 'tp-head');
@@ -851,12 +863,20 @@ function renderTeams(view) {
     const mem = el('div', 'tp-members');
     for (const seat of t.seats) {
       const p = view.players.find((q) => q.seat === seat);
-      const isEnc = view.current && view.current.team === ti && view.current.encryptor === seat && view.phase === 'playing';
+      const isEnc = !!ex && ex.encryptor === seat && view.phase === 'playing';
+      const isDec = !!ex && ex.decider === seat && view.phase === 'playing';
       const chip = el('span', `member${isEnc ? ' enc' : ''}${p && !p.connected ? ' offline' : ''}`);
       chip.dataset.seat = String(seat);
       chip.append(avatarEl(p ? p.name : '?', seat));
       chip.append(el('span', '', (p ? p.name : '?') + (seat === view.you ? ' (you)' : '')));
-      if (isEnc) chip.append(el('span', 'mstat', '🔑'));
+      if (isEnc) {
+        chip.append(el('span', 'mstat', '🔑'));
+        chip.title = 'Encryptor this round';
+      }
+      if (isDec) {
+        chip.append(el('span', 'mstat', '🎯'));
+        chip.title = (chip.title ? chip.title + ' · ' : '') + 'Final say on guesses this round';
+      }
       mem.append(chip);
     }
     panel.append(mem);
@@ -880,10 +900,10 @@ function renderTeams(view) {
     }
 
     // this exchange's clues, not yet mapped to slots
-    if (acting && view.current.clues) {
+    if (ex && ex.clues && !ex.resolved) {
       const pend = el('div', 'tp-pending');
       pend.append(el('span', 'mono', `R${view.round}: `));
-      view.current.clues.forEach((c, i) => {
+      ex.clues.forEach((c, i) => {
         if (i) pend.append(el('span', '', ' · '));
         pend.append(el('span', 'pclue', `“${c}”`));
       });
@@ -897,20 +917,20 @@ function renderTeams(view) {
 
 // ---------------------------------------------------------------- action bar
 
-function digitSet(view, row, onPick) {
-  const ch = choiceFor(view);
+function digitSet(view, target, row, onPick) {
+  const digits = choiceFor(view, target);
   const set = el('div', 'digitset');
   for (let d = 1; d <= 4; d++) {
     const b = el('button', 'dbtn');
     b.type = 'button';
     b.textContent = String(d);
-    if (ch.digits[row] === d) {
+    if (digits[row] === d) {
       b.classList.add('on');
-      const dupe = ch.digits.filter((x) => x === d).length > 1;
+      const dupe = digits.filter((x) => x === d).length > 1;
       if (dupe) b.classList.add('dupe');
     }
     b.addEventListener('click', () => {
-      ch.digits[row] = ch.digits[row] === d ? null : d;
+      digits[row] = digits[row] === d ? null : d;
       onPick();
     });
     set.append(b);
@@ -918,9 +938,9 @@ function digitSet(view, row, onPick) {
   return set;
 }
 
-function guessReady(view) {
-  const ch = choiceFor(view);
-  return ch.digits.every((d) => d != null) && new Set(ch.digits).size === 3;
+function guessReady(view, target) {
+  const digits = choiceFor(view, target);
+  return digits.every((d) => d != null) && new Set(digits).size === 3;
 }
 
 function captureInputs(sel) {
@@ -991,26 +1011,61 @@ function renderActionBar(view, sess) {
     return;
   }
 
-  const cur = view.current;
-  if (!cur) return;
-  const actingMine = cur.team === view.myTeam;
-  const encName = seatName(view, cur.encryptor);
+  // Both exchanges run at once: my team's transmission on top, the rival
+  // transmission (interception work) below.
+  const exs = view.exchanges;
+  if (!exs || view.myTeam < 0) return;
+  const myEx = exs[view.myTeam];
+  const rivEx = exs[1 - view.myTeam];
+  const meDecider = myEx.decider === view.you;
+  const cluesLine = (cluesArr) => bold(cluesArr.map((c) => `“${c}”`).join(' · '));
 
-  if (!cur.clues) {
-    if (cur.encryptor === view.you) {
+  const opinionStrip = (ops) => {
+    const entries = Object.entries(ops || {});
+    if (!entries.length) return;
+    const r = row('oprow');
+    for (const [s, c] of entries) {
+      const seatN = Number(s);
+      r.append(el('span', 'opchip', `${seatName(view, seatN)}${seatN === view.you ? ' (you)' : ''}: ${codeLabel(c)}`));
+    }
+  };
+  const pickerRows = (cluesArr, target) => {
+    cluesArr.forEach((c, i) => {
+      const r = row('pickrow');
+      r.append(el('span', 'cluelbl', `“${c}”`));
+      r.append(digitSet(view, target, i, () => renderActionBar(view, sess)));
+    });
+  };
+  const guessButtons = (target, ops, officialLabel) => {
+    const r = row();
+    if (meDecider) {
+      const go = el('button', 'pick go', officialLabel);
+      go.type = 'button';
+      go.disabled = !guessReady(view, target);
+      go.addEventListener('click', () => sendMove({ kind: 'guess', target, code: choiceFor(view, target).slice() }));
+      r.append(go);
+    } else {
+      const sug = el('button', 'pick', ops && ops[view.you] ? 'Update my suggestion' : 'Suggest to my team');
+      sug.type = 'button';
+      sug.disabled = !guessReady(view, target);
+      sug.addEventListener('click', () => sendMove({ kind: 'opinion', target, code: choiceFor(view, target).slice() }));
+      r.append(sug);
+      r.append(label([txt(`${seatName(view, myEx.decider)} makes the official call.`)]));
+    }
+  };
+
+  // ---- my team's transmission ---------------------------------------
+  if (!myEx.clues) {
+    if (myEx.encryptor === view.you) {
       const kws = view.teams[view.myTeam].keywords;
-      row().append(
-        label([
-          txt('You are the encryptor. Your secret code: '),
-        ]),
-      );
-      row().append(el('span', 'code-big', codeLabel(cur.code)));
+      row().append(label([txt('You are the encryptor. Your secret code: ')]));
+      row().append(el('span', 'code-big', codeLabel(myEx.code)));
       row().append(
         label([
           txt('Write one clue per digit — it must point at the meaning of that keyword. Everyone will hear all three.'),
         ]),
       );
-      cur.code.forEach((digit, i) => {
+      myEx.code.forEach((digit, i) => {
         const r = row('clue-row');
         r.classList.add('clue-row');
         r.append(el('span', 'digit', String(digit)));
@@ -1035,63 +1090,100 @@ function renderActionBar(view, sess) {
         sendMove({ kind: 'clues', words });
       });
       row().append(go);
-    } else if (actingMine) {
-      row().append(label([bold(encName), txt(' is encrypting a code for your team — get ready to decrypt.')]));
+    } else {
+      row().append(
+        label([bold(seatName(view, myEx.encryptor)), txt(' is encrypting a code for your team — get ready to decrypt.')]),
+      );
+    }
+  } else if (myEx.resolved) {
+    row().append(
+      label([
+        txt(
+          `Your code ${codeLabel(myEx.code)} is revealed — ${myEx.missD ? 'a miscommunication' : 'decrypted cleanly'}${
+            myEx.hitI ? ', and the enemy intercepted it' : ''
+          }.`,
+        ),
+      ]),
+    );
+  } else if (!myEx.haveDecipher) {
+    if (myEx.encryptor === view.you) {
+      row().append(label([txt('Your teammates are decrypting your clues — keep a straight face.')]));
+      opinionStrip(myEx.opinions);
     } else {
       row().append(
         label([
-          bold(encName),
-          txt(` is encrypting for ${teamName(view, cur.team)}. `),
-          txt(cur.needIntercept ? 'Sharpen your pencils — you can intercept this one.' : 'No interception in Round 1 — take notes!'),
+          bold('DECRYPT: '),
+          txt(`which keyword is each of ${seatName(view, myEx.encryptor)}'s clues pointing at? Everyone can suggest — `),
+          bold(meDecider ? 'you make the official call.' : `${seatName(view, myEx.decider)} makes the official call.`),
         ]),
       );
+      pickerRows(myEx.clues, view.myTeam);
+      opinionStrip(myEx.opinions);
+      guessButtons(view.myTeam, myEx.opinions, 'Lock our official answer');
     }
-    return;
-  }
-
-  // clues are out
-  const iAmEnc = cur.encryptor === view.you;
-  const canDecipher =
-    actingMine && !cur.haveDecipher && (!iAmEnc || view.players.filter((p) => p.team === view.myTeam && p.connected && p.seat !== view.you).length === 0);
-  const canIntercept = !actingMine && cur.needIntercept && !cur.haveIntercept;
-
-  if (canDecipher || canIntercept) {
-    row().append(
-      label(
-        canDecipher
-          ? [bold('Decrypt '), txt(`${encName}'s transmission — which keyword is each clue pointing at? Agree in team chat; the first submit locks it.`)]
-          : [bold('INTERCEPT: '), txt(`match ${teamName(view, cur.team)}'s pattern from their clue history. A wrong guess costs nothing.`)],
-      ),
-    );
-    cur.clues.forEach((c, i) => {
-      const r = row();
-      r.classList.add('pickrow');
-      r.append(el('span', 'cluelbl', `“${c}”`));
-      r.append(digitSet(view, i, () => renderActionBar(view, sess)));
-    });
-    const go = el('button', 'pick go', canDecipher ? 'Lock our answer' : 'Lock the interception');
-    go.type = 'button';
-    go.disabled = !guessReady(view);
-    go.addEventListener('click', () => {
-      const ch = choiceFor(view);
-      sendMove({ kind: 'guess', code: ch.digits.slice() });
-    });
-    row().append(go);
-    return;
-  }
-
-  // waiting states
-  const bits = [];
-  if (actingMine) {
-    if (iAmEnc) bits.push('Your teammates are decrypting — keep a straight face.');
-    else if (cur.haveDecipher) bits.push(`Answer locked${cur.decipherBy != null ? ` by ${seatName(view, cur.decipherBy)}` : ''}: ${codeLabel(cur.myGuess)}.`);
-    if (cur.needIntercept && !cur.haveIntercept) bits.push(`Waiting for ${teamName(view, 1 - cur.team)}'s interception…`);
   } else {
-    if (cur.haveIntercept) bits.push(`Interception locked: ${codeLabel(cur.myGuess)}.`);
-    if (!cur.haveDecipher) bits.push(`Waiting for ${teamName(view, cur.team)} to decrypt…`);
-    if (!cur.needIntercept) bits.push('No interception in Round 1 — study their clues.');
+    row().append(
+      label([
+        txt(
+          `Answer locked${myEx.decipherBy != null ? ` by ${seatName(view, myEx.decipherBy)}` : ''}: ${codeLabel(myEx.decipher)}.` +
+            (myEx.needIntercept && !myEx.haveIntercept ? ` Waiting for ${teamName(view, 1 - view.myTeam)}'s interception…` : ''),
+        ),
+      ]),
+    );
   }
-  row().append(label([txt(bits.join(' '))]));
+
+  // ---- the rival transmission ----------------------------------------
+  const div = row('abar-div');
+  div.append(el('span', 'divlbl', `${teamName(view, rivEx.team)}'s transmission`));
+
+  if (!rivEx.clues) {
+    row().append(
+      label([
+        bold(seatName(view, rivEx.encryptor)),
+        txt(` is encrypting for ${teamName(view, rivEx.team)}. `),
+        txt(rivEx.needIntercept ? 'You can work on intercepting once their clues are out.' : 'No interception in Round 1 — take notes!'),
+      ]),
+    );
+  } else if (rivEx.resolved) {
+    row().append(
+      label([
+        txt(
+          `Their code ${codeLabel(rivEx.code)} is revealed — ${
+            rivEx.hitI ? 'INTERCEPTED by your team!' : rivEx.needIntercept ? (rivEx.haveIntercept ? 'your interception missed' : 'no interception') : 'no interception in Round 1'
+          }.`,
+        ),
+      ]),
+    );
+  } else if (!rivEx.needIntercept) {
+    row().append(label([txt('Their clues — no interception in Round 1, but take notes: '), cluesLine(rivEx.clues)]));
+  } else if (!myEx.haveDecipher) {
+    row().append(
+      label([
+        bold('INTERCEPT '),
+        txt('later: their clues are out — lock your own answer first, then your team can work on these. '),
+        cluesLine(rivEx.clues),
+      ]),
+    );
+  } else if (!rivEx.haveIntercept) {
+    row().append(
+      label([
+        bold('INTERCEPT: '),
+        txt(`match ${teamName(view, rivEx.team)}'s pattern from their clue history — a wrong guess costs nothing. Everyone can suggest — `),
+        bold(meDecider ? 'you make the official call.' : `${seatName(view, myEx.decider)} makes the official call.`),
+      ]),
+    );
+    pickerRows(rivEx.clues, rivEx.team);
+    opinionStrip(rivEx.intOpinions);
+    guessButtons(rivEx.team, rivEx.intOpinions, 'Lock the official interception');
+  } else {
+    row().append(
+      label([
+        txt(
+          `Interception locked${rivEx.interceptBy != null ? ` by ${seatName(view, rivEx.interceptBy)}` : ''}: ${codeLabel(rivEx.intercept)}. Waiting for their team's answer…`,
+        ),
+      ]),
+    );
+  }
 }
 
 // ---------------------------------------------------------------- main render
@@ -1111,21 +1203,28 @@ function renderDcBanner(view, sess) {
   const gone = view.phase !== 'over' ? view.players.filter((p) => !p.connected) : [];
   bar.classList.toggle('on', gone.length > 0);
   for (const p of gone) {
-    const enc =
-      view.phase === 'playing' && view.current && !view.current.clues && view.current.encryptor === p.seat;
+    let msg = `⚠️ ${p.name} lost connection — the game may wait for them.`;
+    let fix = null;
+    const exs = view.exchanges;
+    if (view.phase === 'playing' && exs && p.team >= 0) {
+      const E = exs[p.team];
+      const R = exs[1 - p.team];
+      const encStall = E.encryptor === p.seat && !E.clues && !E.resolved;
+      const ownCall = !E.resolved && E.clues && !E.haveDecipher;
+      const intCall = !R.resolved && R.needIntercept && R.clues && E.haveDecipher && !R.haveIntercept;
+      if (encStall) {
+        msg = `⚠️ ${p.name} lost connection — the game is waiting for their clues.`;
+        fix = ['Hand the code to a teammate', () => sess.passCode(p.seat)];
+      } else if (E.decider === p.seat && (ownCall || intCall)) {
+        msg = `⚠️ ${p.name} lost connection — the game is waiting for their official call.`;
+        fix = ['Hand the final say to a teammate', () => sess.passFinal(p.seat)];
+      }
+    }
     const row = el('div', 'dc-row');
-    row.append(
-      el(
-        'span',
-        'dc-msg',
-        enc
-          ? `⚠️ ${p.name} lost connection — the game is waiting for their clues.`
-          : `⚠️ ${p.name} lost connection — the game may wait for them.`,
-      ),
-    );
-    if (enc && sess && sess.isHost) {
-      const b = el('button', 'dc-btn', 'Hand the code to a teammate');
-      b.onclick = () => sess.passCode(p.seat);
+    row.append(el('span', 'dc-msg', msg));
+    if (fix && sess && sess.isHost) {
+      const b = el('button', 'dc-btn', fix[0]);
+      b.onclick = fix[1];
       row.append(b);
     }
     bar.append(row);

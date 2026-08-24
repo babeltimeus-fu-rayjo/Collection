@@ -1295,3 +1295,9 @@ a {
 #dc-banner .dc-row.covered { background: rgba(127, 127, 127, 0.12); border-color: rgba(127, 127, 127, 0.45); }
 #dc-banner .dc-btn { border: 1px solid rgba(127, 127, 127, 0.55); background: rgba(127, 127, 127, 0.16); color: inherit; border-radius: 8px; padding: 4px 10px; font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
 #dc-banner .dc-btn:hover { background: rgba(127, 127, 127, 0.28); }
+
+/* Simultaneous exchanges: rival-transmission divider + team suggestions */
+#action-bar .abar-div { border-top: 1px solid rgba(127, 127, 127, 0.35); margin-top: 10px; padding-top: 8px; justify-content: center; }
+#action-bar .divlbl { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.65; }
+#action-bar .oprow { flex-wrap: wrap; gap: 6px; justify-content: center; }
+#action-bar .opchip { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: rgba(127, 127, 127, 0.14); border: 1px solid rgba(127, 127, 127, 0.35); }

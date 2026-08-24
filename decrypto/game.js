@@ -1,7 +1,7 @@
 // game.js — Decrypto rules engine (pure logic, no DOM, no network).
 //
 // An unofficial fan implementation of Decrypto by Thomas Dagenais-Lespérance
-// (© Le Scorpion Masqué). Rules follow the official English rulebook:
+// (© Le Scorpion Masqué). Core rules follow the official English rulebook:
 //   - Two teams (White and Black) of 2-4 players; each team has 4 secret
 //     Keywords, fixed for the whole game, visible only to that team.
 //   - Each round BOTH teams run an exchange: their Encryptor (rotating in
@@ -22,8 +22,22 @@
 //   - Clue etiquette enforced where a program can: a clue may not be one of
 //     your keywords (or contain/be contained by one), and no clue may be
 //     used twice in a game by the same team.
+//
+// House rules for online play (how this table runs the round):
+//   - The two exchanges run SIMULTANEOUSLY. As soon as a team's clues are
+//     out, that team may decrypt them — no waiting on the other encryptor.
+//     Once a team has locked its OWN answer it may start working on the
+//     rival transmission (round 2+), if those clues are out. An exchange is
+//     revealed once its decipher and (when due) the interception are locked;
+//     the round ends when both exchanges are revealed.
+//   - Everyone may SUGGEST a code to their team (non-binding opinions, shown
+//     only to teammates), but the OFFICIAL call belongs to the round's
+//     Decider: the player at the mirrored seat from their encryptor (first
+//     clue-giver ↔ last decider, second ↔ second-to-last). On an odd-sized
+//     team the middle player's mirror is themselves, so the duty shifts to
+//     the next seat along.
 
-export const PROTO = 1;
+export const PROTO = 2;
 export const MIN_PER_TEAM = 2;
 export const MAX_PER_TEAM = 4;
 export const MAX_PLAYERS = MAX_PER_TEAM * 2;
@@ -172,7 +186,6 @@ export function newMatch(roster) {
     mid: Math.random().toString(36).slice(2, 10),
     phase: 'playing', // playing | showdown | over
     round: 1,
-    exch: 0, // which team is being decrypted this half-round (White first)
     players,
     teams: TEAM_META.map((t, i) => ({
       key: t.key,
@@ -186,7 +199,7 @@ export function newMatch(roster) {
       showdownWords: null,
       showdownHits: null,
     })),
-    current: null,
+    exchanges: null, // [white exchange, black exchange] — both run at once
     history: [],
     result: null,
     log: [],
@@ -195,7 +208,7 @@ export function newMatch(roster) {
     fxSeq: 0,
   };
   addLog(G, `The keywords are set. ${G.teams[0].name} and ${G.teams[1].name}, to your screens!`);
-  startExchange(G);
+  startRound(G);
   return G;
 }
 
@@ -208,23 +221,42 @@ function pickEncryptor(G, ti) {
   return seat;
 }
 
-function startExchange(G) {
-  const ti = G.exch;
-  const enc = pickEncryptor(G, ti);
-  G.current = {
-    team: ti,
-    encryptor: enc,
-    code: randomCode(),
-    clues: null,
-    decipher: null,
-    decipherBy: null,
-    intercept: null,
-    interceptBy: null,
-    needIntercept: G.round >= 2,
-  };
-  const encName = playerBySeat(G, enc).name;
-  if (ti === 0) addLog(G, `— Round ${G.round} of ${MAX_ROUNDS} —`);
-  addLog(G, `${G.teams[ti].name}: ${encName} is encrypting a new code.`);
+// The official-call seat mirrors the encryptor's position in team order:
+// first clue-giver ↔ last decider, second ↔ second-to-last. On an odd team
+// the middle player's mirror is themselves, so the duty shifts one seat on.
+function deciderFor(team, encSeat) {
+  const n = team.seats.length;
+  const i = Math.max(0, team.seats.indexOf(encSeat));
+  let d = n - 1 - i;
+  if (d === i) d = (i + 1) % n;
+  return team.seats[d];
+}
+
+function startRound(G) {
+  addLog(G, `— Round ${G.round} of ${MAX_ROUNDS} — both encryptors receive a code.`);
+  G.exchanges = [0, 1].map((ti) => {
+    const team = G.teams[ti];
+    const enc = pickEncryptor(G, ti);
+    const dec = deciderFor(team, enc);
+    addLog(G, `${team.name}: ${playerBySeat(G, enc).name} encrypts — ${playerBySeat(G, dec).name} has the final say.`);
+    return {
+      team: ti,
+      encryptor: enc,
+      decider: dec,
+      code: randomCode(),
+      clues: null,
+      decipher: null,
+      decipherBy: null,
+      opinions: {}, // seat -> suggested code (own team, non-binding)
+      needIntercept: G.round >= 2,
+      intercept: null,
+      interceptBy: null,
+      intOpinions: {}, // seat -> suggested code (rival team, non-binding)
+      resolved: false,
+      hitI: false,
+      missD: false,
+    };
+  });
 }
 
 // ---------------------------------------------------------------- moves
@@ -239,15 +271,17 @@ export function applyMove(G, seat, move) {
     return doShowdown(G, p, move);
   }
   if (move.kind === 'clues') return doClues(G, p, move);
+  if (move.kind === 'opinion') return doOpinion(G, p, move);
   if (move.kind === 'guess') return doGuess(G, p, move);
   return { ok: false, error: 'Unknown action' };
 }
 
 function doClues(G, p, move) {
-  const cur = G.current;
-  if (!cur || cur.clues) return { ok: false, error: 'Clues are already out' };
-  if (p.seat !== cur.encryptor) return { ok: false, error: 'Only the encryptor writes the clues' };
-  const team = G.teams[cur.team];
+  const E = G.exchanges && G.exchanges[p.team];
+  if (!E) return { ok: false, error: 'No exchange running' };
+  if (E.clues) return { ok: false, error: 'Clues are already out' };
+  if (p.seat !== E.encryptor) return { ok: false, error: 'Only the encryptor writes the clues' };
+  const team = G.teams[E.team];
   const raw = Array.isArray(move.words) ? move.words.slice(0, 3) : [];
   const words = raw.map(cleanClue);
   if (words.length !== 3 || words.some((w) => !w)) return { ok: false, error: 'Give exactly 3 clues' };
@@ -264,85 +298,117 @@ function doClues(G, p, move) {
       return { ok: false, error: `“${w}” has already been used — a clue may only be used once per game` };
     }
   }
-  cur.clues = words;
+  E.clues = words;
   team.clueLog.push(...words);
   addLog(G, `${p.name} transmits: “${words[0]}” · “${words[1]}” · “${words[2]}”.`);
-  setFx(G, { kind: 'clues', team: cur.team });
+  setFx(G, { kind: 'clues', team: E.team });
   return { ok: true };
 }
 
+// Which official guess is `p` allowed to make on exchange E right now?
+// Returns null when allowed, or an error string.
+function guessGate(G, p, E, official) {
+  if (!E) return 'No exchange running';
+  if (E.resolved) return 'That code is already revealed';
+  if (!E.clues) return 'Wait for the clues';
+  if (p.team === E.team) {
+    if (p.seat === E.encryptor) return 'You wrote that code — poker face!';
+    if (E.decipher) return 'Your team has already locked its answer';
+    if (official && p.seat !== E.decider) {
+      return `${playerBySeat(G, E.decider).name} makes the official call — suggest your code to the team instead`;
+    }
+  } else {
+    if (!E.needIntercept) return 'No interception in Round 1 — take notes!';
+    const mine = G.exchanges[p.team];
+    if (!mine.decipher) return 'Decrypt your own transmission first';
+    if (E.intercept) return 'Your team has already locked its interception';
+    if (official && p.seat !== mine.decider) {
+      return `${playerBySeat(G, mine.decider).name} makes the official call — suggest your code to the team instead`;
+    }
+  }
+  return null;
+}
+
+// Non-binding suggestion, visible only to the suggester's own team.
+function doOpinion(G, p, move) {
+  const t = move.target;
+  if (t !== 0 && t !== 1) return { ok: false, error: 'Bad target' };
+  const E = G.exchanges && G.exchanges[t];
+  const gateErr = guessGate(G, p, E, false);
+  if (gateErr) return { ok: false, error: gateErr };
+  if (!validCode(move.code)) return { ok: false, error: 'A code is 3 different digits from 1 to 4' };
+  const store = p.team === t ? E.opinions : E.intOpinions;
+  store[p.seat] = move.code.slice(0, 3);
+  return { ok: true };
+}
+
+// The official call — decider only.
 function doGuess(G, p, move) {
-  const cur = G.current;
-  if (!cur || !cur.clues) return { ok: false, error: 'Wait for the clues' };
+  const t = move.target;
+  if (t !== 0 && t !== 1) return { ok: false, error: 'Bad target' };
+  const E = G.exchanges && G.exchanges[t];
+  const gateErr = guessGate(G, p, E, true);
+  if (gateErr) return { ok: false, error: gateErr };
   if (!validCode(move.code)) return { ok: false, error: 'A code is 3 different digits from 1 to 4' };
   const code = move.code.slice(0, 3);
-  if (p.team === cur.team) {
-    if (cur.decipher) return { ok: false, error: 'Your team has already locked its answer' };
-    if (p.seat === cur.encryptor) {
-      // the encryptor never helps decrypt — unless they are the only one left
-      const others = connectedSeats(G, cur.team).filter((s) => s !== cur.encryptor);
-      if (others.length > 0) return { ok: false, error: 'The encryptor stays quiet — your teammates must decrypt' };
-    }
-    cur.decipher = code;
-    cur.decipherBy = p.seat;
-    addLog(G, `${G.teams[cur.team].name} lock in their answer.`);
+  if (p.team === t) {
+    E.decipher = code;
+    E.decipherBy = p.seat;
+    addLog(G, `${G.teams[t].name} lock in their answer.`);
   } else {
-    if (!cur.needIntercept) return { ok: false, error: 'No interception in Round 1 — take notes!' };
-    if (cur.intercept) return { ok: false, error: 'Your team has already locked its interception' };
-    cur.intercept = code;
-    cur.interceptBy = p.seat;
-    addLog(G, `${G.teams[1 - cur.team].name} lock in an interception attempt.`);
+    E.intercept = code;
+    E.interceptBy = p.seat;
+    addLog(G, `${G.teams[p.team].name} lock in an interception attempt.`);
   }
   setFx(G, { kind: 'lock', team: p.team });
-  if (cur.decipher && (!cur.needIntercept || cur.intercept)) resolveExchange(G);
+  maybeResolve(G, E);
   return { ok: true };
 }
 
-function resolveExchange(G) {
-  const cur = G.current;
-  const team = G.teams[cur.team];
-  const opp = G.teams[1 - cur.team];
-  const hitI = cur.needIntercept && sameCode(cur.intercept, cur.code);
-  const missD = !sameCode(cur.decipher, cur.code);
-  if (hitI) opp.intercepts += 1;
-  if (missD) team.miscomms += 1;
+function maybeResolve(G, E) {
+  if (E.resolved || !E.decipher || (E.needIntercept && !E.intercept)) return;
+  resolveExchange(G, E);
+  if (G.exchanges && G.exchanges.every((x) => x.resolved)) endOfRound(G);
+}
+
+function resolveExchange(G, E) {
+  const team = G.teams[E.team];
+  const opp = G.teams[1 - E.team];
+  E.hitI = E.needIntercept && sameCode(E.intercept, E.code);
+  E.missD = !sameCode(E.decipher, E.code);
+  E.resolved = true;
+  if (E.hitI) opp.intercepts += 1;
+  if (E.missD) team.miscomms += 1;
 
   G.history.push({
     round: G.round,
-    team: cur.team,
-    encryptor: cur.encryptor,
-    clues: cur.clues,
-    code: cur.code,
-    decipher: cur.decipher,
-    intercept: cur.needIntercept ? cur.intercept : null,
-    hitI,
-    missD,
+    team: E.team,
+    encryptor: E.encryptor,
+    decider: E.decider,
+    clues: E.clues,
+    code: E.code,
+    decipher: E.decipher,
+    intercept: E.needIntercept ? E.intercept : null,
+    hitI: E.hitI,
+    missD: E.missD,
   });
 
-  addLog(G, `The code was ${codeLabel(cur.code)}.`);
-  if (hitI) addLog(G, `${opp.name} INTERCEPT — that's ${opp.intercepts === 1 ? 'their first white token' : 'their second white token!'}`);
-  else if (cur.needIntercept && cur.intercept) addLog(G, `${opp.name} guessed ${codeLabel(cur.intercept)} — no interception.`);
-  if (missD) addLog(G, `${team.name} miscommunicate (they guessed ${codeLabel(cur.decipher)}) — a black token.`);
+  addLog(G, `${team.name}'s code was ${codeLabel(E.code)}.`);
+  if (E.hitI) addLog(G, `${opp.name} INTERCEPT — that's ${opp.intercepts === 1 ? 'their first white token' : 'their second white token!'}`);
+  else if (E.needIntercept && E.intercept) addLog(G, `${opp.name} guessed ${codeLabel(E.intercept)} — no interception.`);
+  if (E.missD) addLog(G, `${team.name} miscommunicate (they guessed ${codeLabel(E.decipher)}) — a black token.`);
   else addLog(G, `${team.name} decrypt it cleanly.`);
-  setFx(G, { kind: 'reveal', team: cur.team, hitI, missD, code: cur.code });
-
-  if (G.exch === 0) {
-    G.exch = 1;
-    startExchange(G);
-  } else {
-    endOfRound(G);
-  }
+  setFx(G, { kind: 'reveal', team: E.team, hitI: E.hitI, missD: E.missD, code: E.code });
 }
 
 function endOfRound(G) {
   const decided = G.teams.some((t) => t.intercepts >= 2 || t.miscomms >= 2);
   if (!decided && G.round < MAX_ROUNDS) {
     G.round += 1;
-    G.exch = 0;
-    startExchange(G);
+    startRound(G);
     return;
   }
-  G.current = null;
+  G.exchanges = null;
   const scores = G.teams.map((t) => t.intercepts - t.miscomms);
   if (scores[0] !== scores[1]) {
     finish(G, scores[0] > scores[1] ? 0 : 1, decided ? 'tokens' : 'timeout');
@@ -391,6 +457,7 @@ function doShowdown(G, p, move) {
 
 function finish(G, winner, reason) {
   G.phase = 'over';
+  G.exchanges = null;
   G.result = {
     winner,
     reason,
@@ -427,16 +494,44 @@ export function markDisconnected(G, seat) {
   return true;
 }
 
-// Host-only remedy when the pending encryptor is disconnected: hand the
-// current exchange (same code) to a connected teammate.
+// Host-only remedy when a pending encryptor is disconnected: hand their
+// team's exchange (same code) to a connected teammate.
 export function passEncryptor(G, seat) {
   const p = playerBySeat(G, seat);
-  if (!p || p.connected) return false;
-  if (G.phase !== 'playing' || !G.current || G.current.encryptor !== seat || G.current.clues) return false;
-  const next = connectedSeats(G, G.current.team).find((s) => s !== seat);
-  if (next == null) return false;
-  G.current.encryptor = next;
+  if (!p || p.connected || G.phase !== 'playing' || !G.exchanges) return false;
+  const E = G.exchanges[p.team];
+  if (E.encryptor !== seat || E.clues) return false;
+  const conn = connectedSeats(G, p.team).filter((s) => s !== seat);
+  if (!conn.length) return false;
+  const pick = conn.find((s) => s !== E.decider);
+  const next = pick != null ? pick : conn[0];
+  E.encryptor = next;
+  delete E.opinions[next]; // they know the code now — any old suggestion is moot
+  if (E.decider === next) {
+    // keep the roles apart when another teammate is available
+    const dec2 = conn.find((s) => s !== next);
+    if (dec2 != null) E.decider = dec2;
+  }
   addLog(G, `The host hands the code to ${playerBySeat(G, next).name} — they take over as encryptor.`);
+  return true;
+}
+
+// Host-only remedy when a decider with a pending official call is
+// disconnected: hand the final say to a connected teammate.
+export function passDecider(G, seat) {
+  const p = playerBySeat(G, seat);
+  if (!p || p.connected || G.phase !== 'playing' || !G.exchanges) return false;
+  const E = G.exchanges[p.team];
+  if (E.decider !== seat) return false;
+  const rival = G.exchanges[1 - p.team];
+  const ownPending = !E.resolved && E.clues && !E.decipher;
+  const intPending = !rival.resolved && rival.needIntercept && rival.clues && E.decipher && !rival.intercept;
+  if (!ownPending && !intPending) return false;
+  const conn = connectedSeats(G, p.team).filter((s) => s !== seat);
+  if (!conn.length) return false;
+  const pick = conn.find((s) => s !== E.encryptor);
+  E.decider = pick != null ? pick : conn[0];
+  addLog(G, `The host hands the final say to ${playerBySeat(G, E.decider).name}.`);
   return true;
 }
 
@@ -446,7 +541,6 @@ export function viewFor(G, seat, code) {
   const me = playerBySeat(G, seat);
   const myTeam = me ? me.team : -1;
   const over = G.phase === 'over';
-  const cur = G.current;
   return {
     t: 'state',
     code,
@@ -468,21 +562,32 @@ export function viewFor(G, seat, code) {
       showdownWords: over || i === myTeam ? t.showdownWords : null,
       showdownHits: t.showdownHits,
     })),
-    current: cur
-      ? {
-          team: cur.team,
-          encryptor: cur.encryptor,
-          clues: cur.clues,
-          needIntercept: cur.needIntercept,
-          haveDecipher: !!cur.decipher,
-          haveIntercept: !!cur.intercept,
-          decipherBy: cur.decipherBy,
-          interceptBy: cur.interceptBy,
-          // the code is the encryptor's secret; my team's locked guess is
-          // team-visible so the table knows what was agreed
-          code: seat === cur.encryptor || over ? cur.code : null,
-          myGuess: myTeam === cur.team ? cur.decipher : cur.needIntercept ? cur.intercept : null,
-        }
+    exchanges: G.exchanges
+      ? G.exchanges.map((E) => {
+          const mine = myTeam === E.team; // it's my team's code
+          const open = E.resolved || over;
+          return {
+            team: E.team,
+            encryptor: E.encryptor,
+            decider: E.decider,
+            clues: E.clues,
+            needIntercept: E.needIntercept,
+            haveDecipher: !!E.decipher,
+            haveIntercept: !!E.intercept,
+            decipherBy: E.decipherBy,
+            interceptBy: E.interceptBy,
+            resolved: E.resolved,
+            hitI: open ? E.hitI : null,
+            missD: open ? E.missD : null,
+            // the code is the encryptor's secret until the reveal; locked
+            // guesses are visible to the side that made them
+            code: seat === E.encryptor || open ? E.code : null,
+            decipher: mine || open ? E.decipher : null,
+            intercept: !mine || open ? E.intercept : null,
+            opinions: mine ? E.opinions : null,
+            intOpinions: !mine ? E.intOpinions : null,
+          };
+        })
       : null,
     history: G.history,
     result: G.result,
