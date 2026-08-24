@@ -90,6 +90,7 @@
     .art.bomb { background: linear-gradient(150deg, #1c2f47, #101b2b); }
     .art.decrypto { background: linear-gradient(150deg, #12271d, #071009); }
     .art.skull { background: linear-gradient(150deg, #1b2a47, #0d1526); }
+    .art.harmonies { background: linear-gradient(150deg, #1b3a2a, #0c1d14); }
 
     /* dnup art: the flipped wordmark */
     .wordmark {
@@ -225,6 +226,31 @@
     .skfan i.pi { background: linear-gradient(180deg, #c4403f, #8f2626); transform: rotate(4deg) translateY(-6px); font-size: 15px; }
     .skfan i.sk { background: linear-gradient(180deg, #23232e, #0c0c12); border-color: #f2b950; color: #f2b950; transform: rotate(12deg); font-size: 19px; }
 
+    /* harmonies art: a little hex landscape */
+    .hexes {
+      position: relative;
+      width: 168px;
+      height: 100px;
+    }
+
+    .hexes i {
+      position: absolute;
+      width: 52px;
+      height: 45px;
+      clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+      display: grid;
+      place-items: center;
+      font-style: normal;
+      font-size: 19px;
+    }
+
+    .hexes i:nth-child(1) { left: 0; top: 26px; background: linear-gradient(180deg, #3f9fd8, #2a6f9d); }
+    .hexes i:nth-child(2) { left: 39px; top: 4px; background: linear-gradient(180deg, #4aa860, #2f7a42); }
+    .hexes i:nth-child(3) { left: 39px; top: 49px; background: linear-gradient(180deg, #dcb43e, #a98420); }
+    .hexes i:nth-child(4) { left: 78px; top: 26px; background: linear-gradient(180deg, #8d99a6, #626e7b); }
+    .hexes i:nth-child(5) { left: 117px; top: 4px; background: linear-gradient(180deg, #c8543e, #92351f); }
+    .hexes i:nth-child(6) { left: 117px; top: 49px; background: linear-gradient(180deg, #4aa860, #2f7a42); }
+
     .body {
       padding: 16px 18px 18px;
       display: flex;
@@ -326,6 +352,21 @@
       </div>
     </a>
 
+    <a class="game" href="./harmonies/">
+      <div class="art harmonies">
+        <span class="hexes"><i>💧</i><i>🌳</i><i>🌾</i><i>⛰️</i><i>🏠</i><i>🌲</i></span>
+      </div>
+      <div class="body">
+        <div class="title-row">
+          <span class="name">Harmonies</span>
+          <span class="players">2–4 players</span>
+        </div>
+        <p class="blurb">Draw three tokens and shape a tiny world — rivers, forests, mountains, villages — then settle the animals whose habitats you've grown before your board fills up.</p>
+        <div class="tags"><span class="tag">tile laying</span><span class="tag">bots</span><span class="tag">~30 min</span></div>
+        <span class="play">Play Harmonies →</span>
+      </div>
+    </a>
+
     <a class="game" href="./skullking/">
       <div class="art skull">
         <span class="skfan"><i class="g">7</i><i class="p">14</i><i class="pi">⚔</i><i class="sk">☠</i></span>
@@ -376,7 +417,7 @@
   </main>
 
   <footer>
-    Unofficial fan implementations, built for play between friends. <a href="https://www.dnup.game" target="_blank" rel="noopener">dnup</a> is by Kei Kajino &amp; Gilles-Romain Fonteny (© Asmodee Group); Love Letter is by Seiji Kanai (© Z-Man Games / Asmodee); Bomb Busters is by Hisashi Hayashi (© Cocktail Games / Pegasus Spiele); Decrypto is by Thomas Dagenais-Lespérance (© Le Scorpion Masqué); Skull King is by Brent Beck (© Grandpa Beck's Games). Multiplayer runs over WebRTC — browsers talk directly to each other.
+    Unofficial fan implementations, built for play between friends. <a href="https://www.dnup.game" target="_blank" rel="noopener">dnup</a> is by Kei Kajino &amp; Gilles-Romain Fonteny (© Asmodee Group); Love Letter is by Seiji Kanai (© Z-Man Games / Asmodee); Bomb Busters is by Hisashi Hayashi (© Cocktail Games / Pegasus Spiele); Decrypto is by Thomas Dagenais-Lespérance (© Le Scorpion Masqué); Skull King is by Brent Beck (© Grandpa Beck's Games); Harmonies is by Johan Benvenuto (© Libellud). Multiplayer runs over WebRTC — browsers talk directly to each other.
   </footer>
 </body>
 </html>
