@@ -428,6 +428,14 @@ export function applyMove(G, seat, move) {
   return { ok: false, error: 'Unknown move.' };
 }
 
+export function markReconnected(G, seat) {
+  const p = bySeat(G, seat);
+  if (!p || p.connected) return false;
+  p.connected = true;
+  note(G, `${p.name} reconnected — welcome back!`);
+  return true;
+}
+
 export function markDisconnected(G, seat) {
   const p = bySeat(G, seat);
   if (!p || !p.connected) return false;

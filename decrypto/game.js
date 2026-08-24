@@ -416,6 +416,14 @@ function finish(G, winner, reason) {
 
 // ---------------------------------------------------------------- lifecycle
 
+export function markReconnected(G, seat) {
+  const p = playerBySeat(G, seat);
+  if (!p || p.connected) return false;
+  p.connected = true;
+  addLog(G, `${p.name} reconnected — welcome back!`);
+  return true;
+}
+
 export function markDisconnected(G, seat) {
   const p = playerBySeat(G, seat);
   if (!p || !p.connected) return false;

@@ -19,6 +19,7 @@ import {
   viewFor,
   botChoose,
   markDisconnected,
+  markReconnected,
 } from './game.js';
 
 // ---------------------------------------------------------------- networking
@@ -308,6 +309,12 @@ class HostSession {
     };
     if (conn._seat != null) return;
     if (msg.v !== PROTO) return deny('version');
+    // a returning player proves identity with their reconnect token and
+    // reclaims their seat — even mid-game
+    if (msg.token) {
+      const back = this.roster.find((r) => r.token && r.token === msg.token);
+      if (back) return this.reattach(conn, back);
+    }
     if (this.G) return deny('in-progress');
     if (this.roster.length >= MAX_PLAYERS) return deny('full');
     let seat = 0;
@@ -316,13 +323,40 @@ class HostSession {
     conn._seat = seat;
     conn._seen = Date.now();
     this.conns.set(seat, conn);
-    this.roster.push({ seat, name, connected: true });
+    const token = genCode(12);
+    this.roster.push({ seat, name, connected: true, token });
     try {
-      conn.send({ t: 'welcome', seat, code: this.code });
+      conn.send({ t: 'welcome', seat, code: this.code, token });
       if (this.chatLog.length) conn.send({ t: 'chatlog', items: this.chatLog.slice(-20) });
     } catch {}
     toast(`${name} joined`);
     this.pushLobby();
+  }
+
+  reattach(conn, p) {
+    const old = this.conns.get(p.seat);
+    if (old && old !== conn) {
+      old._seat = null; // keep drop() from marking them disconnected again
+      try {
+        old.close();
+      } catch {}
+    }
+    conn._seat = p.seat;
+    conn._seen = Date.now();
+    this.conns.set(p.seat, conn);
+    const wasGone = !p.connected;
+    p.connected = true;
+    try {
+      conn.send({ t: 'welcome', seat: p.seat, code: this.code, token: p.token });
+      if (this.chatLog.length) conn.send({ t: 'chatlog', items: this.chatLog.slice(-20) });
+    } catch {}
+    if (wasGone) toast(`${p.name} reconnected`);
+    if (this.G) {
+      if (wasGone) markReconnected(this.G, p.seat);
+      this.broadcast();
+    } else {
+      this.pushLobby();
+    }
   }
 
   drop(conn) {
@@ -518,8 +552,11 @@ class HostSession {
 }
 
 class GuestSession {
-  constructor(peer, code, name) {
+  constructor(peer, code, name, resume = null) {
     this.isHost = false;
+    this.name = name;
+    this.resume = resume; // { token, attempt } while auto-reconnecting
+    this.token = (resume && resume.token) || loadRejoin(code);
     this.peer = peer;
     this.code = code;
     this.seat = null;
@@ -528,15 +565,23 @@ class GuestSession {
     const conn = peer.connect(ID_PREFIX + code, { reliable: true, serialization: 'json' });
     this.conn = conn;
     this.timeout = setTimeout(() => {
-      if (!this.joined) this.fail('Could not reach that room. Check the code and try again.');
+      if (this.joined) return;
+      if (this.resume) retryReconnect(this);
+      else this.fail('Could not reach that room. Check the code and try again.');
     }, 12000);
     peer.on('error', (e) => {
-      if (e && e.type === 'peer-unavailable' && !this.joined) this.fail('Room not found — check the code.');
+      if (e && e.type === 'peer-unavailable' && !this.joined) {
+        if (this.resume) retryReconnect(this);
+        else this.fail('Room not found — check the code.');
+      }
     });
-    conn.on('open', () => conn.send({ t: 'hello', v: PROTO, name }));
+    conn.on('open', () => conn.send({ t: 'hello', v: PROTO, name, token: this.token || undefined }));
     conn.on('data', (msg) => this.onMsg(msg));
     conn.on('close', () => {
-      if (!this.closed) this.fail(this.joined ? 'Disconnected from the host.' : 'Connection closed.');
+      if (this.closed) return;
+      if (this.joined) beginReconnect(this);
+      else if (this.resume) retryReconnect(this);
+      else this.fail('Connection closed.');
     });
     conn.on('error', () => {});
     this.hb = setInterval(() => {
@@ -557,8 +602,15 @@ class GuestSession {
         clearTimeout(this.timeout);
         setHomeStatus('');
         setBusy(false);
+        this.token = msg.token || this.token;
+        saveRejoin(this.code, this.token);
+        if (this.resume) {
+          toast('Reconnected!');
+          this.resume = null;
+        }
         break;
       case 'deny': {
+        if (this.resume) clearRejoin();
         const why =
           {
             full: 'That squad is full (5 players max).',
@@ -623,6 +675,86 @@ class GuestSession {
       this.peer.destroy();
     } catch {}
   }
+}
+
+// ---------------------------------------------------------------- reconnection
+// The host hands each guest a secret token with its welcome. It is kept per
+// room (localStorage), so a dropped connection — or a refreshed tab — can
+// reclaim the same seat: automatically with retries, or via a manual Join.
+
+const REJOIN_KEY = 'bmb-rejoin';
+
+function saveRejoin(code, token) {
+  if (!token) return;
+  try {
+    localStorage.setItem(REJOIN_KEY, JSON.stringify({ code, token, ts: Date.now() }));
+  } catch {}
+}
+
+function loadRejoin(code) {
+  try {
+    const raw = localStorage.getItem(REJOIN_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    return saved && saved.code === code ? saved.token : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearRejoin() {
+  try {
+    localStorage.removeItem(REJOIN_KEY);
+  } catch {}
+}
+
+const RECONNECT_DELAYS = [1500, 3000, 5000, 8000, 12000, 15000];
+
+function beginReconnect(sess) {
+  const { code, name, token } = sess;
+  sess.closed = true;
+  sess.destroy();
+  if (session === sess) session = null;
+  if (!token) {
+    guestGone(code, 'Disconnected from the host.');
+    return;
+  }
+  scheduleReconnect(code, name, token, 0);
+}
+
+function retryReconnect(sess) {
+  const next = (sess.resume ? sess.resume.attempt : 0) + 1;
+  const { code, name, token } = sess;
+  sess.closed = true;
+  sess.destroy();
+  if (session === sess) session = null;
+  scheduleReconnect(code, name, token, next);
+}
+
+function scheduleReconnect(code, name, token, attempt) {
+  if (attempt >= RECONNECT_DELAYS.length) {
+    guestGone(code, 'Could not reconnect.');
+    return;
+  }
+  toast(`Connection lost — reconnecting (try ${attempt + 1} of ${RECONNECT_DELAYS.length})…`, 2600);
+  setTimeout(async () => {
+    if (session) return; // the player already moved on to something else
+    try {
+      const peer = await openPeer();
+      session = new GuestSession(peer, code, name, { token, attempt });
+    } catch {
+      scheduleReconnect(code, name, token, attempt + 1);
+    }
+  }, RECONNECT_DELAYS[attempt]);
+}
+
+function guestGone(code, why) {
+  showScreen('home');
+  chatSetVisible(false);
+  $('#chat-msgs').replaceChildren();
+  setBusy(false);
+  if (code) $('#code-input').value = code;
+  setHomeStatus(`${why} Your seat is saved — press Join to pick it back up once the host is reachable.`, true);
 }
 
 // ---------------------------------------------------------------- lobby UI
@@ -1582,6 +1714,7 @@ function copyText(text) {
 }
 
 function leave() {
+  clearRejoin();
   if (session) session.destroy();
   session = null;
   location.href = location.pathname;
