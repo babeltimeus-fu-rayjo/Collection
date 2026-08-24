@@ -88,6 +88,7 @@
     .art.dnup { background: linear-gradient(150deg, #1d4535, #0e2b21); }
     .art.love { background: linear-gradient(150deg, #4a1f3d, #2a1230); }
     .art.bomb { background: linear-gradient(150deg, #1c2f47, #101b2b); }
+    .art.decrypto { background: linear-gradient(150deg, #12271d, #071009); }
 
     /* dnup art: the flipped wordmark */
     .wordmark {
@@ -160,6 +161,43 @@
     .rack i.y { background: linear-gradient(180deg, #ffdd80, #f0b429); color: #4a3407; text-shadow: none; }
     .rack i.r { background: linear-gradient(180deg, #ff7a7a, #d92f34); }
     .rack i.up { translate: 0 -7px; }
+
+    /* decrypto art: a terminal code readout over keyword slots */
+    .cipher {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .cipher .codeline {
+      font-family: 'SF Mono', Menlo, Consolas, monospace;
+      font-weight: 800;
+      font-size: 34px;
+      letter-spacing: 0.1em;
+      color: #3ff08a;
+      text-shadow: 0 0 18px rgba(63, 240, 138, 0.5);
+    }
+
+    .cipher .slots {
+      display: flex;
+      gap: 6px;
+    }
+
+    .cipher .slots i {
+      width: 46px;
+      height: 26px;
+      border-radius: 6px;
+      border: 1px solid rgba(63, 240, 138, 0.4);
+      background: rgba(63, 240, 138, 0.08);
+      color: #9fd6b8;
+      font-style: normal;
+      font-weight: 800;
+      font-size: 12px;
+      display: grid;
+      place-items: center;
+      font-family: 'SF Mono', Menlo, Consolas, monospace;
+    }
 
     .body {
       padding: 16px 18px 18px;
@@ -262,6 +300,24 @@
       </div>
     </a>
 
+    <a class="game" href="./decrypto/">
+      <div class="art decrypto">
+        <span class="cipher">
+          <span class="codeline">4·2·1</span>
+          <span class="slots"><i>#1</i><i>#2</i><i>#3</i><i>#4</i></span>
+        </span>
+      </div>
+      <div class="body">
+        <div class="title-row">
+          <span class="name">Decrypto</span>
+          <span class="players">4–8 players</span>
+        </div>
+        <p class="blurb">Two teams, four secret keywords each. Transmit codes with clues your side understands instantly — and pray the other team can't crack the pattern before you slip.</p>
+        <div class="tags"><span class="tag">team vs team</span><span class="tag">word deduction</span><span class="tag">~30 min</span></div>
+        <span class="play">Play Decrypto →</span>
+      </div>
+    </a>
+
     <a class="game" href="./loveletter/">
       <div class="art love">
         <span class="fan"><i>1</i><i>5</i><i>8</i><i>9</i></span>
@@ -279,7 +335,7 @@
   </main>
 
   <footer>
-    Unofficial fan implementations, built for play between friends. <a href="https://www.dnup.game" target="_blank" rel="noopener">dnup</a> is by Kei Kajino &amp; Gilles-Romain Fonteny (© Asmodee Group); Love Letter is by Seiji Kanai (© Z-Man Games / Asmodee); Bomb Busters is by Hisashi Hayashi (© Cocktail Games / Pegasus Spiele). Multiplayer runs over WebRTC — browsers talk directly to each other.
+    Unofficial fan implementations, built for play between friends. <a href="https://www.dnup.game" target="_blank" rel="noopener">dnup</a> is by Kei Kajino &amp; Gilles-Romain Fonteny (© Asmodee Group); Love Letter is by Seiji Kanai (© Z-Man Games / Asmodee); Bomb Busters is by Hisashi Hayashi (© Cocktail Games / Pegasus Spiele); Decrypto is by Thomas Dagenais-Lespérance (© Le Scorpion Masqué). Multiplayer runs over WebRTC — browsers talk directly to each other.
   </footer>
 </body>
 </html>
