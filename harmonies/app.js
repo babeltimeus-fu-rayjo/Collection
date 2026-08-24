@@ -22,6 +22,7 @@ import {
   animalByKey,
   cubeTargetsFor,
   legalCellsFor,
+  cardFeasible,
   newMatch,
   applyMove,
   viewFor,
@@ -827,8 +828,13 @@ function renderMarket(view, sess) {
   const dBox = $('#display');
   dBox.replaceChildren();
   const canCard = view.phase === 'playing' && view.turn === view.you && my && !my.tookCard && my.cards.length < HAND_LIMIT;
+  const supply = tokenSupply(view);
   for (const key of view.display) {
-    const c = animalCardEl(view, key, { cls: `${canCard ? 'can' : ''}${choice.cardSel === key ? ' sel' : ''}` });
+    const dead = my && !cardFeasible(my.board, key, supply);
+    const c = animalCardEl(view, key, {
+      cls: `${canCard ? 'can' : ''}${choice.cardSel === key ? ' sel' : ''}${dead ? ' impossible' : ''}`,
+    });
+    if (dead) c.title = 'Out of reach: this habitat can no longer be built on your board with the tokens left in the game.';
     if (canCard) {
       c.addEventListener('click', () => {
         choice.cardSel = choice.cardSel === key ? null : key;
@@ -990,6 +996,15 @@ const CHEAT_FILTERS = [
 
 const cheatSel = new Set();
 
+// tokens still obtainable by anyone: the pouch plus the central board
+function tokenSupply(view) {
+  const supply = { ...(view.pouchColors || {}) };
+  for (const slot of view.slots) {
+    for (const c of slot) supply[c] = (supply[c] || 0) + 1;
+  }
+  return supply;
+}
+
 function deckRemainder(view) {
   const gone = new Set(view.display);
   for (const p of view.players) {
@@ -1002,9 +1017,14 @@ function deckRemainder(view) {
 function renderCheatsheet(view) {
   if ($('#modal-cheat').classList.contains('hidden')) return;
   const remaining = deckRemainder(view);
+  const myBoard = me(view) ? me(view).board : null;
+  const supply = tokenSupply(view);
+  const alive = new Set(myBoard ? remaining.filter((k) => cardFeasible(myBoard, k, supply)) : remaining);
+  const dead = remaining.length - alive.size;
   $('#cheat-sub').textContent =
-    `${remaining.length} of ${ANIMALS.length} animals are still in the deck — the rest are on display or already claimed. ` +
-    'Filter by the terrain a habitat needs to plan your landscape ahead.';
+    `${remaining.length} of ${ANIMALS.length} animals are still in the deck — the rest are on display or already claimed.` +
+    (dead ? ` ${dead} of them ${dead === 1 ? 'is' : 'are'} greyed out: their habitats can no longer be built on YOUR board.` : '') +
+    ' Filter by the terrain a habitat needs to plan your landscape ahead.';
 
   const fbox = $('#cheat-filters');
   fbox.replaceChildren();
@@ -1038,8 +1058,19 @@ function renderCheatsheet(view) {
   });
   const sorted = filtered
     .map((k) => animalByKey(k))
-    .sort((a, b) => a.pattern.length - b.pattern.length || a.name.localeCompare(b.name));
-  for (const card of sorted) grid.append(animalCardEl(view, card.key, {}));
+    .sort(
+      (a, b) =>
+        (alive.has(a.key) ? 0 : 1) - (alive.has(b.key) ? 0 : 1) ||
+        a.pattern.length - b.pattern.length ||
+        a.name.localeCompare(b.name),
+    );
+  for (const card of sorted) {
+    const node = animalCardEl(view, card.key, { cls: alive.has(card.key) ? '' : 'impossible' });
+    if (!alive.has(card.key)) {
+      node.title = 'Out of reach: this habitat can no longer be built on your board with the tokens left in the game.';
+    }
+    grid.append(node);
+  }
   if (!sorted.length) {
     grid.append(el('div', 'cheat-empty', 'No animal left in the deck needs exactly that combination — loosen a filter.'));
   }

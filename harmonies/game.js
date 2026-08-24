@@ -218,6 +218,94 @@ export function cubeTargets(G, seat, cardKey) {
   return p ? cubeTargetsFor(p.board, cardKey) : [];
 }
 
+// What extra tokens would turn this cell into stack type `t`? Returns null
+// when the cell can never become `t` (stacks only grow, cubes freeze cells,
+// pattern heights are exact). A building built from scratch needs its red
+// plus one base of brown/gray/red — returned as a flexible unit `bldBase`.
+export function deltaToBecome(cell, t) {
+  const cur = stackType(cell.stack);
+  if (cur === t) return {};
+  if (cell.cube) return null; // frozen: nothing may be added
+  switch (t) {
+    case 'water':
+      return cur === 'empty' ? { blue: 1 } : null;
+    case 'field':
+      return cur === 'empty' ? { yellow: 1 } : null;
+    case 'tree1':
+      return cur === 'empty' ? { green: 1 } : null;
+    case 'tree2':
+      if (cur === 'empty') return { brown: 1, green: 1 };
+      if (cur === 'trunk1') return { green: 1 };
+      return null;
+    case 'tree3':
+      if (cur === 'empty') return { brown: 2, green: 1 };
+      if (cur === 'trunk1') return { brown: 1, green: 1 };
+      if (cur === 'trunk2') return { green: 1 };
+      return null;
+    case 'mtn1':
+      return cur === 'empty' ? { gray: 1 } : null;
+    case 'mtn2':
+      if (cur === 'empty') return { gray: 2 };
+      if (cur === 'mtn1') return { gray: 1 };
+      return null;
+    case 'mtn3':
+      if (cur === 'empty') return { gray: 3 };
+      if (cur === 'mtn1') return { gray: 2 };
+      if (cur === 'mtn2') return { gray: 1 };
+      return null;
+    case 'bld':
+      if (cur === 'empty') return { red: 1, bldBase: 1 };
+      if (cur === 'redg' || cur === 'mtn1' || cur === 'trunk1') return { red: 1 };
+      return null;
+    default:
+      return null;
+  }
+}
+
+// Could this card's habitat still be built (and its cube placed) somewhere on
+// `board`, given the tokens still obtainable (`supply` = pouch + central
+// slots, per color)? Optimistic about which tokens you get — so a `false`
+// is a proof of impossibility, never a guess.
+export function cardFeasible(board, cardKey, supply) {
+  const card = animalByKey(cardKey);
+  if (!card) return false;
+  for (const anchor of CELLS) {
+    if (board[anchor.id].cube) continue; // the cube cell must be cube-free
+    rotations: for (let rot = 0; rot < 6; rot++) {
+      const need = {};
+      let flex = 0;
+      for (const part of card.pattern) {
+        const [dx, dz] = rotCube(part.dx, part.dz, rot);
+        const cid = CELL_BY_XZ.get(`${anchor.x + dx},${anchor.z + dz}`);
+        if (cid == null) continue rotations;
+        const delta = deltaToBecome(board[cid], part.t);
+        if (delta == null) continue rotations;
+        for (const [color, n] of Object.entries(delta)) {
+          if (color === 'bldBase') flex += n;
+          else need[color] = (need[color] || 0) + n;
+        }
+      }
+      let ok = true;
+      for (const [color, n] of Object.entries(need)) {
+        if ((supply[color] || 0) < n) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok && flex > 0) {
+        // building bases may be brown, gray, or red — spend the spare supply
+        const spare =
+          Math.max(0, (supply.brown || 0) - (need.brown || 0)) +
+          Math.max(0, (supply.gray || 0) - (need.gray || 0)) +
+          Math.max(0, (supply.red || 0) - (need.red || 0));
+        if (spare < flex) ok = false;
+      }
+      if (ok) return true;
+    }
+  }
+  return false;
+}
+
 // ---------------------------------------------------------------- scoring
 
 export function scoreBoard(board, side = 'A') {
@@ -612,6 +700,10 @@ export function viewFor(G, seat, code) {
     turnNo: G.turnNo,
     lastRound: G.endAfter != null,
     pouchCount: G.pouch.length,
+    pouchColors: G.pouch.reduce((m, c) => {
+      m[c] = (m[c] || 0) + 1;
+      return m;
+    }, {}),
     deckCount: G.deck.length,
     slots: G.slots,
     display: G.display,

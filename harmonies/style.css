@@ -1404,6 +1404,15 @@ a {
   cursor: default;
 }
 
+.acard.impossible {
+  opacity: 0.32;
+  filter: grayscale(0.85);
+}
+
+.acard.impossible .a-name {
+  text-decoration: line-through;
+}
+
 .cheat-empty {
   color: var(--dim);
   font-size: 13.5px;
