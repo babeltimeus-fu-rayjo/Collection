@@ -1712,3 +1712,6 @@ a {
 /* Rectangular table: players face each other on the top and bottom edges;
    discard piles sit on each player's table-facing side */
 .prow { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; width: 100%; max-width: 1180px; }
+
+/* Announcements must survive any browser width: wrap instead of clipping */
+.flash { max-width: min(92vw, 780px); width: max-content; white-space: normal; overflow-wrap: break-word; text-align: center; box-sizing: border-box; }

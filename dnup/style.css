@@ -1597,3 +1597,6 @@ body:not(.my-turn) #hand .pcard .pc-body {
 .prow { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; align-items: flex-start; min-height: 120px; }
 #row-bottom { align-items: flex-end; }
 #row-bottom #my-zone { flex: 0 1 auto; min-width: 260px; }
+
+/* Announcements must survive any browser width: wrap instead of clipping */
+.flash { max-width: min(92vw, 780px); width: max-content; white-space: normal; overflow-wrap: break-word; text-align: center; box-sizing: border-box; }

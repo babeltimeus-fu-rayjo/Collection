@@ -1575,3 +1575,6 @@ a {
 #ob-bar .ob-btn.claim:hover { background: rgba(120, 230, 160, 0.3); }
 #lobby-watch button { margin-left: 8px; border: 1px solid rgba(120, 230, 160, 0.6); background: rgba(120, 230, 160, 0.18); color: inherit; border-radius: 8px; padding: 3px 10px; font: inherit; font-size: 12.5px; cursor: pointer; }
 #lobby-watch button:hover { background: rgba(120, 230, 160, 0.3); }
+
+/* Announcements must survive any browser width: wrap instead of clipping */
+.flash { max-width: min(92vw, 780px); width: max-content; white-space: normal; overflow-wrap: break-word; text-align: center; box-sizing: border-box; }

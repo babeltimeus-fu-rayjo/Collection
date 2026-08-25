@@ -1409,3 +1409,6 @@ a {
 #middle { min-height: 40px; }
 #middle, #trick { min-height: 0; }
 #trick { padding: 6px 12px; }
+
+/* Announcements must survive any browser width: wrap instead of clipping */
+.flash { max-width: min(92vw, 780px); width: max-content; white-space: normal; overflow-wrap: break-word; text-align: center; box-sizing: border-box; }

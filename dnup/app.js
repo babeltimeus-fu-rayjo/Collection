@@ -1422,14 +1422,14 @@ function renderDcBanner(view, sess) {
 }
 
 // Long rectangular table: you sit on the bottom edge and the turn order
-// flows around the perimeter — right along the bottom, up the side, back
-// left across the top.
+// runs CLOCKWISE on screen — from you leftward along the bottom, up the
+// left side, left-to-right across the top, down the right side back to you.
 function tableRows(view) {
   const seats = view.players.map((p) => p.seat).sort((a, b) => a - b);
   const myIdx = Math.max(0, seats.indexOf(view.you));
   const S = seats.map((_, k) => seats[(myIdx + k) % seats.length]);
   const bottomN = Math.max(1, Math.floor(S.length / 2));
-  return { bottom: S.slice(0, bottomN), top: S.slice(bottomN).reverse() };
+  return { bottom: S.slice(0, bottomN).reverse(), top: S.slice(bottomN) };
 }
 
 // One opponent's box: identity strip + their play area(s). The sets face the
