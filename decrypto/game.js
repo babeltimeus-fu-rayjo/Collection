@@ -37,7 +37,7 @@
 //     team the middle player's mirror is themselves, so the duty shifts to
 //     the next seat along.
 
-export const PROTO = 2;
+export const PROTO = 3;
 export const MIN_PER_TEAM = 2;
 export const MAX_PER_TEAM = 4;
 export const MAX_PLAYERS = MAX_PER_TEAM * 2;

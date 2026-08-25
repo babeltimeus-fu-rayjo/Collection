@@ -19,7 +19,7 @@
 // Sort keys ("sv") are integers: blue v*10, yellow v*10+1, red v*10+5 — so a
 // yellow 3.1 sits between the 3s and the 4s, exactly like the physical tiles.
 
-export const PROTO = 1;
+export const PROTO = 2;
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 5;
 

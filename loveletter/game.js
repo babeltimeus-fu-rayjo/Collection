@@ -5,7 +5,7 @@
 // Asmodee). The Premium edition plays 2–8 with a 32-card deck that adds a
 // second character at most values; smaller counts use a trimmed deck.
 
-export const PROTO = 1;
+export const PROTO = 2;
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 8;
 

@@ -31,7 +31,7 @@
 // The animal deck here is an ORIGINAL design (like the physical game's, each
 // card is a pattern, a cube color, and an ascending point ladder).
 
-export const PROTO = 1;
+export const PROTO = 2;
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 4;
 export const HAND_LIMIT = 4;

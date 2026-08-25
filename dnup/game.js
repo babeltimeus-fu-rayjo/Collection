@@ -13,7 +13,7 @@
 // 2 / 3 / 4 / 5 players. High values are deliberately scarce (three 10s, five
 // 9s in the whole deck) and no card pairs two high values together.
 
-export const PROTO = 2;
+export const PROTO = 3;
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 5;
 export const TARGET_POINTS = 4; // standard (3-5p): first to 4+ points wins

@@ -19,7 +19,7 @@
 //   - Deck: the modern 70-card deck (mermaids included). The Legendary
 //     expansion menu (Loot, Kraken, White Whale) is not implemented.
 
-export const PROTO = 1;
+export const PROTO = 2;
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 8;
 export const ROUNDS = 10;

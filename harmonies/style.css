@@ -1556,3 +1556,16 @@ a {
 #dc-banner .dc-row.covered { background: rgba(127, 127, 127, 0.12); border-color: rgba(127, 127, 127, 0.45); }
 #dc-banner .dc-btn { border: 1px solid rgba(127, 127, 127, 0.55); background: rgba(127, 127, 127, 0.16); color: inherit; border-radius: 8px; padding: 4px 10px; font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
 #dc-banner .dc-btn:hover { background: rgba(127, 127, 127, 0.28); }
+
+/* Observers: watch chip, lobby note, and the shadow-a-player bar */
+#watch-chip { display: none; }
+#watch-chip.on { display: inline-block; margin-left: 8px; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: rgba(127, 127, 127, 0.16); border: 1px solid rgba(127, 127, 127, 0.4); vertical-align: middle; }
+#lobby-watch { display: none; }
+#lobby-watch.on { display: block; margin: 6px auto 0; font-size: 12.5px; opacity: 0.85; text-align: center; }
+#ob-bar { display: none; }
+#ob-bar.on { display: flex; flex-direction: column; gap: 6px; margin: 10px auto 2px; max-width: 620px; padding: 0 10px; }
+#ob-bar .ob-row { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; background: rgba(120, 160, 255, 0.12); border: 1px solid rgba(120, 160, 255, 0.5); border-radius: 10px; padding: 7px 12px; font-size: 13px; line-height: 1.35; }
+#ob-bar .ob-switch { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+#ob-bar .ob-btn { border: 1px solid rgba(127, 127, 127, 0.55); background: rgba(127, 127, 127, 0.16); color: inherit; border-radius: 8px; padding: 3px 10px; font: inherit; font-size: 12.5px; cursor: pointer; }
+#ob-bar .ob-btn:hover { background: rgba(127, 127, 127, 0.28); }
+#ob-bar .ob-btn.on { background: rgba(120, 160, 255, 0.3); border-color: rgba(120, 160, 255, 0.75); cursor: default; }

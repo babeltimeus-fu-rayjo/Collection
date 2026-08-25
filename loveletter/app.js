@@ -252,6 +252,8 @@ class HostSession {
     this.G = null;
     this.botTimer = null;
     this.chatLog = [];
+    this.watchers = []; // observers: {id, name, conn, target-seat}
+    this.wid = 0;
     peer.on('connection', (conn) => this.accept(conn));
     peer.on('disconnected', () => {
       try {
@@ -274,6 +276,8 @@ class HostSession {
     if (!msg || typeof msg !== 'object') return;
     conn._seen = Date.now();
     if (msg.t === 'hello') return this.join(conn, msg);
+    if (msg.t === 'watch' && conn._watcher != null) return this.setWatch(conn._watcher, msg.seat);
+    if (msg.t === 'chat' && conn._watcher != null) return this.watcherChat(conn._watcher, msg);
     const seat = conn._seat;
     if (seat == null) return;
     if (msg.t === 'move') this.move(seat, msg.move);
@@ -302,8 +306,7 @@ class HostSession {
       const back = this.roster.find((r) => r.token && r.token === msg.token);
       if (back) return this.reattach(conn, back);
     }
-    if (this.G) return deny('in-progress');
-    if (this.roster.length >= MAX_PLAYERS) return deny('full');
+    if (this.G || this.roster.length >= MAX_PLAYERS) return this.attachWatcher(conn, msg);
     let seat = 0;
     while (this.roster.some((p) => p.seat === seat)) seat++;
     const name = cleanName(msg.name) || `Player ${seat + 1}`;
@@ -347,6 +350,17 @@ class HostSession {
   }
 
   drop(conn) {
+    if (conn._watcher != null) {
+      const w = this.watchers.find((x) => x.id === conn._watcher);
+      conn._watcher = null;
+      if (w) {
+        this.watchers = this.watchers.filter((x) => x !== w);
+        toast(`${w.name} stopped watching`);
+        if (this.G) this.broadcast();
+        else this.pushLobby();
+      }
+      return;
+    }
     const seat = conn._seat;
     if (seat == null) return;
     conn._seat = null;
@@ -376,8 +390,60 @@ class HostSession {
     if (markBotTakeover(this.G, seat)) this.broadcast();
   }
 
+  // Overflow and mid-game joiners become observers: they shadow one chosen
+  // player's exact view (like standing behind their chair) and can switch.
+  attachWatcher(conn, msg) {
+    const name = cleanName(msg.name) || 'Watcher';
+    const id = ++this.wid;
+    conn._watcher = id;
+    conn._seen = Date.now();
+    const target = this.roster.length ? this.roster[0].seat : 0;
+    this.watchers.push({ id, name, conn, target });
+    try {
+      conn.send({ t: 'welcome', observer: true, code: this.code });
+      if (this.chatLog.length) conn.send({ t: 'chatlog', items: this.chatLog.slice(-20) });
+    } catch {}
+    toast(`${name} is watching`);
+    if (this.G) this.broadcast();
+    else this.pushLobby();
+  }
+
+  setWatch(id, seat) {
+    const w = this.watchers.find((x) => x.id === id);
+    if (!w || !this.roster.some((r) => r.seat === seat)) return;
+    w.target = seat;
+    if (this.G) this.sendWatcher(w);
+  }
+
+  sendWatcher(w) {
+    if (!this.roster.some((r) => r.seat === w.target)) w.target = this.roster.length ? this.roster[0].seat : 0;
+    try {
+      w.conn.send({
+        t: 'state',
+        view: {
+          ...viewFor(this.G, w.target, this.code),
+          observer: { name: w.name, target: w.target },
+          watchers: this.watchers.map((x) => x.name),
+        },
+      });
+    } catch {}
+  }
+
+  watcherChat(id, msg) {
+    const w = this.watchers.find((x) => x.id === id);
+    if (w) this.relayChat(-1, `${w.name} \u{1F441}`, msg.text);
+  }
+
   sweep() {
     const now = Date.now();
+    for (const w of [...this.watchers]) {
+      if (w.conn._seen && now - w.conn._seen > 20000) {
+        try {
+          w.conn.close();
+        } catch {}
+        this.drop(w.conn);
+      }
+    }
     for (const conn of [...this.conns.values()]) {
       if (conn._seen && now - conn._seen > 20000) {
         try {
@@ -451,6 +517,7 @@ class HostSession {
     return {
       t: 'lobby',
       code: this.code,
+      watchers: this.watchers.map((x) => x.name),
       players: this.roster.map((p) => ({ seat: p.seat, name: p.name, bot: !!p.bot })),
       min: MIN_PLAYERS,
       max: MAX_PLAYERS,
@@ -466,6 +533,11 @@ class HostSession {
     for (const c of this.conns.values()) {
       try {
         c.send(msg);
+      } catch {}
+    }
+    for (const w of this.watchers) {
+      try {
+        w.conn.send(msg);
       } catch {}
     }
   }
@@ -506,15 +578,17 @@ class HostSession {
   }
 
   broadcast() {
+    const wnames = this.watchers.map((x) => x.name);
     for (const [seat, conn] of this.conns) {
       try {
-        conn.send({ t: 'state', view: viewFor(this.G, seat, this.code) });
+        conn.send({ t: 'state', view: { ...viewFor(this.G, seat, this.code), watchers: wnames } });
       } catch {}
     }
+    for (const w of this.watchers) this.sendWatcher(w);
     pendingMove = false;
     resetChoice();
     showScreen('game');
-    renderGame(viewFor(this.G, 0, this.code), this);
+    renderGame({ ...viewFor(this.G, 0, this.code), watchers: wnames }, this);
     this.scheduleBots();
   }
 
@@ -596,6 +670,7 @@ class GuestSession {
     switch (msg.t) {
       case 'welcome':
         this.joined = true;
+        this.observer = !!msg.observer;
         this.seat = msg.seat;
         clearTimeout(this.timeout);
         setHomeStatus('');
@@ -646,6 +721,12 @@ class GuestSession {
   localMove(move) {
     try {
       this.conn.send({ t: 'move', move });
+    } catch {}
+  }
+
+  watch(seat) {
+    try {
+      this.conn.send({ t: 'watch', seat });
     } catch {}
   }
 
@@ -764,6 +845,7 @@ function renderLobby(lob, sess) {
   clearChatBubbles();
   chatSetVisible(true);
   $('#lobby-code').textContent = lob.code;
+  renderLobbyWatch(lob, sess);
   const list = $('#lobby-players');
   list.replaceChildren();
   const mySeat = sess.isHost ? 0 : sess.seat;
@@ -1162,6 +1244,71 @@ function renderTracker(view) {
 
 // While a human is disconnected mid-game the table stalls; tell everyone
 // why, and give the host the remedy (hand the seat to a bot).
+// Observers shadow one player's view; pin a bar naming whose eyes they are
+// borrowing, with buttons to switch player.
+function renderObBar(view, sess) {
+  let bar = $('#ob-bar');
+  const on = !!view.observer;
+  if (!bar) {
+    if (!on) return;
+    bar = el('div', '');
+    bar.id = 'ob-bar';
+    const anchor = $('#action-bar');
+    anchor.parentNode.insertBefore(bar, anchor);
+  }
+  bar.classList.toggle('on', on);
+  bar.replaceChildren();
+  if (!on) return;
+  const cur = view.players.find((p) => p.seat === view.observer.target);
+  const row = el('div', 'ob-row');
+  row.append(el('span', 'ob-msg', `\u{1F441} Watching ${cur ? cur.name : '?'}'s view \u2014 you can chat, but not act.`));
+  const sw = el('div', 'ob-switch');
+  for (const p of view.players) {
+    const b = el('button', 'ob-btn' + (p.seat === view.observer.target ? ' on' : ''), p.name);
+    b.type = 'button';
+    b.onclick = () => sess.watch(p.seat);
+    sw.append(b);
+  }
+  row.append(sw);
+  bar.append(row);
+}
+
+function renderWatchChip(view) {
+  const anchor = $('#room-chip');
+  if (!anchor) return;
+  let chip = $('#watch-chip');
+  const names = view.watchers || [];
+  if (!chip) {
+    if (!names.length) return;
+    chip = el('span', '');
+    chip.id = 'watch-chip';
+    anchor.parentNode.insertBefore(chip, anchor.nextSibling);
+  }
+  chip.classList.toggle('on', names.length > 0);
+  chip.textContent = names.length ? `\u{1F441} ${names.length}` : '';
+  chip.title = names.length ? `Watching: ${names.join(', ')}` : '';
+}
+
+function renderLobbyWatch(lob, sess) {
+  const anchor = $('#lobby-code');
+  if (!anchor) return;
+  let chip = $('#lobby-watch');
+  const names = lob.watchers || [];
+  const mine = !!(sess && sess.observer);
+  if (!chip) {
+    if (!names.length && !mine) return;
+    chip = el('div', '');
+    chip.id = 'lobby-watch';
+    anchor.parentNode.insertBefore(chip, anchor.nextSibling);
+  }
+  chip.classList.toggle('on', names.length > 0 || mine);
+  chip.textContent = mine
+    ? `\u{1F441} You are watching \u2014 the game appears here when it starts.`
+    : names.length
+      ? `\u{1F441} ${names.length} watching: ${names.join(', ')}`
+      : '';
+}
+
 function renderDcBanner(view, sess) {
   let bar = $('#dc-banner');
   if (!bar) {
@@ -1196,6 +1343,8 @@ function renderDcBanner(view, sess) {
 function renderGame(view, sess) {
   lastView = view;
   renderDcBanner(view, sess);
+  renderObBar(view, sess);
+  renderWatchChip(view);
   chatSetVisible(true);
   $('#room-chip').textContent = view.code;
   $('#round-chip').textContent = `Round ${view.round} · first to ${view.tokensToWin} ♥`;
@@ -1481,6 +1630,10 @@ function confetti() {
 // ---------------------------------------------------------------- actions
 
 function sendMove(move) {
+  if (session && session.observer) {
+    toast('You are watching \u2014 only the seated player can act');
+    return;
+  }
   if (pendingMove || !session) return;
   pendingMove = true;
   resetChoice();
