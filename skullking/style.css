@@ -1421,3 +1421,10 @@ a {
 
 /* Game table-talk: the same bubbles as chat, tinted as the game speaking */
 .chat-bubble.say { border: 1px solid rgba(255, 205, 110, 0.75); background: rgba(66, 52, 22, 0.96); color: #ffe9c4; font-weight: 600; }
+
+/* Top-row players speak toward the table: bubbles hang below their seat */
+.chat-bubble { max-width: min(240px, 60vw); }
+.chat-bubble.below { top: auto; bottom: -8px; transform: translateY(100%); }
+.chat-bubble.below::after { bottom: auto; top: -6px; border-top-color: transparent; border-bottom-color: #fff; }
+.chat-bubble.say::after { border-top-color: rgba(66, 52, 22, 0.96); }
+.chat-bubble.say.below::after { border-top-color: transparent; border-bottom-color: rgba(66, 52, 22, 0.96); }

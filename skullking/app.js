@@ -225,7 +225,9 @@ function paintChatBubbles() {
   for (const [seat, b] of chatBubbles) {
     const host = document.querySelector(`.seat[data-seat="${seat}"]`) || document.querySelector(`.seat-row[data-seat="${seat}"]`);
     if (!host) continue;
-    host.append(el('div', 'chat-bubble' + (b.say ? ' say' : ''), b.text));
+    const bub = el('div', 'chat-bubble' + (b.say ? ' say' : ''), b.text);
+    if (host.closest('#row-top')) bub.classList.add('below');
+    host.append(bub);
   }
 }
 
@@ -239,7 +241,7 @@ function showChatBubble(m) {
     timer: setTimeout(() => {
       chatBubbles.delete(m.seat);
       paintChatBubbles();
-    }, 6500),
+    }, m.say ? 4200 : 6500),
   });
   paintChatBubbles();
 }
@@ -635,6 +637,7 @@ class HostSession {
     if (actor == null) return;
     let delay = this.G.phase === 'bid' ? 900 + Math.random() * 900 : 4600 + Math.random() * 1600;
     if (this.trickPauseUntil) delay = Math.max(delay, this.trickPauseUntil - Date.now());
+    if (this.talkPauseUntil) delay = Math.max(delay, this.talkPauseUntil - Date.now());
     this.botTimer = setTimeout(() => {
       if (!this.G) return;
       const seat = this.botActor();
@@ -728,6 +731,22 @@ class HostSession {
     if (this.G && this.G.fx && this.G.fx.kind === 'trick' && this.G.fx.seq !== this._trickFxSeen) {
       this._trickFxSeen = this.G.fx.seq;
       this.trickPauseUntil = Date.now() + 3400; // let everyone see who took it
+    }
+    // pace the table: note how long the newest spoken exchange needs to
+    // air, so bots do not start the next turn mid-conversation
+    if (this.G && this.G.chatter) {
+      if (this._talkMid !== this.G.mid) {
+        this._talkMid = this.G.mid;
+        this._talkSeen = 0;
+      }
+      let talkTotal = null;
+      for (const c of this.G.chatter) {
+        if (c.n > this._talkSeen) {
+          talkTotal = (talkTotal || 0) + (c.wait || 0);
+          this._talkSeen = c.n;
+        }
+      }
+      if (talkTotal != null) this.talkPauseUntil = Math.max(this.talkPauseUntil || 0, Date.now() + talkTotal + 4400);
     }
     const wnames = this.watchers.map((x) => x.name);
     for (const [seat, conn] of this.conns) {
@@ -1603,6 +1622,7 @@ function playChatter(view) {
     return;
   }
   let at = 0;
+  let spoke = false;
   for (const c of items) {
     if (c.n <= chatterSeen) continue;
     chatterSeen = c.n;
@@ -1612,7 +1632,10 @@ function playChatter(view) {
       const line = c;
       chatterTimers.push(setTimeout(() => showChatBubble({ seat: line.seat, text: line.text, say: true }), at));
     }
+    spoke = true;
   }
+  // hold the YOUR TURN nudge until the exchange has fully aired
+  if (spoke) announceBusyUntil = Math.max(announceBusyUntil, Date.now() + at + 4400);
 }
 
 // A loud nudge the moment the table starts waiting on YOU. Waits out a

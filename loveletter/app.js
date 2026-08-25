@@ -212,7 +212,9 @@ function paintChatBubbles() {
   for (const [seat, b] of chatBubbles) {
     const host = document.querySelector(`.seat[data-seat="${seat}"]`);
     if (!host) continue;
-    host.append(el('div', 'chat-bubble' + (b.say ? ' say' : ''), b.text));
+    const bub = el('div', 'chat-bubble' + (b.say ? ' say' : ''), b.text);
+    if (host.closest('#row-top')) bub.classList.add('below');
+    host.append(bub);
   }
 }
 
@@ -226,7 +228,7 @@ function showChatBubble(m) {
     timer: setTimeout(() => {
       chatBubbles.delete(m.seat);
       paintChatBubbles();
-    }, 6500),
+    }, m.say ? 4200 : 6500),
   });
   paintChatBubbles();
 }
@@ -606,7 +608,7 @@ class HostSession {
         else if (me && me.hand[0]) applyMove(g, seat, { kind: 'play', cardId: me.hand[0].id });
       }
       this.broadcast();
-    }, 4600 + Math.random() * 1600);
+    }, Math.max(4600 + Math.random() * 1600, this.talkPauseUntil ? this.talkPauseUntil - Date.now() : 0));
   }
 
   lobbyMsg() {
@@ -674,6 +676,22 @@ class HostSession {
   }
 
   broadcast() {
+    // pace the table: note how long the newest spoken exchange needs to
+    // air, so bots do not start the next turn mid-conversation
+    if (this.G && this.G.chatter) {
+      if (this._talkMid !== this.G.mid) {
+        this._talkMid = this.G.mid;
+        this._talkSeen = 0;
+      }
+      let talkTotal = null;
+      for (const c of this.G.chatter) {
+        if (c.n > this._talkSeen) {
+          talkTotal = (talkTotal || 0) + (c.wait || 0);
+          this._talkSeen = c.n;
+        }
+      }
+      if (talkTotal != null) this.talkPauseUntil = Math.max(this.talkPauseUntil || 0, Date.now() + talkTotal + 4400);
+    }
     const wnames = this.watchers.map((x) => x.name);
     for (const [seat, conn] of this.conns) {
       try {
@@ -1642,6 +1660,7 @@ function playChatter(view) {
     return;
   }
   let at = 0;
+  let spoke = false;
   for (const c of items) {
     if (c.n <= chatterSeen) continue;
     chatterSeen = c.n;
@@ -1651,7 +1670,10 @@ function playChatter(view) {
       const line = c;
       chatterTimers.push(setTimeout(() => showChatBubble({ seat: line.seat, text: line.text, say: true }), at));
     }
+    spoke = true;
   }
+  // hold the YOUR TURN nudge until the exchange has fully aired
+  if (spoke) announceBusyUntil = Math.max(announceBusyUntil, Date.now() + at + 4400);
 }
 
 // A loud nudge the moment the table starts waiting on YOU. Waits out a

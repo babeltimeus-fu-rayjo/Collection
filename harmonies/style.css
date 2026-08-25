@@ -1619,3 +1619,13 @@ a {
 #tray .tray-tok { display: flex; align-items: center; justify-content: center; }
 #tray .tray-tok .tok { display: block; }
 .acard .a-pattern, .a-pattern { width: auto; height: auto; margin: 4px auto; align-self: center; }
+
+/* Wide windows: the score table and the standings sit side by side */
+@media (min-width: 860px) {
+  #gameover .panel { width: min(920px, 94vw); display: grid; grid-template-columns: auto 1fr; column-gap: 30px; align-items: start; }
+  #gameover .panel > #go-title { grid-column: 1 / -1; }
+  #gameover .panel > #go-table { grid-column: 1; grid-row: 2 / span 4; }
+  #gameover .panel > #go-rank { grid-column: 2; }
+  #gameover .panel > .btn-row { grid-column: 2; }
+  #gameover .panel > #go-wait { grid-column: 2; }
+}

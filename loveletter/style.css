@@ -1718,3 +1718,22 @@ a {
 
 /* Game table-talk: the same bubbles as chat, tinted as the game speaking */
 .chat-bubble.say { border: 1px solid rgba(255, 205, 110, 0.75); background: rgba(66, 52, 22, 0.96); color: #ffe9c4; font-weight: 600; }
+
+/* Top-row players speak toward the table: bubbles hang below their seat */
+.chat-bubble { max-width: min(200px, 60vw); }
+.chat-bubble.below { bottom: auto; top: calc(100% + 8px); }
+.chat-bubble.below::after { top: auto; bottom: 100%; border-top-color: transparent; border-bottom-color: #fff3d6; }
+.chat-bubble.say::after { border-top-color: rgba(66, 52, 22, 0.96); }
+.chat-bubble.say.below::after { border-top-color: transparent; border-bottom-color: rgba(66, 52, 22, 0.96); }
+
+/* Wide windows: round results read side by side instead of one long stack */
+@media (min-width: 760px) {
+  #roundend .panel { width: min(800px, 94vw); display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; align-items: start; }
+  #roundend .panel > h2 { grid-column: 1 / -1; grid-row: 1; }
+  #roundend .panel > #re-sub { grid-column: 1 / -1; grid-row: 2; }
+  #roundend .panel > #re-reveal { grid-column: 1; grid-row: 3 / span 2; }
+  #roundend .panel > .panel-label { grid-column: 2; grid-row: 3; }
+  #roundend .panel > #re-rank { grid-column: 2; grid-row: 4; }
+  #roundend .panel > #btn-next-round { grid-column: 1 / -1; grid-row: 5; justify-self: center; }
+  #roundend .panel > #re-wait { grid-column: 1 / -1; grid-row: 6; text-align: center; }
+}
