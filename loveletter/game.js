@@ -133,6 +133,14 @@ function note(G, text) {
   if (G.log.length > 60) G.log.shift();
 }
 
+// Table talk: short first-person lines that float over seats as speech
+// bubbles; the client replays them with conversational pauses.
+function say(G, seat, text, wait = 0) {
+  G.chatSeq += 1;
+  G.chatter.push({ n: G.chatSeq, seat, text, wait });
+  if (G.chatter.length > 30) G.chatter.shift();
+}
+
 function fx(G, kind, extra = {}) {
   G.fx = { seq: ++G.fxSeq, kind, ...extra };
 }
@@ -172,6 +180,7 @@ function eliminate(G, p, reasonText) {
   if (p.discard.some((c) => c.key === 'constable')) {
     p.tokens++;
     note(G, `${p.name}'s Constable earns them a token anyway.`);
+    say(G, p.seat, 'My Constable pays out — a token! \u{1F6E1}', 900);
   }
   if (G.sycophant === p.seat) G.sycophant = null;
   fx(G, 'out', { seat: p.seat });
@@ -220,6 +229,8 @@ export function newMatch(roster) {
     roundResult: null,
     winner: null,
     log: [],
+    chatter: [],
+    chatSeq: 0,
     logSeq: 0,
     fx: null,
     fxSeq: 0,
@@ -316,7 +327,10 @@ function endRound(G) {
     }
   }
   for (const w of winners) w.tokens++;
-  if (winners.length === 1) note(G, `${winners[0].name} wins the round!`);
+  if (winners.length === 1) {
+    note(G, `${winners[0].name} wins the round!`);
+    say(G, winners[0].seat, 'The round is mine! \u2665', 800);
+  }
   else if (winners.length > 1) note(G, `Round tied — ${winners.map((w) => w.name).join(' & ')} each take a token.`);
   else note(G, 'Round ends with nobody left.');
 
@@ -326,6 +340,7 @@ function endRound(G) {
     if (!owner) continue;
     owner.tokens++;
     note(G, `${owner.name}'s Jester called it — a token for backing ${nameOf(G, bet.target)}.`);
+    say(G, owner.seat, 'My Jester called it — a token!', 900);
   }
 
   G.roundResult = {
@@ -369,6 +384,7 @@ export function applyMove(G, seat, move) {
       toDiscard(p, card);
       forgetHand(G, p.seat);
       note(G, `${p.name} discards ${cardLabel(card.key)} and draws a new card.`);
+      say(G, p.seat, `I'll discard ${cardLabel(card.key)} and draw fresh.`);
       if (card.key === 'princess') {
         p.lastAction = 'out — discarded the Princess for the Bishop';
         eliminate(G, p, `${p.name} discarded the Princess — out of the round!`);
@@ -379,6 +395,7 @@ export function applyMove(G, seat, move) {
     } else {
       p.lastAction = 'kept their card against the Bishop';
       note(G, `${p.name} keeps their card.`);
+      say(G, p.seat, "I'm keeping my card.");
     }
     finishTurn(G);
     return { ok: true };
@@ -460,6 +477,7 @@ export function applyMove(G, seat, move) {
   if (G.sycophant != null && spec.targets && spec.targets !== 0) G.sycophant = null;
 
   if (card.key === 'princess') {
+    say(G, seat, "The Princess! I'm out. \u{1F494}");
     p.lastAction = 'out — played the Princess';
     eliminate(G, p, `${p.name} played the Princess — out of the round!`);
     finishTurn(G);
@@ -468,33 +486,41 @@ export function applyMove(G, seat, move) {
 
   const t0 = targets.length ? bySeat(G, targets[0]) : null;
   const noTarget = spec.targets && spec.targets !== 0 && !targets.length;
-  if (noTarget) note(G, 'No one can be targeted — no effect.');
+  if (noTarget) {
+    note(G, 'No one can be targeted — no effect.');
+    say(G, seat, `I play ${cardLabel(card.key)} — but no one can be targeted.`);
+  }
 
   switch (card.key) {
     case 'handmaid':
       p.immune = true;
       p.lastAction = 'played the Handmaid — protected';
       note(G, `${p.name} is protected until their next turn.`);
+      say(G, seat, "Handmaid (4) — I'm protected until my next turn.");
       break;
 
     case 'guard':
       if (t0) {
+        say(G, seat, `Guard (1) — ${t0.name}, do you have a ${cardLabel(move.guess)}?`);
         if (t0.hand[0] && t0.hand[0].key === 'assassin') {
           const ass = t0.hand.pop();
           toDiscard(t0, ass);
           forgetHand(G, t0.seat);
           note(G, `${t0.name} held the Assassin — ${p.name} is struck down!`);
+          say(G, t0.seat, `I hold the Assassin! Down you go, ${p.name}. \u{1F480}`, 1100);
           t0.lastAction = `Assassin struck down ${p.name}`;
           drawFor(G, t0);
           eliminate(G, p, `${p.name} is out of the round.`);
           p.lastAction = `Guard hit ${t0.name}'s Assassin — out`;
         } else if (t0.hand[0] && t0.hand[0].key === move.guess) {
           note(G, `${p.name} guesses ${cardLabel(move.guess)} — correct!`);
+          say(G, t0.seat, "Yes… I'm out. \u{1F494}", 1100);
           p.lastAction = `named ${cardName(move.guess)} on ${t0.name} — right`;
           eliminate(G, t0, `${t0.name} is out of the round.`);
           t0.lastAction = `out — held the ${cardName(move.guess)}`;
         } else {
           note(G, `${p.name} guesses ${cardLabel(move.guess)} — wrong.`);
+          say(G, t0.seat, 'No!', 1100);
           p.lastAction = `named ${cardName(move.guess)} on ${t0.name} — wrong`;
         }
       }
@@ -505,6 +531,8 @@ export function applyMove(G, seat, move) {
         peek(G, p, t0);
         p.lastAction = `looked at ${t0.name}'s hand`;
         note(G, `${p.name} looks at ${t0.name}'s hand.`);
+        say(G, seat, `Priest (2) — ${t0.name}, show me your hand.`);
+        say(G, t0.seat, 'Take a peek…', 1100);
       }
       break;
 
@@ -517,6 +545,8 @@ export function applyMove(G, seat, move) {
         const who = targets.map((s) => nameOf(G, s)).join(' and ');
         p.lastAction = `looked at ${who}'s hand${targets.length > 1 ? 's' : ''}`;
         note(G, `${p.name} looks at ${who}'s hand${targets.length > 1 ? 's' : ''}.`);
+        say(G, seat, `Baroness (3) — ${who}, show me your hand${targets.length > 1 ? 's' : ''}.`);
+        say(G, targets[0], 'Take a peek…', 1100);
       }
       break;
 
@@ -530,29 +560,35 @@ export function applyMove(G, seat, move) {
         forgetHand(G, a.seat);
         forgetHand(G, b.seat);
         note(G, `${a.name} and ${b.name} swap hands.`);
+        say(G, seat, `Cardinal (2) — ${a.name} and ${b.name}, swap hands!`);
         const look = move.peek != null ? bySeat(G, move.peek) : a;
         peek(G, p, look);
         p.lastAction = `swapped ${a.name} & ${b.name}, peeked at ${look.name}`;
         note(G, `${p.name} looks at ${look.name}'s new hand.`);
+        say(G, look.seat, 'Swapped — and you get a look at mine.', 1100);
       }
       break;
 
     case 'baron':
       if (t0) {
+        say(G, seat, `Baron (3) — ${t0.name}, compare hands with me.`);
         const mine = p.hand[0] ? cardValue(p.hand[0].key) : -1;
         const theirs = t0.hand[0] ? cardValue(t0.hand[0].key) : -1;
         p.memory[t0.seat] = t0.hand[0] ? t0.hand[0].key : undefined;
         t0.memory[p.seat] = p.hand[0] ? p.hand[0].key : undefined;
         if (mine > theirs) {
           eliminate(G, t0, `${t0.name} loses the comparison and is out.`);
+          say(G, t0.seat, "Mine is lower… I'm out. \u{1F494}", 1100);
           p.lastAction = `Baron beat ${t0.name}`;
           t0.lastAction = `out — lost the Baron to ${p.name}`;
         } else if (theirs > mine) {
           eliminate(G, p, `${p.name} loses the comparison and is out.`);
+          say(G, seat, "Mine is lower… I'm out. \u{1F494}", 1100);
           p.lastAction = `out — lost their own Baron to ${t0.name}`;
           t0.lastAction = `survived ${p.name}'s Baron`;
         } else {
           note(G, 'The comparison is a tie — both survive.');
+          say(G, t0.seat, 'A tie — we both live.', 1100);
           p.lastAction = `Baron tied with ${t0.name}`;
         }
       }
@@ -560,20 +596,24 @@ export function applyMove(G, seat, move) {
 
     case 'dowager':
       if (t0) {
+        say(G, seat, `Dowager Queen (7) — ${t0.name}, compare: the higher card falls.`);
         const mine = p.hand[0] ? cardValue(p.hand[0].key) : -1;
         const theirs = t0.hand[0] ? cardValue(t0.hand[0].key) : -1;
         p.memory[t0.seat] = t0.hand[0] ? t0.hand[0].key : undefined;
         t0.memory[p.seat] = p.hand[0] ? p.hand[0].key : undefined;
         if (mine < theirs) {
           eliminate(G, t0, `${t0.name} holds the higher card and is out.`);
+          say(G, t0.seat, "Mine is higher… I'm out. \u{1F494}", 1100);
           p.lastAction = `Dowager Queen took out ${t0.name}`;
           t0.lastAction = `out — held the higher card`;
         } else if (theirs < mine) {
           eliminate(G, p, `${p.name} holds the higher card and is out.`);
+          say(G, seat, "Mine is higher… I'm out. \u{1F494}", 1100);
           p.lastAction = `out — held the higher card`;
           t0.lastAction = `survived ${p.name}'s Dowager Queen`;
         } else {
           note(G, 'The comparison is a tie — both survive.');
+          say(G, t0.seat, 'A tie — we both live.', 1100);
           p.lastAction = `Dowager Queen tied with ${t0.name}`;
         }
       }
@@ -591,11 +631,15 @@ export function applyMove(G, seat, move) {
         p.lastAction = `traded hands with ${t0.name}`;
         t0.lastAction = `traded hands with ${p.name}`;
         note(G, `${p.name} and ${t0.name} trade hands.`);
+        say(G, seat, `King (6) — ${t0.name}, trade hands with me.`);
+        say(G, t0.seat, 'Done — traded.', 1100);
       }
       break;
 
     case 'prince':
       if (t0) {
+        if (t0.seat === seat) say(G, seat, 'Prince (5) — I discard my own hand and redraw.');
+        else say(G, seat, `Prince (5) — ${t0.name}, discard your hand.`);
         const dumped = t0.hand.pop();
         if (dumped) {
           toDiscard(t0, dumped);
@@ -603,6 +647,7 @@ export function applyMove(G, seat, move) {
           note(G, `${t0.name} discards ${cardLabel(dumped.key)}.`);
           const self = t0.seat === seat;
           if (dumped.key === 'princess') {
+            say(G, t0.seat, "The Princess?! I'm out. \u{1F494}", 1100);
             eliminate(G, t0, `${t0.name} discarded the Princess — out of the round!`);
             p.lastAction = self
               ? 'out — Prince made them drop the Princess'
@@ -610,6 +655,7 @@ export function applyMove(G, seat, move) {
             if (!self) t0.lastAction = 'out — forced to discard the Princess';
           } else {
             drawFor(G, t0);
+            say(G, t0.seat, `I discard ${cardLabel(dumped.key)} and redraw.`, 1100);
             p.lastAction = self
               ? `Prince: dropped ${cardName(dumped.key)} and redrew`
               : `Prince made ${t0.name} drop ${cardName(dumped.key)}`;
@@ -624,6 +670,7 @@ export function applyMove(G, seat, move) {
         G.sycophant = t0.seat;
         p.lastAction = `Sycophant: next card must hit ${t0.name}`;
         note(G, `The next targeted card must aim at ${t0.name}.`);
+        say(G, seat, `Sycophant (4) — the next targeted card must aim at ${t0.name}.`);
       }
       break;
 
@@ -632,16 +679,19 @@ export function applyMove(G, seat, move) {
         G.jesterBets.push({ owner: seat, target: t0.seat });
         p.lastAction = `Jester: betting on ${t0.name}`;
         note(G, `${p.name} bets on ${t0.name} to win the round.`);
+        say(G, seat, `Jester (0) — ${t0.name}, I bet you'll win this round.`);
       }
       break;
 
     case 'bishop':
       if (t0) {
+        say(G, seat, `Bishop (9) — ${t0.name}, is your card worth ${move.guess}?`);
         const theirs = t0.hand[0] ? cardValue(t0.hand[0].key) : -1;
         if (theirs === move.guess) {
           p.tokens++;
           p.memory[t0.seat] = t0.hand[0].key;
           note(G, `${p.name} names ${move.guess} for ${t0.name} — right! A token of affection.`);
+          say(G, t0.seat, 'Yes… a token for you. \u{1F624}', 1100);
           p.lastAction = `Bishop named ${move.guess} at ${t0.name} — right`;
           fx(G, 'token', { seat });
           if (p.tokens >= G.tokensToWin) {
@@ -658,10 +708,12 @@ export function applyMove(G, seat, move) {
               })),
             };
             note(G, `${p.name} wins the game with ${p.tokens} tokens!`);
+            say(G, seat, 'That token wins me the game! \u2665', 2200);
             return { ok: true };
           }
         } else {
           note(G, `${p.name} names ${move.guess} for ${t0.name} — no.`);
+          say(G, t0.seat, 'No.', 1100);
           p.lastAction = `Bishop named ${move.guess} at ${t0.name} — wrong`;
         }
         if (!t0.out && t0.hand[0]) {
@@ -672,6 +724,7 @@ export function applyMove(G, seat, move) {
       break;
 
     default:
+      say(G, seat, `I play ${cardLabel(card.key)}.`);
       p.lastAction = `played the ${spec.name}`;
       break; // assassin, count, constable, countess: no immediate effect
   }
@@ -927,6 +980,7 @@ export function viewFor(G, seat, code) {
     winner: G.winner,
     standings: G.phase === 'over' || G.phase === 'roundEnd' ? standings(G) : null,
     log: G.log.slice(-15),
+    chatter: G.chatter.slice(-20),
     fx: G.fx,
   };
 }

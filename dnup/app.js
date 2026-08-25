@@ -224,7 +224,7 @@ function paintChatBubbles() {
       document.querySelector(`.opp[data-seat="${seat}"]`) ||
       document.querySelector(`#my-zone[data-seat="${seat}"]`);
     if (!host) continue;
-    host.append(el('div', 'chat-bubble', b.text));
+    host.append(el('div', 'chat-bubble' + (b.say ? ' say' : ''), b.text));
   }
 }
 
@@ -233,6 +233,7 @@ function showChatBubble(m) {
   const prev = chatBubbles.get(m.seat);
   if (prev) clearTimeout(prev.timer);
   chatBubbles.set(m.seat, {
+    say: !!m.say,
     text: m.text.length > 110 ? `${m.text.slice(0, 110)}\u2026` : m.text,
     timer: setTimeout(() => {
       chatBubbles.delete(m.seat);
@@ -1568,6 +1569,7 @@ function renderGame(view, sess) {
   renderHand(view, myTurn && !pendingMove);
 
   renderLog(view);
+  playChatter(view);
   announceTurn(view, view.phase === 'playing' && view.turn.seat === view.you);
   paintChatBubbles();
 
@@ -1649,6 +1651,35 @@ function standingsList(view, listEl) {
 let logLines = [];
 let logKey = null;
 
+// Game speech: the engine scripts short first-person table-talk lines;
+// replay NEW ones as chat-style bubbles with conversational pauses. On
+// (re)join, history is skipped rather than replayed.
+let chatterSeen = 0;
+let chatterMid = null;
+let chatterTimers = [];
+
+function playChatter(view) {
+  const items = view.chatter || [];
+  if (chatterMid !== view.mid) {
+    chatterMid = view.mid;
+    for (const t of chatterTimers) clearTimeout(t);
+    chatterTimers = [];
+    chatterSeen = items.length ? items[items.length - 1].n : 0;
+    return;
+  }
+  let at = 0;
+  for (const c of items) {
+    if (c.n <= chatterSeen) continue;
+    chatterSeen = c.n;
+    at += c.wait || 0;
+    if (at <= 0) showChatBubble({ seat: c.seat, text: c.text, say: true });
+    else {
+      const line = c;
+      chatterTimers.push(setTimeout(() => showChatBubble({ seat: line.seat, text: line.text, say: true }), at));
+    }
+  }
+}
+
 // A loud nudge the moment the table starts waiting on YOU. Waits out a
 // just-fired play announcement, and never fires for observers.
 let hadTurn = false;
@@ -1675,9 +1706,6 @@ function announceTurn(view, isMine) {
   hadTurn = isMine;
 }
 
-// Feed lines worth flashing across the table as they happen.
-const ANNOUNCE_RE = / plays | adds a | rotated — dnup| rotates their whole hand/;
-
 function renderLog(view) {
   // the log is keyed per round, so a new deal starts from an empty panel
   const key = `${view.mid}:${view.round}`;
@@ -1695,14 +1723,6 @@ function renderLog(view) {
       logLines.push(item);
       fresh.push(item);
       added = true;
-    }
-  }
-  // announce the newest play so the whole table sees what just happened
-  if (!newMatch && fresh.length) {
-    const a = fresh.filter((l) => ANNOUNCE_RE.test(l.text)).pop();
-    if (a) {
-      flash(a.text, 'plain', 3500); // announcements linger longer
-      announceBusyUntil = Date.now() + 1900;
     }
   }
   if (!added && logLines.length === $('#feed').children.length) return;

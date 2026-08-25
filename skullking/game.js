@@ -111,6 +111,14 @@ function addLog(G, text) {
   if (G.log.length > 250) G.log.shift();
 }
 
+// Table talk: short first-person lines that float over seats as speech
+// bubbles; the client replays them with conversational pauses.
+function say(G, seat, text, wait = 0) {
+  G.chatSeq += 1;
+  G.chatter.push({ n: G.chatSeq, seat, text, wait });
+  if (G.chatter.length > 30) G.chatter.shift();
+}
+
 function setFx(G, fx) {
   G.fxSeq += 1;
   G.fx = { seq: G.fxSeq, ...fx };
@@ -152,6 +160,8 @@ export function newMatch(roster, scoringKey) {
     trick: null,
     trickNo: 0,
     log: [],
+    chatter: [],
+    chatSeq: 0,
     feedSeq: 0,
     fx: null,
     fxSeq: 0,
@@ -279,6 +289,7 @@ function doPlay(G, p, move) {
   }
   p.lastAction = `played ${cardLabel(card, as)}`;
   addLog(G, `${p.name} plays ${cardLabel(card, as)}.`);
+  say(G, p.seat, `I play ${cardLabel(card, as)}.`);
 
   if (t.plays.length === G.players.length) resolveTrick(G);
   return { ok: true };
@@ -292,6 +303,7 @@ function resolveTrick(G) {
   winner.captured.push(t.plays.map((pl) => ({ seat: pl.seat, card: pl.card, as: pl.as })));
   const withCard = cardLabel(winnerPlay.card, winnerPlay.as);
   addLog(G, `${winner.name} takes trick ${G.trickNo} with ${withCard} (${winner.tricksWon} so far, bid ${winner.bid}).`);
+  say(G, winner.seat, `Mine! Trick ${G.trickNo} with ${withCard}.`, 900);
   winner.lastAction = `took trick ${G.trickNo} with ${withCard}`;
   setFx(G, { kind: 'trick', seat: winner.seat, trick: t.plays, winnerCard: winnerPlay.card.id });
 
@@ -496,6 +508,7 @@ export function viewFor(G, seat, code) {
     legal: G.phase === 'play' && turnSeat(G) === seat ? legalPlays(G, seat).map((c) => c.id) : [],
     roundResult: G.roundResult,
     log: G.log.slice(-60),
+    chatter: G.chatter.slice(-20),
     fx: G.fx,
   };
 }

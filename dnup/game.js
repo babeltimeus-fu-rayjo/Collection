@@ -114,6 +114,14 @@ function note(G, text) {
   if (G.feed.length > 40) G.feed.shift();
 }
 
+// Table talk: short first-person lines that float over seats as speech
+// bubbles; the client replays them with conversational pauses.
+function say(G, seat, text, wait = 0) {
+  G.chatSeq += 1;
+  G.chatter.push({ n: G.chatSeq, seat, text, wait });
+  if (G.chatter.length > 30) G.chatter.shift();
+}
+
 const bySeat = (G, seat) => G.players.find((p) => p.seat === seat);
 
 export function setLabel(s) {
@@ -149,6 +157,8 @@ export function newMatch(roster) {
     unitCount: 0,
     feed: [],
     feedSeq: 0,
+    chatter: [],
+    chatSeq: 0,
     fx: null,
     fxSeq: 0,
   };
@@ -246,6 +256,7 @@ function bounceSet(G, ref) {
   if (owner.out) {
     G.discardCount += s.cards.length;
     note(G, `${owner.name}'s ${setLabel(s)} is beaten and discarded.`);
+    say(G, owner.seat, `My ${setLabel(s)} is beaten… gone. \u{1F494}`, 700);
     return false;
   }
   for (const c of s.cards) {
@@ -253,6 +264,7 @@ function bounceSet(G, ref) {
     owner.hand.push(c);
   }
   note(G, `${owner.name} takes back ${setLabel(s)} rotated — dnup!`);
+  say(G, owner.seat, `My ${setLabel(s)} comes back rotated — dnup!`, 700);
   return true;
 }
 
@@ -261,6 +273,7 @@ function afterAction(G, p, carry = {}) {
     if (G.mode === 'duel') {
       p.rounds += 1;
       note(G, `${p.name} empties their hand and wins round ${G.round}!`);
+      say(G, p.seat, `Empty hand — round ${G.round} is mine!`, 400);
       G.roundResult = { kind: 'duel', winner: p.seat };
       if (p.rounds >= TARGET_ROUNDS) {
         G.phase = 'over';
@@ -338,6 +351,7 @@ export function applyMove(G, seat, move) {
       return { ok: false, error: `A set of ${cards.length} needs a value above ${sets.find((s) => s.size === cards.length).value}.` };
     }
     note(G, `${p.name} plays ${setLabel({ value: v, size: cards.length })}.`);
+    say(G, p.seat, `I play ${setLabel({ value: v, size: cards.length })}.`);
     const returned = verdict.bounce ? bounceSet(G, verdict.bounce) : false;
     p.hand = p.hand.filter((c) => !ids.includes(c.id));
     p.areas[areaIdx] = { value: v, cards };
@@ -376,6 +390,7 @@ export function applyMove(G, seat, move) {
       };
     }
     note(G, `${p.name} adds a ${activeVal(card)} to ${tp.name}'s set.`);
+    say(G, p.seat, `I add a ${activeVal(card)} to ${tp.name}'s set.`);
     p.notes[areaIdx] = `added a ${activeVal(card)} to ${tp.name}`;
     const returned = verdict.bounce ? bounceSet(G, verdict.bounce) : false;
     p.hand = p.hand.filter((c) => c.id !== card.id);
@@ -412,6 +427,8 @@ export function applyMove(G, seat, move) {
     }
     G.fx = { seq: ++G.fxSeq, kind: 'take', seat, targetSeat: t.seat };
     note(G, `${p.name} takes ${tp.name}'s ${takenLabel} rotated — dnup!`);
+    say(G, p.seat, `I take your ${takenLabel}, ${tp.name} — dnup!`);
+    say(G, tp.seat, 'Hey — that was mine!', 1100);
     afterAction(G, p);
     return { ok: true };
   }
@@ -421,6 +438,7 @@ export function applyMove(G, seat, move) {
     p.notes[areaIdx] = 'rotated hand — dnup!';
     G.fx = { seq: ++G.fxSeq, kind: 'rotate', seat };
     note(G, `${p.name} rotates their whole hand — dnup!`);
+    say(G, p.seat, 'I rotate my whole hand — dnup!');
     afterAction(G, p);
     return { ok: true };
   }
@@ -604,6 +622,7 @@ export function viewFor(G, seat, code) {
     roundResult: G.roundResult,
     ranking: G.phase === 'over' || G.phase === 'roundEnd' ? ranking(G) : null,
     feed: G.feed.slice(-15),
+    chatter: G.chatter.slice(-20),
     fx: G.fx,
   };
 }

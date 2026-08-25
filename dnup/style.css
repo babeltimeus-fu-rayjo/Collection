@@ -1600,3 +1600,6 @@ body:not(.my-turn) #hand .pcard .pc-body {
 
 /* Announcements must survive any browser width: wrap instead of clipping */
 .flash { max-width: min(92vw, 780px); width: max-content; white-space: normal; overflow-wrap: break-word; text-align: center; box-sizing: border-box; }
+
+/* Game table-talk: the same bubbles as chat, tinted as the game speaking */
+.chat-bubble.say { border: 1px solid rgba(255, 205, 110, 0.75); background: rgba(66, 52, 22, 0.96); color: #ffe9c4; font-weight: 600; }
