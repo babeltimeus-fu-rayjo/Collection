@@ -1578,3 +1578,44 @@ a {
 
 /* Announcements must survive any browser width: wrap instead of clipping */
 .flash { max-width: min(92vw, 780px); width: max-content; white-space: normal; overflow-wrap: break-word; text-align: center; box-sizing: border-box; }
+
+/* Animal cards: the habitat recipe is the point — bigger, and centered */
+.a-pattern { width: 130px; height: 64px; margin: 2px auto; }
+.mini-hex { width: 31px; height: 27px; font-size: 12px; }
+
+/* The board reads as a true hex grid: every cell gets a rim and a fill,
+   so empty spaces are visible hexes rather than faint ghosts */
+.hex { background: rgba(255, 255, 255, 0.22); }
+.hex::before { content: ''; position: absolute; inset: 2px; clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); background: rgba(0, 0, 0, 0.38); }
+.hex > * { position: relative; z-index: 1; }
+.hex.can::before { background: rgba(143, 214, 168, 0.3); }
+.hex.blue::before { background: linear-gradient(180deg, var(--t-blue), var(--t-blue-2)); }
+.hex.gray::before { background: linear-gradient(180deg, var(--t-gray), var(--t-gray-2)); }
+.hex.brown::before { background: linear-gradient(180deg, var(--t-brown), var(--t-brown-2)); }
+.hex.green::before { background: linear-gradient(180deg, var(--t-green), var(--t-green-2)); }
+.hex.yellow::before { background: linear-gradient(180deg, var(--t-yellow), var(--t-yellow-2)); }
+.hex.red::before { background: linear-gradient(180deg, var(--t-red), var(--t-red-2)); }
+.hex.can { background: rgba(143, 214, 168, 0.85); }
+
+/* Everyone's landscape at a glance: postage-stamp boards in the seat tiles */
+.miniboard { position: relative; width: 106px; height: 106px; margin: 6px auto 2px; }
+.mbhex { position: absolute; width: 26px; height: 19px; clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); background: rgba(255, 255, 255, 0.1); }
+.mbhex.blue { background: var(--t-blue); }
+.mbhex.gray { background: var(--t-gray); }
+.mbhex.brown { background: var(--t-brown); }
+.mbhex.green { background: var(--t-green); }
+.mbhex.yellow { background: var(--t-yellow); }
+.mbhex.red { background: var(--t-red); }
+.mbhex.hascube::after { content: ''; position: absolute; inset: 32%; border-radius: 50%; background: #14100c; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.75); }
+
+/* The tokens you are about to place: unmissable */
+#tray:has(.tray-tok) { background: rgba(143, 214, 168, 0.1); border: 1px solid rgba(143, 214, 168, 0.4); border-radius: 12px; padding: 8px 14px; }
+#tray .tray-label { font-weight: 800; }
+.tray-tok .tok { width: 46px; height: 46px; }
+.tray-tok.sel .tok { outline: 3px solid var(--accent); outline-offset: 2px; transform: translateY(-3px) scale(1.06); }
+.acard .a-pattern { align-self: center; }
+#tray .tray-tok .tok { width: 46px; height: 46px; }
+.acard .a-pattern { width: 124px; }
+#tray .tray-tok { display: flex; align-items: center; justify-content: center; }
+#tray .tray-tok .tok { display: block; }
+.acard .a-pattern, .a-pattern { width: auto; height: auto; margin: 4px auto; align-self: center; }

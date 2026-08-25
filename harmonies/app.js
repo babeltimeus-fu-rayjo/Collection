@@ -1070,6 +1070,25 @@ function stackIcon(type) {
 
 // ---------------------------------------------------------------- seats
 
+// A thumbnail of a player's landscape: the same 23-hex layout at postage
+// stamp size, so everyone's progress is visible at a glance.
+function miniBoardEl(p) {
+  const MW = 26;
+  const MH = 19;
+  const box = el('div', 'miniboard');
+  for (const cell of CELLS) {
+    const st = p.board[cell.id];
+    const top = st.stack[st.stack.length - 1];
+    const h = el('span', `mbhex${top ? ` ${top}` : ' open'}${st.cube ? ' hascube' : ''}`);
+    const x = cell.col * MW * 0.75;
+    const y = cell.row * MH + (cell.col % 2 === 1 ? MH / 2 : 0);
+    h.style.left = `${x}px`;
+    h.style.top = `${y}px`;
+    box.append(h);
+  }
+  return box;
+}
+
 function renderSeats(view) {
   const box = $('#seats');
   box.replaceChildren();
@@ -1091,6 +1110,7 @@ function renderSeats(view) {
     sub.append(el('span', '', `🃏 ${p.cards.length}`));
     if (view.phase === 'playing' && view.turn === p.seat) sub.append(el('span', '', '— their turn'));
     tile.append(sub);
+    if (p.seat !== view.you) tile.append(miniBoardEl(p));
     // seat notes describe what OTHER players last did — never your own actions
     tile.append(el('div', 'seat-note', p.seat !== view.you && p.lastAction ? `· ${p.lastAction}` : ''));
     tile.addEventListener('click', () => {
@@ -1106,15 +1126,19 @@ function renderSeats(view) {
 
 function patternDiagram(card) {
   const box = el('div', 'a-pattern');
-  const W = 20;
-  const H = 23;
+  const W = 24;
+  const H = 27;
   const pts = card.pattern.map((p) => ({ x: p.dx * W, y: (p.dz + p.dx / 2) * H, t: p.t, cube: p === card.pattern[0] }));
   const minX = Math.min(...pts.map((p) => p.x));
   const minY = Math.min(...pts.map((p) => p.y));
   const maxX = Math.max(...pts.map((p) => p.x));
   const maxY = Math.max(...pts.map((p) => p.y));
-  const offX = (108 - (maxX - minX + 26)) / 2 - minX;
-  const offY = (56 - (maxY - minY + 23)) / 2 - minY;
+  // the box wraps the diagram exactly, so CSS margin:auto centers it in
+  // any card width
+  const offX = -minX;
+  const offY = -minY;
+  box.style.width = `${maxX - minX + 31}px`;
+  box.style.height = `${maxY - minY + 27}px`;
   for (const p of pts) {
     const kind = p.t.startsWith('tree') ? 'tree' : p.t.startsWith('mtn') ? 'mtn' : p.t;
     const h = el('div', `mini-hex ${kind}${p.cube ? ' cubespot' : ''}`);
@@ -1263,7 +1287,7 @@ function renderTray(view) {
     return;
   }
   if (!my || !my.tray.length) return;
-  box.append(el('span', 'tray-label', 'Place:'));
+  box.append(el('span', 'tray-label', `Place ${my.tray.length} token${my.tray.length === 1 ? '' : 's'}:`));
   my.tray.forEach((color, i) => {
     const b = el('button', `tray-tok${choice.traySel === i ? ' sel' : ''}`);
     b.type = 'button';
