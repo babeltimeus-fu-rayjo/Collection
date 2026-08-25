@@ -1671,11 +1671,20 @@ function renderLog(view) {
       added = true;
     }
   }
-  // announce the newest play so the whole table sees what just happened
+  // announce the newest play together with everything it caused — the
+  // guess, the knockout, the trade — which lands in the same batch of lines
   if (!newMatch && fresh.length) {
-    const a = fresh.filter((l) => ANNOUNCE_RE.test(l.text)).pop();
-    if (a) {
-      flash(a.text, 'plain', 3600); // announcements linger longer
+    const flags = fresh.map((l) => ANNOUNCE_RE.test(l.text));
+    const at = flags.lastIndexOf(true);
+    let lines = null;
+    if (at >= 0) lines = fresh.slice(at).map((l) => l.text);
+    else {
+      // a Bishop's target answers in a later broadcast — announce that too
+      const follow = fresh.filter((l) => / discards .+ and draws a new card| keeps their card/.test(l.text));
+      if (follow.length) lines = follow.map((l) => l.text);
+    }
+    if (lines) {
+      flash(lines.join(' '), 'plain', 3600 + Math.min(2000, (lines.length - 1) * 800));
       announceBusyUntil = Date.now() + 1900;
     }
   }
