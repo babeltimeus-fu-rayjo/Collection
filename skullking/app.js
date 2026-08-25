@@ -1171,7 +1171,7 @@ function bidChipFor(view, p) {
 }
 
 function seatTile(view, p) {
-  const isTurn = view.phase === 'play' && view.turn === p.seat;
+  const isTurn = view.phase === 'play' && shownTurn(view, view.turn) === p.seat;
   const tile = el('div', `seat${isTurn ? ' turn' : ''}${p.seat === view.you ? ' me' : ''}${p.connected ? '' : ' offline'}`);
   tile.dataset.seat = String(p.seat);
   const head = el('div', 'seat-head');
@@ -1394,7 +1394,7 @@ function renderActionBar(view) {
   // play phase
   const myTurn = view.turn === view.you && !talkHold();
   if (!myTurn) {
-    row().append(label(view.turn === view.you ? 'The table is talking…' : `${seatName(view, view.turn)} is choosing a card…`));
+    row().append(label(talkHold() ? 'The table is talking…' : `${seatName(view, view.turn)} is choosing a card…`));
     return;
   }
   const selCard = view.hand.find((c) => c.id === selCardId);
@@ -1567,6 +1567,9 @@ function renderDcBanner(view, sess) {
 
 function renderGame(view, sess) {
   lastView = view;
+  // process table-talk FIRST: it arms the turn-hold that every indicator
+  // below (seat glow, waiting text, controls) must respect this render
+  playChatter(view);
   renderDcBanner(view, sess);
   renderObBar(view, sess);
   renderWatchChip(view);
@@ -1586,7 +1589,6 @@ function renderGame(view, sess) {
   renderHand(view);
   renderActionBar(view);
   renderLog(view);
-  playChatter(view);
   announceTurn(view, view.phase === 'play' && view.turn === view.you && !talkHold());
   paintChatBubbles();
 
@@ -1643,6 +1645,22 @@ let talkTimer = null;
 function talkHold() {
   return Date.now() < talkUntil;
 }
+
+// While table-talk airs, the table keeps presenting the SPEAKER's turn;
+// the engine's next turn takes over visually only once the exchange ends —
+// glow, waiting text, controls, and YOUR TURN all hand over together.
+let shownTurnSeat = null;
+let shownTurnMid = null;
+
+function shownTurn(view, engineSeat) {
+  if (shownTurnMid !== view.mid) {
+    shownTurnMid = view.mid;
+    shownTurnSeat = engineSeat;
+  }
+  if (!talkHold()) shownTurnSeat = engineSeat;
+  return shownTurnSeat;
+}
+
 
 function playChatter(view) {
   const items = view.chatter || [];

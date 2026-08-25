@@ -1069,8 +1069,8 @@ function targetName(view, seat) {
 }
 
 function seatTile(view, p, facing = 'down') {
-  const isTurn = view.phase === 'playing' && view.turn === p.seat && !view.pending;
-  const isPending = view.pending && view.pending.seat === p.seat;
+  const isTurn = view.phase === 'playing' && shownTurn(view, view.turn) === p.seat && (talkHold() || !view.pending);
+  const isPending = view.pending && view.pending.seat === p.seat && !talkHold();
   const cls = [
     'seat',
     isTurn || isPending ? 'turn' : '',
@@ -1561,6 +1561,9 @@ function renderDcBanner(view, sess) {
 
 function renderGame(view, sess) {
   lastView = view;
+  // process table-talk FIRST: it arms the turn-hold that every indicator
+  // below (seat glow, waiting text, controls) must respect this render
+  playChatter(view);
   renderDcBanner(view, sess);
   renderObBar(view, sess);
   renderWatchChip(view);
@@ -1613,12 +1616,11 @@ function renderGame(view, sess) {
     status.className = 'status mine';
   } else {
     const cur = view.players.find((p) => p.seat === view.turn);
-    status.textContent =
-      cur && cur.seat === view.you
-        ? 'The table is talking…'
-        : cur && (cur.bot || cur.botFor)
-          ? `${cur.name} is thinking…`
-          : `Waiting for ${cur ? cur.name : '…'}…`;
+    status.textContent = talkHold()
+      ? 'The table is talking…'
+      : cur && (cur.bot || cur.botFor)
+        ? `${cur.name} is thinking…`
+        : `Waiting for ${cur ? cur.name : '…'}…`;
     status.className = 'status';
   }
 
@@ -1644,7 +1646,6 @@ function renderGame(view, sess) {
 
   renderActionBar(view, myTurn);
   renderLog(view);
-  playChatter(view);
   announceTurn(view, view.phase === 'playing' && !talkHold() && ((view.pending && view.pending.seat === view.you) || (!view.pending && view.turn === view.you)));
   paintChatBubbles();
 
@@ -1687,6 +1688,22 @@ let talkTimer = null;
 function talkHold() {
   return Date.now() < talkUntil;
 }
+
+// While table-talk airs, the table keeps presenting the SPEAKER's turn;
+// the engine's next turn takes over visually only once the exchange ends —
+// glow, waiting text, controls, and YOUR TURN all hand over together.
+let shownTurnSeat = null;
+let shownTurnMid = null;
+
+function shownTurn(view, engineSeat) {
+  if (shownTurnMid !== view.mid) {
+    shownTurnMid = view.mid;
+    shownTurnSeat = engineSeat;
+  }
+  if (!talkHold()) shownTurnSeat = engineSeat;
+  return shownTurnSeat;
+}
+
 
 function playChatter(view) {
   const items = view.chatter || [];
