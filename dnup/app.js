@@ -1266,7 +1266,7 @@ function attachDrag(cardEl, cardId) {
 function areaEl(view, p, areaIdx, sess) {
   const s = p.areas[areaIdx];
   const mine = p.seat === view.you;
-  const myTurn = view.phase === 'playing' && view.turn.seat === view.you && !pendingMove;
+  const myTurn = view.phase === 'playing' && view.turn.seat === view.you && !pendingMove && !talkHold();
   const wrap = el('div', `tset${s ? '' : ' empty'}`);
   wrap.dataset.owner = p.seat;
   wrap.dataset.area = areaIdx;
@@ -1540,7 +1540,7 @@ function renderGame(view, sess) {
       ? `Round ${view.round} · first to ${view.targetRounds} round wins`
       : `Round ${view.round} · first to ${view.targetPoints} points`;
 
-  const myTurn = view.phase === 'playing' && view.turn.seat === view.you;
+  const myTurn = view.phase === 'playing' && view.turn.seat === view.you && !talkHold();
   document.body.classList.toggle('my-turn', myTurn);
 
   // The table: two facing rows, you on the bottom edge, sets facing center.
@@ -1571,7 +1571,12 @@ function renderGame(view, sess) {
       status.className = 'status mine';
     } else {
       const cur = view.players.find((p) => p.seat === view.turn.seat);
-      status.textContent = cur && (cur.bot || cur.botFor) ? `${cur.name} is thinking…` : `Waiting for ${cur ? cur.name : '…'}…`;
+      status.textContent =
+        cur && cur.seat === view.you
+          ? 'The table is talking…'
+          : cur && (cur.bot || cur.botFor)
+            ? `${cur.name} is thinking…`
+            : `Waiting for ${cur ? cur.name : '…'}…`;
       status.className = 'status';
     }
   } else {
@@ -1608,7 +1613,7 @@ function renderGame(view, sess) {
 
   renderLog(view);
   playChatter(view);
-  announceTurn(view, view.phase === 'playing' && view.turn.seat === view.you);
+  announceTurn(view, view.phase === 'playing' && view.turn.seat === view.you && !talkHold());
   paintChatBubbles();
 
   // One-shot effects.
@@ -1695,6 +1700,14 @@ let logKey = null;
 let chatterSeen = 0;
 let chatterMid = null;
 let chatterTimers = [];
+let talkUntil = 0;
+let talkTimer = null;
+
+// The engine may already have advanced the turn while table-talk is still
+// airing; the new turn's controls unlock once the last line was readable.
+function talkHold() {
+  return Date.now() < talkUntil;
+}
 
 function playChatter(view) {
   const items = view.chatter || [];
@@ -1706,6 +1719,7 @@ function playChatter(view) {
     return;
   }
   let at = 0;
+  let heard = false;
   for (const c of items) {
     if (c.n <= chatterSeen) continue;
     chatterSeen = c.n;
@@ -1715,6 +1729,14 @@ function playChatter(view) {
       const line = c;
       chatterTimers.push(setTimeout(() => showChatBubble({ seat: line.seat, text: line.text, say: true }), at));
     }
+    heard = true;
+  }
+  if (heard) {
+    talkUntil = Math.max(talkUntil, Date.now() + at + 1600);
+    clearTimeout(talkTimer);
+    talkTimer = setTimeout(() => {
+      if (lastView) renderGame(lastView, session);
+    }, Math.max(60, talkUntil - Date.now() + 40));
   }
 }
 

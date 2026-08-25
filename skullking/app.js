@@ -1301,7 +1301,7 @@ function renderHand(view) {
       have.delete(id);
     }
   }
-  const myTurn = view.phase === 'play' && view.turn === view.you;
+  const myTurn = view.phase === 'play' && view.turn === view.you && !talkHold();
   const legal = new Set(view.legal || []);
   let prev = null;
   for (const c of view.hand) {
@@ -1392,9 +1392,9 @@ function renderActionBar(view) {
   }
 
   // play phase
-  const myTurn = view.turn === view.you;
+  const myTurn = view.turn === view.you && !talkHold();
   if (!myTurn) {
-    row().append(label(`${seatName(view, view.turn)} is choosing a card…`));
+    row().append(label(view.turn === view.you ? 'The table is talking…' : `${seatName(view, view.turn)} is choosing a card…`));
     return;
   }
   const selCard = view.hand.find((c) => c.id === selCardId);
@@ -1587,7 +1587,7 @@ function renderGame(view, sess) {
   renderActionBar(view);
   renderLog(view);
   playChatter(view);
-  announceTurn(view, view.phase === 'play' && view.turn === view.you);
+  announceTurn(view, view.phase === 'play' && view.turn === view.you && !talkHold());
   paintChatBubbles();
 
   if (view.fx && view.fx.seq !== lastFxSeq) {
@@ -1635,6 +1635,14 @@ let logMid = null;
 let chatterSeen = 0;
 let chatterMid = null;
 let chatterTimers = [];
+let talkUntil = 0;
+let talkTimer = null;
+
+// The engine may already have advanced the turn while table-talk is still
+// airing; the new turn's controls unlock once the last line was readable.
+function talkHold() {
+  return Date.now() < talkUntil;
+}
 
 function playChatter(view) {
   const items = view.chatter || [];
@@ -1646,6 +1654,7 @@ function playChatter(view) {
     return;
   }
   let at = 0;
+  let heard = false;
   for (const c of items) {
     if (c.n <= chatterSeen) continue;
     chatterSeen = c.n;
@@ -1655,6 +1664,14 @@ function playChatter(view) {
       const line = c;
       chatterTimers.push(setTimeout(() => showChatBubble({ seat: line.seat, text: line.text, say: true }), at));
     }
+    heard = true;
+  }
+  if (heard) {
+    talkUntil = Math.max(talkUntil, Date.now() + at + 1600);
+    clearTimeout(talkTimer);
+    talkTimer = setTimeout(() => {
+      if (lastView) renderGame(lastView, session);
+    }, Math.max(60, talkUntil - Date.now() + 40));
   }
 }
 

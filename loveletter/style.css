@@ -1167,8 +1167,7 @@ a {
 }
 
 .chat-time {
-  float: right;
-  margin-left: 8px;
+  margin-right: 6px;
   color: #8d7383;
   font-size: 10.5px;
   line-height: 1.7;

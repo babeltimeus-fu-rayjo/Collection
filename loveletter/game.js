@@ -508,6 +508,7 @@ export function applyMove(G, seat, move) {
           forgetHand(G, t0.seat);
           note(G, `${t0.name} held the Assassin — ${p.name} is struck down!`);
           say(G, t0.seat, `I hold the Assassin! Down you go, ${p.name}. \u{1F480}`, 1100);
+          say(G, seat, "Struck down… I'm out. \u{1F494}", 500);
           t0.lastAction = `Assassin struck down ${p.name}`;
           drawFor(G, t0);
           eliminate(G, p, `${p.name} is out of the round.`);
@@ -547,6 +548,7 @@ export function applyMove(G, seat, move) {
         note(G, `${p.name} looks at ${who}'s hand${targets.length > 1 ? 's' : ''}.`);
         say(G, seat, `Baroness (3) — ${who}, show me your hand${targets.length > 1 ? 's' : ''}.`);
         say(G, targets[0], 'Take a peek…', 1100);
+        if (targets[1] != null) say(G, targets[1], 'Take a peek…', 400);
       }
       break;
 
@@ -565,7 +567,9 @@ export function applyMove(G, seat, move) {
         peek(G, p, look);
         p.lastAction = `swapped ${a.name} & ${b.name}, peeked at ${look.name}`;
         note(G, `${p.name} looks at ${look.name}'s new hand.`);
-        say(G, look.seat, 'Swapped — and you get a look at mine.', 1100);
+        say(G, a.seat, 'Swapped!', 1100);
+        say(G, b.seat, 'Swapped!', 350);
+        say(G, look.seat, 'And you get a look at my new hand…', 500);
       }
       break;
 
@@ -589,6 +593,7 @@ export function applyMove(G, seat, move) {
         } else {
           note(G, 'The comparison is a tie — both survive.');
           say(G, t0.seat, 'A tie — we both live.', 1100);
+          say(G, seat, 'Phew — a tie.', 450);
           p.lastAction = `Baron tied with ${t0.name}`;
         }
       }
@@ -614,6 +619,7 @@ export function applyMove(G, seat, move) {
         } else {
           note(G, 'The comparison is a tie — both survive.');
           say(G, t0.seat, 'A tie — we both live.', 1100);
+          say(G, seat, 'Phew — a tie.', 450);
           p.lastAction = `Dowager Queen tied with ${t0.name}`;
         }
       }
