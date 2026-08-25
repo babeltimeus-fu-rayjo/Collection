@@ -128,14 +128,14 @@ function toast(text, ms = 2800) {
 }
 
 let flashTimer = null;
-function flash(text, cls = '') {
+function flash(text, cls = '', ms = 1500) {
   const b = $('#banner');
   b.textContent = text;
   b.className = 'flash hidden';
   void b.offsetWidth; // restart the pop animation
   b.className = `flash ${cls}`;
   clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => b.classList.add('hidden'), 1500);
+  flashTimer = setTimeout(() => b.classList.add('hidden'), ms);
 }
 
 function setHomeStatus(text, isError = false) {
@@ -629,7 +629,7 @@ class HostSession {
       const res = applyMove(this.G, seat, botChoose(this.G, seat));
       if (!res.ok) applyMove(this.G, seat, { kind: 'rotate' }); // safety net
       this.broadcast();
-    }, 2600 + Math.random() * 1600); // deliberate pause so consecutive bot turns read clearly
+    }, 4600 + Math.random() * 1600); // deliberate pause so consecutive bot turns read clearly
   }
 
   lobbyMsg() {
@@ -1568,6 +1568,7 @@ function renderGame(view, sess) {
   renderHand(view, myTurn && !pendingMove);
 
   renderLog(view);
+  announceTurn(view, view.phase === 'playing' && view.turn.seat === view.you);
   paintChatBubbles();
 
   // One-shot effects.
@@ -1648,6 +1649,32 @@ function standingsList(view, listEl) {
 let logLines = [];
 let logKey = null;
 
+// A loud nudge the moment the table starts waiting on YOU. Waits out a
+// just-fired play announcement, and never fires for observers.
+let hadTurn = false;
+let turnMid = null;
+let announceBusyUntil = 0;
+
+function announceTurn(view, isMine) {
+  if (turnMid !== view.mid) {
+    turnMid = view.mid;
+    hadTurn = false;
+  }
+  if (session && session.observer) {
+    hadTurn = isMine;
+    return;
+  }
+  if (isMine && !hadTurn) {
+    const wait = Math.max(0, announceBusyUntil - Date.now());
+    const fire = () => {
+      if (hadTurn) flash('YOUR TURN', '', 3500);
+    };
+    if (wait > 0) setTimeout(fire, wait);
+    else fire();
+  }
+  hadTurn = isMine;
+}
+
 // Feed lines worth flashing across the table as they happen.
 const ANNOUNCE_RE = / plays | adds a | rotated — dnup| rotates their whole hand/;
 
@@ -1673,7 +1700,10 @@ function renderLog(view) {
   // announce the newest play so the whole table sees what just happened
   if (!newMatch && fresh.length) {
     const a = fresh.filter((l) => ANNOUNCE_RE.test(l.text)).pop();
-    if (a) flash(a.text, 'plain');
+    if (a) {
+      flash(a.text, 'plain', 3500); // announcements linger longer
+      announceBusyUntil = Date.now() + 1900;
+    }
   }
   if (!added && logLines.length === $('#feed').children.length) return;
   logLines.sort((a, b) => a.n - b.n);

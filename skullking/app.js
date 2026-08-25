@@ -138,14 +138,14 @@ function toast(text, ms = 3000) {
 }
 
 let flashTimer = null;
-function flash(text, cls = '') {
+function flash(text, cls = '', ms = 1700) {
   const b = $('#banner');
   b.textContent = text;
   b.className = 'flash hidden';
   void b.offsetWidth;
   b.className = `flash ${cls}`;
   clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => b.classList.add('hidden'), 1700);
+  flashTimer = setTimeout(() => b.classList.add('hidden'), ms);
 }
 
 function setHomeStatus(text, isError = false) {
@@ -632,7 +632,8 @@ class HostSession {
     if (!this.G) return;
     const actor = this.botActor();
     if (actor == null) return;
-    const delay = this.G.phase === 'bid' ? 900 + Math.random() * 900 : 2600 + Math.random() * 1600;
+    let delay = this.G.phase === 'bid' ? 900 + Math.random() * 900 : 4600 + Math.random() * 1600;
+    if (this.trickPauseUntil) delay = Math.max(delay, this.trickPauseUntil - Date.now());
     this.botTimer = setTimeout(() => {
       if (!this.G) return;
       const seat = this.botActor();
@@ -723,6 +724,10 @@ class HostSession {
   }
 
   broadcast() {
+    if (this.G && this.G.fx && this.G.fx.kind === 'trick' && this.G.fx.seq !== this._trickFxSeen) {
+      this._trickFxSeen = this.G.fx.seq;
+      this.trickPauseUntil = Date.now() + 3400; // let everyone see who took it
+    }
     const wnames = this.watchers.map((x) => x.name);
     for (const [seat, conn] of this.conns) {
       try {
@@ -1155,7 +1160,7 @@ function tableRows(view) {
 function playSlotEl(view, p) {
   const slot = el('div', 'pslot');
   const showLast =
-    lastTrick && Date.now() - lastTrick.ts < 2200 && (!view.trick || view.trick.plays.length === 0);
+    lastTrick && Date.now() - lastTrick.ts < 3200 && (!view.trick || view.trick.plays.length === 0);
   const t = showLast ? lastTrick : view.trick;
   const pl = t && t.plays ? t.plays.find((x) => x.seat === p.seat) : null;
   if (pl) {
@@ -1206,7 +1211,7 @@ function renderTrick(view) {
   // a finished trick lingers a moment so everyone sees who took it — including
   // the round's last trick, while the score overlay is still on its way
   const showLast =
-    lastTrick && Date.now() - lastTrick.ts < 2200 && (!view.trick || view.trick.plays.length === 0);
+    lastTrick && Date.now() - lastTrick.ts < 3200 && (!view.trick || view.trick.plays.length === 0);
   const t = showLast ? lastTrick : view.trick;
 
   if (view.phase === 'bid') {
@@ -1536,13 +1541,18 @@ function renderGame(view, sess) {
   renderHand(view);
   renderActionBar(view);
   renderLog(view);
+  announceTurn(view, view.phase === 'play' && view.turn === view.you);
   paintChatBubbles();
 
   if (view.fx && view.fx.seq !== lastFxSeq) {
     lastFxSeq = view.fx.seq;
     const fx = view.fx;
-    if (fx.kind === 'trick') {
+    if (fx.kind === 'trick' || ((fx.kind === 'roundEnd' || fx.kind === 'over') && fx.trick)) {
       lastTrick = { plays: fx.trick, winnerCard: fx.winnerCard, seat: fx.seat, ts: Date.now() };
+      // the trick winner is the headline — big flash, and the table holds
+      const wp = (fx.trick || []).find((x) => x.card.id === fx.winnerCard);
+      flash(`${seatName(view, fx.seat)} takes the trick${wp ? ` with ${cardLabel(wp.card, wp.as)}` : ''}!`, '', 3700);
+      announceBusyUntil = Date.now() + 1900;
       const tile = document.querySelector(`.seat[data-seat="${fx.seat}"]`);
       if (tile) {
         tile.classList.remove('won-pulse');
@@ -1555,7 +1565,7 @@ function renderGame(view, sess) {
           renderTrick(lastView);
           renderTable(lastView);
         }
-      }, 2300);
+      }, 3300);
       renderTrick(view);
       renderTable(view);
     } else if (fx.kind === 'bids') {
@@ -1574,8 +1584,34 @@ function renderGame(view, sess) {
 let logLines = [];
 let logMid = null;
 
+// A loud nudge the moment the table starts waiting on YOU. Waits out a
+// just-fired play announcement, and never fires for observers.
+let hadTurn = false;
+let turnMid = null;
+let announceBusyUntil = 0;
+
+function announceTurn(view, isMine) {
+  if (turnMid !== view.mid) {
+    turnMid = view.mid;
+    hadTurn = false;
+  }
+  if (session && session.observer) {
+    hadTurn = isMine;
+    return;
+  }
+  if (isMine && !hadTurn) {
+    const wait = Math.max(0, announceBusyUntil - Date.now());
+    const fire = () => {
+      if (hadTurn) flash('YOUR TURN', '', 3700);
+    };
+    if (wait > 0) setTimeout(fire, wait);
+    else fire();
+  }
+  hadTurn = isMine;
+}
+
 // Feed lines worth flashing across the table as they happen.
-const ANNOUNCE_RE = / plays | takes trick /;
+const ANNOUNCE_RE = / plays /;
 
 function renderLog(view) {
   const key = String(view.mid);
@@ -1598,7 +1634,10 @@ function renderLog(view) {
   // announce the newest play so the whole table sees what just happened
   if (!newMatch && fresh.length) {
     const a = fresh.filter((l) => ANNOUNCE_RE.test(l.text)).pop();
-    if (a) flash(a.text, 'plain');
+    if (a) {
+      flash(a.text, 'plain', 3700); // announcements linger longer
+      announceBusyUntil = Date.now() + 1900;
+    }
   }
   if (!added && logLines.length === $('#feed').children.length) return;
   logLines.sort((a, b) => a.n - b.n);
@@ -1680,7 +1719,7 @@ function showGameover(view, sess) {
 }
 
 // Overlays wait ~1.8s the first time so the last play stays visible.
-const OVERLAY_DELAY = 1800;
+const OVERLAY_DELAY = 3200;
 const overlayTimers = new Map();
 const overlayPending = new Map();
 

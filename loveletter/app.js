@@ -125,14 +125,14 @@ function toast(text, ms = 3000) {
 }
 
 let flashTimer = null;
-function flash(text, cls = '') {
+function flash(text, cls = '', ms = 1600) {
   const b = $('#banner');
   b.textContent = text;
   b.className = 'flash hidden';
   void b.offsetWidth;
   b.className = `flash ${cls}`;
   clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => b.classList.add('hidden'), 1600);
+  flashTimer = setTimeout(() => b.classList.add('hidden'), ms);
 }
 
 function setHomeStatus(text, isError = false) {
@@ -605,7 +605,7 @@ class HostSession {
         else if (me && me.hand[0]) applyMove(g, seat, { kind: 'play', cardId: me.hand[0].id });
       }
       this.broadcast();
-    }, 2600 + Math.random() * 1600);
+    }, 4600 + Math.random() * 1600);
   }
 
   lobbyMsg() {
@@ -1595,6 +1595,7 @@ function renderGame(view, sess) {
 
   renderActionBar(view, myTurn);
   renderLog(view);
+  announceTurn(view, view.phase === 'playing' && ((view.pending && view.pending.seat === view.you) || (!view.pending && view.turn === view.you)));
   paintChatBubbles();
 
   if (view.fx && view.fx.seq !== lastFxSeq) {
@@ -1622,6 +1623,32 @@ function renderGame(view, sess) {
 let logLines = [];
 let logMid = null;
 
+// A loud nudge the moment the table starts waiting on YOU. Waits out a
+// just-fired play announcement, and never fires for observers.
+let hadTurn = false;
+let turnMid = null;
+let announceBusyUntil = 0;
+
+function announceTurn(view, isMine) {
+  if (turnMid !== view.mid) {
+    turnMid = view.mid;
+    hadTurn = false;
+  }
+  if (session && session.observer) {
+    hadTurn = isMine;
+    return;
+  }
+  if (isMine && !hadTurn) {
+    const wait = Math.max(0, announceBusyUntil - Date.now());
+    const fire = () => {
+      if (hadTurn) flash('YOUR TURN', '', 3600);
+    };
+    if (wait > 0) setTimeout(fire, wait);
+    else fire();
+  }
+  hadTurn = isMine;
+}
+
 // Feed lines worth flashing across the table as they happen.
 const ANNOUNCE_RE = / plays /;
 
@@ -1647,7 +1674,10 @@ function renderLog(view) {
   // announce the newest play so the whole table sees what just happened
   if (!newMatch && fresh.length) {
     const a = fresh.filter((l) => ANNOUNCE_RE.test(l.text)).pop();
-    if (a) flash(a.text, 'plain');
+    if (a) {
+      flash(a.text, 'plain', 3600); // announcements linger longer
+      announceBusyUntil = Date.now() + 1900;
+    }
   }
   if (!added && logLines.length === $('#feed').children.length) return;
   logLines.sort((a, b) => a.n - b.n);

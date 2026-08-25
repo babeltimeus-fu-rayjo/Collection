@@ -374,15 +374,21 @@ function scoreRound(G) {
     `Round ${G.round} scored: ` +
       lines.map((l) => `${playerBySeat(G, l.seat).name} ${l.bidPts + l.bonusPts >= 0 ? '+' : ''}${l.bidPts + l.bonusPts}`).join(' · '),
   );
+  // the round's last trick fx would be overwritten here — carry its payload
+  // so clients can still show who took the final trick
+  const lastTrickFx = G.fx && G.fx.kind === 'trick' ? G.fx : null;
+  const carry = lastTrickFx
+    ? { seat: lastTrickFx.seat, trick: lastTrickFx.trick, winnerCard: lastTrickFx.winnerCard }
+    : {};
   if (G.round >= ROUNDS) {
     G.phase = 'over';
     const best = Math.max(...G.players.map((p) => p.score));
     const winners = G.players.filter((p) => p.score === best);
     addLog(G, `Game over — ${winners.map((w) => w.name).join(' & ')} rule${winners.length === 1 ? 's' : ''} the seas with ${best} points!`);
-    setFx(G, { kind: 'over' });
+    setFx(G, { kind: 'over', ...carry });
   } else {
     G.phase = 'roundEnd';
-    setFx(G, { kind: 'roundEnd' });
+    setFx(G, { kind: 'roundEnd', ...carry });
   }
 }
 

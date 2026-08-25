@@ -1412,3 +1412,9 @@ a {
 
 /* Announcements must survive any browser width: wrap instead of clipping */
 .flash { max-width: min(92vw, 780px); width: max-content; white-space: normal; overflow-wrap: break-word; text-align: center; box-sizing: border-box; }
+
+/* Your side of the table reads centered, like everything above it */
+#hand { justify-content: center; }
+#action-bar { align-items: center; }
+#action-bar .abar-row { justify-content: center; }
+#action-bar { align-self: center; margin-left: auto; margin-right: auto; }
