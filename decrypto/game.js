@@ -494,6 +494,29 @@ export function markDisconnected(G, seat) {
   return true;
 }
 
+// An observer may adopt an abandoned seat: it becomes theirs, name and all.
+export function markSeatClaimed(G, seat, name) {
+  const p = playerBySeat(G, seat);
+  if (!p || p.connected) return false;
+  const old = p.name;
+  p.name = name;
+  p.connected = true;
+  p.resigned = false;
+  addLog(G, `${name} takes over ${old}'s seat.`);
+  return true;
+}
+
+// A player may hand back their seat and keep watching; the seat then waits
+// for a claimant (or, in games with bots, a host bot-takeover).
+export function markSeatResigned(G, seat) {
+  const p = playerBySeat(G, seat);
+  if (!p || !p.connected) return false;
+  p.connected = false;
+  p.resigned = true;
+  addLog(G, `${p.name} hands back their seat — it is open for a taker.`);
+  return true;
+}
+
 // Host-only remedy when a pending encryptor is disconnected: hand their
 // team's exchange (same code) to a connected teammate.
 export function passEncryptor(G, seat) {
@@ -550,7 +573,7 @@ export function viewFor(G, seat, code) {
     phase: G.phase,
     round: G.round,
     maxRounds: MAX_ROUNDS,
-    players: G.players.map((p) => ({ seat: p.seat, name: p.name, connected: p.connected, team: p.team })),
+    players: G.players.map((p) => ({ seat: p.seat, name: p.name, connected: p.connected, resigned: !!p.resigned, team: p.team })),
     teams: G.teams.map((t, i) => ({
       key: t.key,
       name: t.name,

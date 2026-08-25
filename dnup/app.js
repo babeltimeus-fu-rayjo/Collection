@@ -17,6 +17,8 @@ import {
   markDisconnected,
   markReconnected,
   markBotTakeover,
+  markSeatClaimed,
+  markSeatResigned,
   viewFor,
   botChoose,
   activeVal,
@@ -306,8 +308,10 @@ class HostSession {
     if (msg.t === 'hello') return this.join(conn, msg);
     if (msg.t === 'watch' && conn._watcher != null) return this.setWatch(conn._watcher, msg.seat);
     if (msg.t === 'chat' && conn._watcher != null) return this.watcherChat(conn._watcher, msg);
+    if (msg.t === 'claim' && conn._watcher != null) return this.claimSeat(conn._watcher, msg.seat);
     const seat = conn._seat;
     if (seat == null) return;
+    if (msg.t === 'resign') return this.resignSeat(conn);
     if (msg.t === 'move') this.move(seat, msg.move);
     if (msg.t === 'chat') {
       const p = this.roster.find((r) => r.seat === seat);
@@ -435,6 +439,94 @@ class HostSession {
     if (markBotTakeover(this.G, seat)) this.broadcast();
   }
 
+  // An observer takes a seat: in the lobby any open chair; mid-game a seat
+  // whose human is gone (bot-covered or not) \u2014 integrity permitting.
+  claimSeat(id, seat) {
+    const w = this.watchers.find((x) => x.id === id);
+    if (!w) return;
+    const err = (text) => {
+      try {
+        w.conn.send({ t: 'err', error: text });
+      } catch {}
+    };
+    if (!this.G) return this.seatFromLobby(w, err);
+    const p = this.roster.find((r) => r.seat === seat);
+    if (!p || p.bot) return err('That seat cannot be taken.');
+    if (p.connected) return err('That seat is taken.');
+    if (!this.claimOk(w, seat)) return err("You have watched other players' hands \u2014 you can only take the seat you have been watching from the start.");
+    const old = this.conns.get(seat);
+    if (old && old !== w.conn) {
+      old._seat = null;
+      try {
+        old.close();
+      } catch {}
+    }
+    this.watchers = this.watchers.filter((x) => x !== w);
+    w.conn._watcher = null;
+    w.conn._seat = seat;
+    this.conns.set(seat, w.conn);
+    p.name = w.name;
+    p.connected = true;
+    p.token = genCode(12); // the previous owner's token no longer reclaims it
+    markSeatClaimed(this.G, seat, w.name);
+    try {
+      w.conn.send({ t: 'welcome', seat, code: this.code, token: p.token });
+    } catch {}
+    toast(`${w.name} takes over the seat`);
+    this.broadcast();
+  }
+
+  seatFromLobby(w, err) {
+    if (this.roster.length >= MAX_PLAYERS) return err('The room is full.');
+    let seat = 0;
+    while (this.roster.some((p) => p.seat === seat)) seat++;
+    const token = genCode(12);
+    this.watchers = this.watchers.filter((x) => x !== w);
+    w.conn._watcher = null;
+    w.conn._seat = seat;
+    this.conns.set(seat, w.conn);
+    this.roster.push({ seat, name: w.name, connected: true, token });
+    try {
+      w.conn.send({ t: 'welcome', seat, code: this.code, token });
+    } catch {}
+    toast(`${w.name} takes a seat`);
+    this.pushLobby();
+  }
+
+  // A claimant may not have shoulder-surfed anyone else's hidden cards —
+  // the seat they take must be the only view they have ever had.
+  claimOk(w, seat) {
+    if (!w.seen) return true;
+    for (const s of w.seen) if (s !== seat) return false;
+    return true;
+  }
+
+  // A seated guest hands back their seat and becomes an observer of it.
+  resignSeat(conn) {
+    const seat = conn._seat;
+    if (seat == null || seat === 0) return; // the host cannot give up the room
+    const p = this.roster.find((r) => r.seat === seat);
+    if (!p) return;
+    conn._seat = null;
+    this.conns.delete(seat);
+    const id = ++this.wid;
+    conn._watcher = id;
+    this.watchers.push({ id, name: p.name, conn, target: seat, seen: new Set([seat]) });
+    try {
+      conn.send({ t: 'welcome', observer: true, code: this.code });
+    } catch {}
+    toast(`${p.name} hands back their seat to watch`);
+    if (!this.G) {
+      this.roster = this.roster.filter((r) => r.seat !== seat);
+      this.pushLobby();
+    } else {
+      p.connected = false;
+      p.token = null;
+      markSeatResigned(this.G, seat);
+      this.broadcast();
+    }
+  }
+
   // Overflow and mid-game joiners become observers: they shadow one chosen
   // player's exact view (like standing behind their chair) and can switch.
   attachWatcher(conn, msg) {
@@ -442,8 +534,9 @@ class HostSession {
     const id = ++this.wid;
     conn._watcher = id;
     conn._seen = Date.now();
-    const target = this.roster.length ? this.roster[0].seat : 0;
-    this.watchers.push({ id, name, conn, target });
+    const open = this.roster.find((r) => !r.connected && !r.bot);
+    const target = open ? open.seat : this.roster.length ? this.roster[0].seat : 0;
+    this.watchers.push({ id, name, conn, target, seen: new Set() });
     try {
       conn.send({ t: 'welcome', observer: true, code: this.code });
       if (this.chatLog.length) conn.send({ t: 'chatlog', items: this.chatLog.slice(-20) });
@@ -462,6 +555,8 @@ class HostSession {
 
   sendWatcher(w) {
     if (!this.roster.some((r) => r.seat === w.target)) w.target = this.roster.length ? this.roster[0].seat : 0;
+    if (!w.seen) w.seen = new Set();
+    w.seen.add(w.target);
     try {
       w.conn.send({
         t: 'state',
@@ -699,8 +794,13 @@ class GuestSession {
         clearTimeout(this.timeout);
         setHomeStatus('');
         setBusy(false);
-        this.token = msg.token || this.token;
-        saveRejoin(this.code, this.token);
+        if (msg.observer) {
+          this.token = null;
+          clearRejoin();
+        } else {
+          this.token = msg.token || this.token;
+          saveRejoin(this.code, this.token);
+        }
         if (this.resume) {
           toast('Reconnected!');
           this.resume = null;
@@ -753,6 +853,18 @@ class GuestSession {
   watch(seat) {
     try {
       this.conn.send({ t: 'watch', seat });
+    } catch {}
+  }
+
+  claim(seat) {
+    try {
+      this.conn.send({ t: 'claim', seat });
+    } catch {}
+  }
+
+  resign() {
+    try {
+      this.conn.send({ t: 'resign' });
     } catch {}
   }
 
@@ -873,6 +985,7 @@ function renderLobby(lob, sess) {
   chatSetVisible(true);
   $('#lobby-code').textContent = lob.code;
   renderLobbyWatch(lob, sess);
+  ensureResignBtn(sess);
   const list = $('#lobby-players');
   list.replaceChildren();
   const mySeat = sess.isHost ? 0 : sess.seat;
@@ -1190,6 +1303,13 @@ function renderObBar(view, sess) {
     sw.append(b);
   }
   row.append(sw);
+  const tgt = view.players.find((p) => p.seat === view.observer.target);
+  if (tgt && !tgt.connected && !tgt.bot) {
+    const claim = el('button', 'ob-btn claim', `\u{1FA91} Take ${tgt.name}'s seat`);
+    claim.type = 'button';
+    claim.onclick = () => sess.claim(view.observer.target);
+    row.append(claim);
+  }
   bar.append(row);
 }
 
@@ -1222,11 +1342,50 @@ function renderLobbyWatch(lob, sess) {
     anchor.parentNode.insertBefore(chip, anchor.nextSibling);
   }
   chip.classList.toggle('on', names.length > 0 || mine);
-  chip.textContent = mine
-    ? `\u{1F441} You are watching \u2014 the game appears here when it starts.`
-    : names.length
-      ? `\u{1F441} ${names.length} watching: ${names.join(', ')}`
-      : '';
+  chip.replaceChildren();
+  if (mine) {
+    chip.append(el('span', '', `\u{1F441} You are watching \u2014 the game appears here when it starts.`));
+    if ((lob.players || []).length < MAX_PLAYERS) {
+      const b = el('button', '', `\u{1FA91} Take a seat`);
+      b.type = 'button';
+      b.onclick = () => sess.claim(null);
+      chip.append(b);
+    }
+  } else if (names.length) {
+    chip.append(el('span', '', `\u{1F441} ${names.length} watching: ${names.join(', ')}`));
+  }
+}
+
+// A seated guest may hand back their seat and keep watching. Two-step arm so
+// a stray click cannot forfeit a seat; injected beside each screen's Leave.
+function ensureResignBtn(sess) {
+  for (const scr of ['game', 'lobby']) {
+    const anchor = document.querySelector(`#screen-${scr} .btn-leave`);
+    if (!anchor) continue;
+    let b = document.querySelector(`#btn-resign-${scr}`);
+    if (!b) {
+      b = el('button', anchor.className.split(/\s+/).filter((c) => c !== 'btn-leave').join(' '), '');
+      b.id = `btn-resign-${scr}`;
+      b.type = 'button';
+      b.addEventListener('click', () => {
+        if (!session || session.isHost || session.observer) return;
+        if (b.dataset.armed) {
+          delete b.dataset.armed;
+          session.resign();
+        } else {
+          b.dataset.armed = '1';
+          b.textContent = 'Really hand back your seat?';
+          setTimeout(() => {
+            delete b.dataset.armed;
+            b.textContent = '\u{1F441} Watch instead';
+          }, 4000);
+        }
+      });
+      anchor.parentNode.insertBefore(b, anchor);
+    }
+    if (!b.dataset.armed) b.textContent = '\u{1F441} Watch instead';
+    b.classList.toggle('hidden', !sess || sess.isHost || !!sess.observer);
+  }
 }
 
 function renderDcBanner(view, sess) {
@@ -1248,7 +1407,9 @@ function renderDcBanner(view, sess) {
         'dc-msg',
         p.botFor
           ? `🤖 A bot is playing for ${p.name} until they return.`
-          : `⚠️ ${p.name} lost connection — the game is waiting for them.`,
+          : p.resigned
+            ? `🪑 ${p.name} handed back their seat — an observer can take it over.`
+            : `⚠️ ${p.name} lost connection — the game is waiting for them.`,
       ),
     );
     if (!p.botFor && sess && sess.isHost) {
@@ -1265,6 +1426,7 @@ function renderGame(view, sess) {
   renderDcBanner(view, sess);
   renderObBar(view, sess);
   renderWatchChip(view);
+  ensureResignBtn(sess);
   chatSetVisible(true);
   $('#room-chip').textContent = view.code;
   $('#round-chip').textContent =

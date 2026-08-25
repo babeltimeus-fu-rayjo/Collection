@@ -698,6 +698,31 @@ export function markDisconnected(G, seat) {
   return true;
 }
 
+// An observer may adopt an abandoned seat: it becomes theirs, name and all.
+export function markSeatClaimed(G, seat, name) {
+  const p = bySeat(G, seat);
+  if (!p || p.connected) return false;
+  const old = p.name;
+  p.name = name;
+  p.connected = true;
+  p.resigned = false;
+  p.botFor = false;
+  note(G, `${name} takes over ${old}'s seat.`);
+  return true;
+}
+
+// A player may hand back their seat and keep watching; the seat then waits
+// for a claimant (or, in games with bots, a host bot-takeover).
+export function markSeatResigned(G, seat) {
+  const p = bySeat(G, seat);
+  if (!p || !p.connected) return false;
+  p.connected = false;
+  p.botFor = false;
+  p.resigned = true;
+  note(G, `${p.name} hands back their seat — it is open for a taker.`);
+  return true;
+}
+
 // Host-only remedy for a stalled seat: hand it to a bot until they return.
 export function markBotTakeover(G, seat) {
   const p = bySeat(G, seat);
@@ -887,6 +912,7 @@ export function viewFor(G, seat, code) {
       bot: p.bot,
       connected: p.connected,
       botFor: !!p.botFor,
+      resigned: !!p.resigned,
       tokens: p.tokens,
       out: p.out,
       immune: p.immune,
