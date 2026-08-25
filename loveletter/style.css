@@ -1708,3 +1708,7 @@ a {
 #ob-bar .ob-btn.claim:hover { background: rgba(120, 230, 160, 0.3); }
 #lobby-watch button { margin-left: 8px; border: 1px solid rgba(120, 230, 160, 0.6); background: rgba(120, 230, 160, 0.18); color: inherit; border-radius: 8px; padding: 3px 10px; font: inherit; font-size: 12.5px; cursor: pointer; }
 #lobby-watch button:hover { background: rgba(120, 230, 160, 0.3); }
+
+/* Rectangular table: players face each other on the top and bottom edges;
+   discard piles sit on each player's table-facing side */
+.prow { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; width: 100%; max-width: 1180px; }

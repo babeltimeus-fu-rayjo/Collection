@@ -1024,7 +1024,7 @@ function targetName(view, seat) {
   return p ? p.name : '?';
 }
 
-function seatTile(view, p) {
+function seatTile(view, p, facing = 'down') {
   const isTurn = view.phase === 'playing' && view.turn === p.seat && !view.pending;
   const isPending = view.pending && view.pending.seat === p.seat;
   const cls = [
@@ -1060,14 +1060,28 @@ function seatTile(view, p) {
   // already know what you did, and the log has the detail.
   if (p.lastAction && p.seat !== view.you) tile.append(el('div', 'seat-note', p.lastAction));
 
+  // Played cards face the table: below the tile on the top edge, ABOVE it
+  // on the bottom edge — as if laid in front of the player.
   const pile = el('div', 'pile');
   if (p.discard.length) {
     for (const key of p.discard.slice(-6)) pile.append(cardEl(key, 'mini'));
   } else {
     pile.append(el('div', 'pile-empty', 'nothing played yet'));
   }
-  tile.append(pile);
+  if (facing === 'up') tile.prepend(pile);
+  else tile.append(pile);
   return tile;
+}
+
+// Long rectangular table: you sit on the bottom edge and the turn order
+// flows around the perimeter — right along the bottom, up the side, back
+// left across the top.
+function tableRows(view) {
+  const seats = view.players.map((p) => p.seat).sort((a, b) => a - b);
+  const myIdx = Math.max(0, seats.indexOf(view.you));
+  const S = seats.map((_, k) => seats[(myIdx + k) % seats.length]);
+  const bottomN = Math.max(1, Math.floor(S.length / 2));
+  return { bottom: S.slice(0, bottomN), top: S.slice(bottomN).reverse() };
 }
 
 // The action bar walks you through whatever the chosen card still needs.
@@ -1516,14 +1530,18 @@ function renderGame(view, sess) {
   const me = view.players.find((p) => p.seat === view.you);
   document.body.classList.toggle('my-turn', myTurn);
 
-  // the table, starting from your own seat
-  const table = $('#table');
-  table.replaceChildren();
-  const order = view.players.map((p) => p.seat).sort((a, b) => a - b);
-  const start = Math.max(0, order.indexOf(view.you));
-  for (let k = 0; k < order.length; k++) {
-    const p = view.players.find((q) => q.seat === order[(start + k) % order.length]);
-    table.append(seatTile(view, p));
+  // the table: two facing rows, you on the bottom edge
+  const rows = tableRows(view);
+  for (const [rowSel, list, facing] of [
+    ['#row-top', rows.top, 'down'],
+    ['#row-bottom', rows.bottom, 'up'],
+  ]) {
+    const box = $(rowSel);
+    box.replaceChildren();
+    for (const seat of list) {
+      const p = view.players.find((q) => q.seat === seat);
+      if (p) box.append(seatTile(view, p, facing));
+    }
   }
 
   // centre: deck, set-aside card, and the face-up cards of a two-player game
@@ -1604,21 +1622,32 @@ function renderGame(view, sess) {
 let logLines = [];
 let logMid = null;
 
+// Feed lines worth flashing across the table as they happen.
+const ANNOUNCE_RE = / plays /;
+
 function renderLog(view) {
   // keyed per round, so a new deal starts from an empty panel
   const key = `${view.mid}:${view.round}`;
-  if (key !== logMid) {
+  const newMatch = key !== logMid;
+  if (newMatch) {
     logMid = key;
     logLines = [];
     $('#feed').replaceChildren();
   }
   const have = new Set(logLines.map((l) => l.n));
   let added = false;
+  const fresh = [];
   for (const item of view.log || []) {
     if (item && typeof item === 'object' && !have.has(item.n)) {
       logLines.push(item);
+      fresh.push(item);
       added = true;
     }
+  }
+  // announce the newest play so the whole table sees what just happened
+  if (!newMatch && fresh.length) {
+    const a = fresh.filter((l) => ANNOUNCE_RE.test(l.text)).pop();
+    if (a) flash(a.text, 'plain');
   }
   if (!added && logLines.length === $('#feed').children.length) return;
   logLines.sort((a, b) => a.n - b.n);

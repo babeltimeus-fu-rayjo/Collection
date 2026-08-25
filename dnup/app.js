@@ -1421,6 +1421,73 @@ function renderDcBanner(view, sess) {
   }
 }
 
+// Long rectangular table: you sit on the bottom edge and the turn order
+// flows around the perimeter — right along the bottom, up the side, back
+// left across the top.
+function tableRows(view) {
+  const seats = view.players.map((p) => p.seat).sort((a, b) => a - b);
+  const myIdx = Math.max(0, seats.indexOf(view.you));
+  const S = seats.map((_, k) => seats[(myIdx + k) % seats.length]);
+  const bottomN = Math.max(1, Math.floor(S.length / 2));
+  return { bottom: S.slice(0, bottomN), top: S.slice(bottomN).reverse() };
+}
+
+// One opponent's box: identity strip + their play area(s). The sets face the
+// table — below the head on the top edge, above it on the bottom edge.
+function oppBoxEl(view, p, sess, facing) {
+  const turnNow = view.phase === 'playing' && view.turn.seat === p.seat;
+  const box = el('div', `opp${turnNow ? ' turn' : ''}${p.connected ? '' : ' offline'}`);
+  box.dataset.seat = p.seat;
+  const head = el('div', 'opp-head');
+  head.append(avatarEl(p.name, p.seat, p.bot));
+  const meta = el('div', 'opp-meta');
+  const nameRow = el('div', 'opp-name', p.name);
+  if (p.seat === view.starterSeat) nameRow.append(el('span', 'star-badge', '★'));
+  meta.append(nameRow);
+  const info = el('div', 'opp-info');
+  info.append(scoreBadge(view, p));
+  const backs = el('span', 'backs');
+  for (let i = 0; i < Math.min(p.handCount, 8); i++) backs.append(el('i', 'mini-back'));
+  info.append(backs, el('span', 'count', String(p.handCount)));
+  meta.append(info);
+  head.append(meta);
+  if (p.out) head.append(el('span', 'tag win', view.firstOut === p.seat ? 'OUT +2' : 'OUT +1'));
+  else if (!p.connected) head.append(el('span', 'tag off', 'OFFLINE'));
+  else if (p.handCount <= 3) {
+    // Close-to-out warning: louder the fewer cards they hold.
+    head.append(
+      el(
+        'span',
+        `tag ${p.handCount === 1 ? 'dnup' : 'low'}`,
+        p.handCount === 1 ? '1 CARD!' : `${p.handCount} CARDS`,
+      ),
+    );
+  }
+  const areasRow = el('div', 'areas');
+  p.areas.forEach((_, i) => areasRow.append(areaEl(view, p, i, sess)));
+  if (facing === 'up') box.append(areasRow, head);
+  else box.append(head, areasRow);
+  return box;
+}
+
+// Your own corner of the table: sets above (facing the middle), label below.
+function myZoneEl(view, sess) {
+  const mine = view.players.find((p) => p.seat === view.you);
+  const zone = el('div', '');
+  zone.id = 'my-zone';
+  zone.dataset.seat = view.you;
+  if (!mine) return zone;
+  const areasRow = el('div', 'areas');
+  mine.areas.forEach((_, i) => areasRow.append(areaEl(view, mine, i, sess)));
+  const label = el('div', 'zone-label');
+  label.append(el('span', null, view.mode === 'duel' ? 'Your play areas' : 'Your set'));
+  if (view.you === view.starterSeat) label.append(el('span', 'star-badge', '★'));
+  label.append(scoreBadge(view, mine));
+  if (mine.out) label.append(el('span', 'tag win', view.firstOut === view.you ? 'OUT +2' : 'OUT +1'));
+  zone.append(areasRow, label);
+  return zone;
+}
+
 function renderGame(view, sess) {
   lastView = view;
   renderDcBanner(view, sess);
@@ -1437,47 +1504,22 @@ function renderGame(view, sess) {
   const myTurn = view.phase === 'playing' && view.turn.seat === view.you;
   document.body.classList.toggle('my-turn', myTurn);
 
-  // Opponents, in seat order starting clockwise from you.
-  const seats = view.players.map((p) => p.seat).sort((a, b) => a - b);
-  const myIdx = Math.max(0, seats.indexOf(view.you));
-  const opp = $('#opponents');
-  opp.replaceChildren();
-  for (let k = 1; k < seats.length; k++) {
-    const p = view.players.find((q) => q.seat === seats[(myIdx + k) % seats.length]);
-    if (!p || p.seat === view.you) continue;
-    const turnNow = view.phase === 'playing' && view.turn.seat === p.seat;
-    const box = el('div', `opp${turnNow ? ' turn' : ''}${p.connected ? '' : ' offline'}`);
-    box.dataset.seat = p.seat;
-    const head = el('div', 'opp-head');
-    head.append(avatarEl(p.name, p.seat, p.bot));
-    const meta = el('div', 'opp-meta');
-    const nameRow = el('div', 'opp-name', p.name);
-    if (p.seat === view.starterSeat) nameRow.append(el('span', 'star-badge', '★'));
-    meta.append(nameRow);
-    const info = el('div', 'opp-info');
-    info.append(scoreBadge(view, p));
-    const backs = el('span', 'backs');
-    for (let i = 0; i < Math.min(p.handCount, 8); i++) backs.append(el('i', 'mini-back'));
-    info.append(backs, el('span', 'count', String(p.handCount)));
-    meta.append(info);
-    head.append(meta);
-    if (p.out) head.append(el('span', 'tag win', view.firstOut === p.seat ? 'OUT +2' : 'OUT +1'));
-    else if (!p.connected) head.append(el('span', 'tag off', 'OFFLINE'));
-    else if (p.handCount <= 3) {
-      // Close-to-out warning: louder the fewer cards they hold.
-      head.append(
-        el(
-          'span',
-          `tag ${p.handCount === 1 ? 'dnup' : 'low'}`,
-          p.handCount === 1 ? '1 CARD!' : `${p.handCount} CARDS`,
-        ),
-      );
+  // The table: two facing rows, you on the bottom edge, sets facing center.
+  const rows = tableRows(view);
+  for (const [rowSel, list, facing] of [
+    ['#row-top', rows.top, 'down'],
+    ['#row-bottom', rows.bottom, 'up'],
+  ]) {
+    const rowBox = $(rowSel);
+    rowBox.replaceChildren();
+    for (const seat of list) {
+      if (seat === view.you) {
+        rowBox.append(myZoneEl(view, sess));
+        continue;
+      }
+      const p = view.players.find((q) => q.seat === seat);
+      if (p) rowBox.append(oppBoxEl(view, p, sess, facing));
     }
-    box.append(head);
-    const areasRow = el('div', 'areas');
-    p.areas.forEach((_, i) => areasRow.append(areaEl(view, p, i, sess)));
-    box.append(areasRow);
-    opp.append(box);
   }
 
   const status = $('#status');
@@ -1498,22 +1540,7 @@ function renderGame(view, sess) {
     status.className = 'status';
   }
 
-  // My zone: my area(s) + score.
-  const mine = view.players.find((p) => p.seat === view.you);
-  const zone = $('#my-zone');
-  zone.dataset.seat = view.you;
-  zone.replaceChildren();
-  if (mine) {
-    const label = el('div', 'zone-label');
-    label.append(el('span', null, view.mode === 'duel' ? 'Your play areas' : 'Your set'));
-    if (view.you === view.starterSeat) label.append(el('span', 'star-badge', '★'));
-    label.append(scoreBadge(view, mine));
-    if (mine.out) label.append(el('span', 'tag win', view.firstOut === view.you ? 'OUT +2' : 'OUT +1'));
-    zone.append(label);
-    const areasRow = el('div', 'areas');
-    mine.areas.forEach((_, i) => areasRow.append(areaEl(view, mine, i, sess)));
-    zone.append(areasRow);
-  }
+  // (your own zone renders inside the bottom row, sets facing the middle)
 
   // Action bar.
   const play = $('#btn-play');
@@ -1621,21 +1648,32 @@ function standingsList(view, listEl) {
 let logLines = [];
 let logKey = null;
 
+// Feed lines worth flashing across the table as they happen.
+const ANNOUNCE_RE = / plays | adds a | rotated — dnup| rotates their whole hand/;
+
 function renderLog(view) {
   // the log is keyed per round, so a new deal starts from an empty panel
   const key = `${view.mid}:${view.round}`;
-  if (key !== logKey) {
+  const newMatch = key !== logKey;
+  if (newMatch) {
     logKey = key;
     logLines = [];
     $('#feed').replaceChildren();
   }
   const have = new Set(logLines.map((l) => l.n));
   let added = false;
+  const fresh = [];
   for (const item of view.feed || []) {
     if (item && typeof item === 'object' && !have.has(item.n)) {
       logLines.push(item);
+      fresh.push(item);
       added = true;
     }
+  }
+  // announce the newest play so the whole table sees what just happened
+  if (!newMatch && fresh.length) {
+    const a = fresh.filter((l) => ANNOUNCE_RE.test(l.text)).pop();
+    if (a) flash(a.text, 'plain');
   }
   if (!added && logLines.length === $('#feed').children.length) return;
   logLines.sort((a, b) => a.n - b.n);

@@ -1397,3 +1397,15 @@ a {
 #ob-bar .ob-btn.claim:hover { background: rgba(120, 230, 160, 0.3); }
 #lobby-watch button { margin-left: 8px; border: 1px solid rgba(120, 230, 160, 0.6); background: rgba(120, 230, 160, 0.18); color: inherit; border-radius: 8px; padding: 3px 10px; font: inherit; font-size: 12.5px; cursor: pointer; }
 #lobby-watch button:hover { background: rgba(120, 230, 160, 0.3); }
+
+/* Rectangular table: players face each other top/bottom; played cards land
+   in a slot on each player's table-facing side */
+.prow { display: flex; justify-content: center; align-items: stretch; gap: 12px; flex-wrap: wrap; width: min(1040px, 100%); padding: 2px 14px; }
+.pcell { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 150px; }
+.pcell .seat { width: 100%; }
+.pslot { min-height: 84px; display: flex; align-items: center; justify-content: center; }
+.pslot.empty { border: 2px dashed rgba(127, 127, 127, 0.3); border-radius: 9px; width: 52px; height: 74px; box-sizing: border-box; }
+.pslot .slot-hint { font-size: 10.5px; color: var(--dim); text-align: center; padding: 2px; }
+#middle { min-height: 40px; }
+#middle, #trick { min-height: 0; }
+#trick { padding: 6px 12px; }

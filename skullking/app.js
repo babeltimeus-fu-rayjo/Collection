@@ -1139,13 +1139,57 @@ function seatTile(view, p) {
   return tile;
 }
 
+// Long rectangular table: you sit on the bottom edge and the turn order
+// flows around the perimeter — right along the bottom, up the side, back
+// left across the top.
+function tableRows(view) {
+  const seats = view.players.map((p) => p.seat).sort((a, b) => a - b);
+  const myIdx = Math.max(0, seats.indexOf(view.you));
+  const S = seats.map((_, k) => seats[(myIdx + k) % seats.length]);
+  const bottomN = Math.max(1, Math.floor(S.length / 2));
+  return { bottom: S.slice(0, bottomN), top: S.slice(bottomN).reverse() };
+}
+
+// The card a player has thrown into the current trick sits in a slot on
+// their table-facing side (below the top row, above the bottom row).
+function playSlotEl(view, p) {
+  const slot = el('div', 'pslot');
+  const showLast =
+    lastTrick && Date.now() - lastTrick.ts < 2200 && (!view.trick || view.trick.plays.length === 0);
+  const t = showLast ? lastTrick : view.trick;
+  const pl = t && t.plays ? t.plays.find((x) => x.seat === p.seat) : null;
+  if (pl) {
+    const wrap = el('div', `tplay${showLast && pl.card.id === lastTrick.winnerCard ? ' winner' : ''}`);
+    wrap.append(cardEl(pl.card, pl.as, true));
+    slot.append(wrap);
+  } else {
+    slot.classList.add('empty');
+    if (!showLast && view.trick && view.phase === 'play' && view.trick.plays.length === 0 && view.trick.leader === p.seat) {
+      slot.append(el('span', 'slot-hint', 'leads…'));
+    }
+  }
+  return slot;
+}
+
 function renderTable(view) {
-  const box = $('#table');
-  box.replaceChildren();
-  const ordered = [...view.players].sort(
-    (a, b) => ((a.seat - view.you + 64) % 64) - ((b.seat - view.you + 64) % 64),
-  );
-  for (const p of ordered) box.append(seatTile(view, p));
+  const rows = tableRows(view);
+  for (const [rowSel, list, facing] of [
+    ['#row-top', rows.top, 'down'],
+    ['#row-bottom', rows.bottom, 'up'],
+  ]) {
+    const box = $(rowSel);
+    box.replaceChildren();
+    for (const seat of list) {
+      const p = view.players.find((q) => q.seat === seat);
+      if (!p) continue;
+      const cell = el('div', 'pcell');
+      const tile = seatTile(view, p);
+      const slot = playSlotEl(view, p);
+      if (facing === 'down') cell.append(tile, slot);
+      else cell.append(slot, tile);
+      box.append(cell);
+    }
+  }
 }
 
 // ---------------------------------------------------------------- trick area
@@ -1189,12 +1233,7 @@ function renderTrick(view) {
   }
   box.append(label);
 
-  for (const pl of t.plays) {
-    const wrap = el('div', `tplay${showLast && pl.card.id === lastTrick.winnerCard ? ' winner' : ''}`);
-    wrap.append(cardEl(pl.card, pl.as, true));
-    wrap.append(el('span', 'who', seatName(view, pl.seat)));
-    box.append(wrap);
-  }
+  // the played cards themselves sit in front of each player now
   if (!showLast && view.trick && view.phase === 'play' && view.trick.plays.length === 0) {
     box.append(el('span', 'abar-label', `${seatName(view, view.trick.leader)} leads.`));
   }
@@ -1512,9 +1551,13 @@ function renderGame(view, sess) {
       }
       clearTimeout(lingerTimer);
       lingerTimer = setTimeout(() => {
-        if (lastView) renderTrick(lastView);
+        if (lastView) {
+          renderTrick(lastView);
+          renderTable(lastView);
+        }
       }, 2300);
       renderTrick(view);
+      renderTable(view);
     } else if (fx.kind === 'bids') {
       flash('YO · HO · HO!', '');
     } else if (fx.kind === 'deal') {
@@ -1531,20 +1574,31 @@ function renderGame(view, sess) {
 let logLines = [];
 let logMid = null;
 
+// Feed lines worth flashing across the table as they happen.
+const ANNOUNCE_RE = / plays | takes trick /;
+
 function renderLog(view) {
   const key = String(view.mid);
-  if (key !== logMid) {
+  const newMatch = key !== logMid;
+  if (newMatch) {
     logMid = key;
     logLines = [];
     $('#feed').replaceChildren();
   }
   const have = new Set(logLines.map((l) => l.n));
   let added = false;
+  const fresh = [];
   for (const item of view.log || []) {
     if (item && typeof item === 'object' && !have.has(item.n)) {
       logLines.push(item);
+      fresh.push(item);
       added = true;
     }
+  }
+  // announce the newest play so the whole table sees what just happened
+  if (!newMatch && fresh.length) {
+    const a = fresh.filter((l) => ANNOUNCE_RE.test(l.text)).pop();
+    if (a) flash(a.text, 'plain');
   }
   if (!added && logLines.length === $('#feed').children.length) return;
   logLines.sort((a, b) => a.n - b.n);
