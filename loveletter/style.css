@@ -1737,3 +1737,14 @@ a {
   #roundend .panel > #btn-next-round { grid-column: 1 / -1; grid-row: 5; justify-self: center; }
   #roundend .panel > #re-wait { grid-column: 1 / -1; grid-row: 6; text-align: center; }
 }
+
+/* Bubbles on a fixed overlay: flicker-free, unclippable, above the seats */
+#bubble-layer { position: fixed; inset: 0; pointer-events: none; z-index: 70; }
+#bubble-layer .chat-bubble { position: absolute; bottom: auto; right: auto; margin: 0; transform: translate(-50%, calc(-100% - 10px)); }
+#bubble-layer .chat-bubble::after { left: 50%; right: auto; bottom: -12px; top: auto; transform: translateX(-50%); border: 6px solid transparent; }
+#bubble-layer .chat-bubble::after { border-top-color: #ffe4a8; }
+#bubble-layer .chat-bubble.say::after { border-top-color: rgba(66, 52, 22, 0.96); }
+#row-top { margin-top: 84px; }
+.seat { width: 190px; min-height: 176px; }
+.seat-note { min-height: 15px; }
+.prow .seat { flex: 0 0 190px; }

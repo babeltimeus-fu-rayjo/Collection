@@ -1323,3 +1323,9 @@ a {
 
 /* Announcements must survive any browser width: wrap instead of clipping */
 .flash { max-width: min(92vw, 780px); width: max-content; white-space: normal; overflow-wrap: break-word; text-align: center; box-sizing: border-box; }
+
+/* Bubbles on a fixed overlay: flicker-free, unclippable, above the seats */
+#bubble-layer { position: fixed; inset: 0; pointer-events: none; z-index: 70; }
+#bubble-layer .chat-bubble { position: absolute; bottom: auto; right: auto; margin: 0; transform: translate(-50%, calc(-100% - 10px)); }
+#bubble-layer .chat-bubble::after { left: 50%; right: auto; bottom: -12px; top: auto; transform: translateX(-50%); border: 6px solid transparent; }
+#bubble-layer .chat-bubble::after { border-top-color: #fff; }

@@ -198,9 +198,10 @@ function fmtChatTime(ts) {
 function addChatMsg(m, self) {
   const box = $('#chat-msgs');
   const row = el('div', `chat-msg${self ? ' mine' : ''}${m.channel === 'team' ? ' teamch' : ''}`);
+  row.append(el('span', `chat-name s${(m.seat || 0) % 8}`, m.name || '?'));
   if (m.ts) row.append(el('span', 'chat-time', fmtChatTime(m.ts)));
   if (m.channel === 'team') row.append(el('span', 'chat-lock', '🔒'));
-  row.append(el('span', `chat-name s${(m.seat || 0) % 8}`, m.name || '?'), el('span', 'chat-text', m.text));
+  row.append(el('span', 'chat-text', m.text));
   box.append(row);
   while (box.children.length > 100) box.firstChild.remove();
   box.scrollTop = box.scrollHeight;
@@ -220,11 +221,37 @@ function addChatMsg(m, self) {
 const chatBubbles = new Map();
 
 function paintChatBubbles() {
-  for (const n of document.querySelectorAll('.chat-bubble')) n.remove();
+  // Bubbles live on a fixed overlay so seat re-renders never destroy them
+  // (no flicker) and no container can clip them.
+  let layer = document.querySelector('#bubble-layer');
+  if (!layer) {
+    layer = el('div', '');
+    layer.id = 'bubble-layer';
+    document.body.append(layer);
+    window.addEventListener('scroll', paintChatBubbles, { passive: true });
+    window.addEventListener('resize', paintChatBubbles);
+  }
+  const seen = new Set();
   for (const [seat, b] of chatBubbles) {
     const host = document.querySelector(`.member[data-seat="${seat}"]`) || document.querySelector(`.seat-row[data-seat="${seat}"]`);
-    if (!host) continue;
-    host.append(el('div', 'chat-bubble', b.text));
+    if (!host || !host.offsetParent) continue;
+    const key = String(seat);
+    seen.add(key);
+    let bub = layer.querySelector(`.chat-bubble[data-seat="${key}"]`);
+    if (!bub) {
+      bub = el('div', 'chat-bubble', b.text);
+      bub.dataset.seat = key;
+      layer.append(bub);
+    } else if (bub.textContent !== b.text) {
+      bub.textContent = b.text;
+    }
+    bub.classList.toggle('say', !!b.say);
+    const r = host.getBoundingClientRect();
+    bub.style.left = `${Math.round(r.left + r.width / 2)}px`;
+    bub.style.top = `${Math.round(Math.max(r.top, bub.offsetHeight + 14))}px`;
+  }
+  for (const n of layer.querySelectorAll('.chat-bubble')) {
+    if (!seen.has(n.dataset.seat)) n.remove();
   }
 }
 
@@ -233,7 +260,7 @@ function showChatBubble(m) {
   const prev = chatBubbles.get(m.seat);
   if (prev) clearTimeout(prev.timer);
   chatBubbles.set(m.seat, {
-    text: (m.channel === 'team' ? '🔒 ' : '') + (m.text.length > 110 ? `${m.text.slice(0, 110)}…` : m.text),
+    text: (m.channel === 'team' ? '🔒 ' : '') + (m.text.length > 84 ? `${m.text.slice(0, 84)}…` : m.text),
     timer: setTimeout(() => {
       chatBubbles.delete(m.seat);
       paintChatBubbles();

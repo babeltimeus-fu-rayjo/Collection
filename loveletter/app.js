@@ -188,8 +188,9 @@ function fmtChatTime(ts) {
 function addChatMsg(m, self) {
   const box = $('#chat-msgs');
   const row = el('div', `chat-msg${self ? ' mine' : ''}`);
+  row.append(el('span', `chat-name s${(m.seat || 0) % 8}`, m.name || '?'));
   if (m.ts) row.append(el('span', 'chat-time', fmtChatTime(m.ts)));
-  row.append(el('span', `chat-name s${(m.seat || 0) % 8}`, m.name || '?'), el('span', 'chat-text', m.text));
+  row.append(el('span', 'chat-text', m.text));
   box.append(row);
   while (box.children.length > 100) box.firstChild.remove();
   box.scrollTop = box.scrollHeight;
@@ -208,13 +209,37 @@ function addChatMsg(m, self) {
 const chatBubbles = new Map();
 
 function paintChatBubbles() {
-  for (const n of document.querySelectorAll('.chat-bubble')) n.remove();
+  // Bubbles live on a fixed overlay so seat re-renders never destroy them
+  // (no flicker) and no container can clip them.
+  let layer = document.querySelector('#bubble-layer');
+  if (!layer) {
+    layer = el('div', '');
+    layer.id = 'bubble-layer';
+    document.body.append(layer);
+    window.addEventListener('scroll', paintChatBubbles, { passive: true });
+    window.addEventListener('resize', paintChatBubbles);
+  }
+  const seen = new Set();
   for (const [seat, b] of chatBubbles) {
-    const host = document.querySelector(`.seat[data-seat="${seat}"]`);
-    if (!host) continue;
-    const bub = el('div', 'chat-bubble' + (b.say ? ' say' : ''), b.text);
-    if (host.closest('#row-top')) bub.classList.add('below');
-    host.append(bub);
+    const host = document.querySelector(`.seat[data-seat="${seat}"]`) || document.querySelector(`.seat-row[data-seat="${seat}"]`);
+    if (!host || !host.offsetParent) continue;
+    const key = String(seat);
+    seen.add(key);
+    let bub = layer.querySelector(`.chat-bubble[data-seat="${key}"]`);
+    if (!bub) {
+      bub = el('div', 'chat-bubble', b.text);
+      bub.dataset.seat = key;
+      layer.append(bub);
+    } else if (bub.textContent !== b.text) {
+      bub.textContent = b.text;
+    }
+    bub.classList.toggle('say', !!b.say);
+    const r = host.getBoundingClientRect();
+    bub.style.left = `${Math.round(r.left + r.width / 2)}px`;
+    bub.style.top = `${Math.round(Math.max(r.top, bub.offsetHeight + 14))}px`;
+  }
+  for (const n of layer.querySelectorAll('.chat-bubble')) {
+    if (!seen.has(n.dataset.seat)) n.remove();
   }
 }
 
@@ -224,7 +249,7 @@ function showChatBubble(m) {
   if (prev) clearTimeout(prev.timer);
   chatBubbles.set(m.seat, {
     say: !!m.say,
-    text: m.text.length > 110 ? `${m.text.slice(0, 110)}…` : m.text,
+    text: m.text.length > 84 ? `${m.text.slice(0, 84)}…` : m.text,
     timer: setTimeout(() => {
       chatBubbles.delete(m.seat);
       paintChatBubbles();
@@ -1660,7 +1685,6 @@ function playChatter(view) {
     return;
   }
   let at = 0;
-  let spoke = false;
   for (const c of items) {
     if (c.n <= chatterSeen) continue;
     chatterSeen = c.n;
@@ -1670,17 +1694,13 @@ function playChatter(view) {
       const line = c;
       chatterTimers.push(setTimeout(() => showChatBubble({ seat: line.seat, text: line.text, say: true }), at));
     }
-    spoke = true;
   }
-  // hold the YOUR TURN nudge until the exchange has fully aired
-  if (spoke) announceBusyUntil = Math.max(announceBusyUntil, Date.now() + at + 4400);
 }
 
-// A loud nudge the moment the table starts waiting on YOU. Waits out a
-// just-fired play announcement, and never fires for observers.
+// A loud nudge fired the instant the turn becomes yours (never for
+// observers).
 let hadTurn = false;
 let turnMid = null;
-let announceBusyUntil = 0;
 
 function announceTurn(view, isMine) {
   if (turnMid !== view.mid) {
@@ -1691,14 +1711,7 @@ function announceTurn(view, isMine) {
     hadTurn = isMine;
     return;
   }
-  if (isMine && !hadTurn) {
-    const wait = Math.max(0, announceBusyUntil - Date.now());
-    const fire = () => {
-      if (hadTurn) flash('YOUR TURN', '', 3600);
-    };
-    if (wait > 0) setTimeout(fire, wait);
-    else fire();
-  }
+  if (isMine && !hadTurn) flash('YOUR TURN', '', 3600);
   hadTurn = isMine;
 }
 
