@@ -31,6 +31,12 @@
   --k-mermaid-2: #0a7472;
   --k-tigress: #e07726;
   --k-tigress-2: #aa4f12;
+  --k-loot: #c9a13b;
+  --k-loot-2: #8e6c1a;
+  --k-kraken: #5a3fa0;
+  --k-kraken-2: #33215f;
+  --k-whale: #3c6fb2;
+  --k-whale-2: #23477a;
 }
 
 * {
@@ -739,6 +745,9 @@ a {
 .card.sk { background: linear-gradient(180deg, #23232e, var(--k-sk)); border-color: var(--gold); color: var(--gold); }
 .card.mermaid { background: linear-gradient(180deg, var(--k-mermaid), var(--k-mermaid-2)); }
 .card.tigress { background: linear-gradient(180deg, var(--k-tigress), var(--k-tigress-2)); }
+.card.loot { background: linear-gradient(180deg, var(--k-loot), var(--k-loot-2)); }
+.card.kraken { background: linear-gradient(180deg, var(--k-kraken), var(--k-kraken-2)); }
+.card.whale { background: linear-gradient(180deg, var(--k-whale), var(--k-whale-2)); }
 
 .card .ck {
   font-size: 24px;

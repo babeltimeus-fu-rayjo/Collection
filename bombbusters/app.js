@@ -1963,9 +1963,9 @@ function showResult(view, sess) {
   }
 }
 
-// Overlays wait ~1.8s the first time they appear so the last play is visible;
+// Overlays hold back so the final play stays visible for a good while;
 // once shown they update instantly.
-const OVERLAY_DELAY = 1800;
+const OVERLAY_DELAY = 4800;
 const overlayTimers = new Map();
 const overlayPending = new Map();
 

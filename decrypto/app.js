@@ -1723,8 +1723,8 @@ function showResult(view, sess) {
   }
 }
 
-// Overlays wait ~1.8s the first time so the final reveal is visible.
-const OVERLAY_DELAY = 1800;
+// Overlays hold back a good while so the final reveal stays visible.
+const OVERLAY_DELAY = 4800;
 const overlayTimers = new Map();
 const overlayPending = new Map();
 

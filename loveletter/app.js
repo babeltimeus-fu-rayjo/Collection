@@ -1871,9 +1871,9 @@ function showGameover(view, sess) {
   if (view.winner === view.you) confetti();
 }
 
-// Overlays wait ~1.8s the first time they appear so the last play is visible;
-// once shown they update instantly.
-const OVERLAY_DELAY = 1800;
+// Overlays hold back so the final play — and any table talk about it —
+// stays visible for a good while; once shown they update instantly.
+const OVERLAY_DELAY = 4800;
 const overlayTimers = new Map();
 
 function settleOverlay(sel, wanted, show) {
@@ -1892,13 +1892,14 @@ function settleOverlay(sel, wanted, show) {
     return;
   }
   if (pending) return;
+  const delay = Math.max(OVERLAY_DELAY, talkUntil - Date.now() + 800);
   overlayTimers.set(
     sel,
     setTimeout(() => {
       overlayTimers.delete(sel);
       overlayPending.delete(sel);
       show();
-    }, OVERLAY_DELAY),
+    }, delay),
   );
 }
 

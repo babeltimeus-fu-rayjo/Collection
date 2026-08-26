@@ -653,18 +653,42 @@ class HostSession {
     return null;
   }
 
+  // A lone card is no decision: when the player to act holds exactly one
+  // card (and it isn't the Tigress, which still wants a declaration), the
+  // host plays it for them — human, offline, or bot alike.
+  forcedActor() {
+    const g = this.G;
+    if (!g || g.phase !== 'play') return null;
+    const seat = turnSeat(g);
+    if (seat == null) return null;
+    const p = g.players.find((q) => q.seat === seat);
+    if (!p || p.hand.length !== 1 || p.hand[0].kind === 'tigress') return null;
+    return seat;
+  }
+
   // Bots think in the host's browser; the pause keeps consecutive bot turns
-  // readable. Bids come quicker since everyone bids at once.
+  // readable. Bids come quicker since everyone bids at once, and a forced
+  // last card snaps down almost immediately.
   scheduleBots() {
     clearTimeout(this.botTimer);
     if (!this.G) return;
+    const forced = this.forcedActor();
     const actor = this.botActor();
-    if (actor == null) return;
-    let delay = this.G.phase === 'bid' ? 900 + Math.random() * 900 : 4600 + Math.random() * 1600;
+    if (actor == null && forced == null) return;
+    let delay;
+    if (forced != null) delay = 1600 + Math.random() * 600;
+    else delay = this.G.phase === 'bid' ? 900 + Math.random() * 900 : 4600 + Math.random() * 1600;
     if (this.trickPauseUntil) delay = Math.max(delay, this.trickPauseUntil - Date.now());
     if (this.talkPauseUntil) delay = Math.max(delay, this.talkPauseUntil - Date.now());
     this.botTimer = setTimeout(() => {
       if (!this.G) return;
+      const fseat = this.forcedActor();
+      if (fseat != null) {
+        const p = this.G.players.find((q) => q.seat === fseat);
+        applyMove(this.G, fseat, { kind: 'play', cardId: p.hand[0].id });
+        this.broadcast();
+        return;
+      }
       const seat = this.botActor();
       if (seat == null) return;
       const move = botChoose(this.G, seat);
@@ -1268,7 +1292,9 @@ function renderTrick(view) {
     box.append(label);
     return;
   }
-  label.append(el('span', '', showLast ? 'Trick taken!' : `Trick ${view.trickNo} of ${view.dealt}`));
+  label.append(
+    el('span', '', showLast ? (lastTrick.destroyed ? 'Trick devoured — nobody takes it!' : 'Trick taken!') : `Trick ${view.trickNo} of ${view.dealt}`),
+  );
   if (!showLast && view.trick) {
     if (view.trick.suit) {
       const chip = el('span', `suitchip`, `follow ${view.trick.suit}`);
@@ -1302,6 +1328,7 @@ function renderHand(view) {
     }
   }
   const myTurn = view.phase === 'play' && view.turn === view.you && !talkHold();
+  const forced = forcedPlay(view); // the host plays a lone card for you
   const legal = new Set(view.legal || []);
   let prev = null;
   for (const c of view.hand) {
@@ -1315,12 +1342,18 @@ function renderHand(view) {
       if (prev) prev.after(node);
       else box.prepend(node);
     }
-    const isLegal = myTurn && legal.has(c.id);
+    const isLegal = myTurn && legal.has(c.id) && !forced;
     node.disabled = !isLegal;
-    node.classList.toggle('illegal', myTurn && !isLegal);
+    node.classList.toggle('illegal', myTurn && !forced && !legal.has(c.id));
     node.classList.toggle('sel', selCardId === c.id);
     prev = node;
   }
+}
+
+// One card, no choice: the host snaps it onto the table for you — no
+// controls, no YOUR TURN blare. The Tigress still asks for her declaration.
+function forcedPlay(view) {
+  return view.phase === 'play' && view.turn === view.you && view.hand.length === 1 && view.hand[0].kind !== 'tigress';
 }
 
 function onHandClick(cardId) {
@@ -1395,6 +1428,10 @@ function renderActionBar(view) {
   const myTurn = view.turn === view.you && !talkHold();
   if (!myTurn) {
     row().append(label(talkHold() ? 'The table is talking…' : `${seatName(view, view.turn)} is choosing a card…`));
+    return;
+  }
+  if (forcedPlay(view)) {
+    row().append(label(`Last card — your ${cardLabel(view.hand[0])} plays itself. ⚓`));
     return;
   }
   const selCard = view.hand.find((c) => c.id === selCardId);
@@ -1589,18 +1626,28 @@ function renderGame(view, sess) {
   renderHand(view);
   renderActionBar(view);
   renderLog(view);
-  announceTurn(view, view.phase === 'play' && view.turn === view.you && !talkHold());
+  announceTurn(view, view.phase === 'play' && view.turn === view.you && !talkHold() && !forcedPlay(view));
   paintChatBubbles();
 
   if (view.fx && view.fx.seq !== lastFxSeq) {
     lastFxSeq = view.fx.seq;
     const fx = view.fx;
     if (fx.kind === 'trick' || ((fx.kind === 'roundEnd' || fx.kind === 'over') && fx.trick)) {
-      lastTrick = { plays: fx.trick, winnerCard: fx.winnerCard, seat: fx.seat, ts: Date.now() };
+      lastTrick = { plays: fx.trick, winnerCard: fx.winnerCard, seat: fx.seat, destroyed: fx.destroyed || null, ts: Date.now() };
       // the trick winner is the headline — big flash, and the table holds
       const wp = (fx.trick || []).find((x) => x.card.id === fx.winnerCard);
-      flash(`${seatName(view, fx.seat)} takes the trick${wp ? ` with ${cardLabel(wp.card, wp.as)}` : ''}!`, '', 3700);
-      const tile = document.querySelector(`.seat[data-seat="${fx.seat}"]`);
+      if (fx.destroyed) {
+        flash(
+          fx.destroyed === 'kraken'
+            ? '🐙 The Kraken devours the trick — nobody takes it!'
+            : '🐋 The White Whale swallows the trick whole!',
+          '',
+          3700,
+        );
+      } else {
+        flash(`${seatName(view, fx.seat)} takes the trick${wp ? ` with ${cardLabel(wp.card, wp.as)}` : ''}!`, '', 3700);
+      }
+      const tile = fx.destroyed ? null : document.querySelector(`.seat[data-seat="${fx.seat}"]`);
       if (tile) {
         tile.classList.remove('won-pulse');
         void tile.offsetWidth;
@@ -1808,8 +1855,9 @@ function showGameover(view, sess) {
   }
 }
 
-// Overlays wait ~1.8s the first time so the last play stays visible.
-const OVERLAY_DELAY = 3200;
+// Overlays hold back so the final trick — and any table talk about it —
+// stays visible for a good while before the tally covers the table.
+const OVERLAY_DELAY = 6200;
 const overlayTimers = new Map();
 const overlayPending = new Map();
 
@@ -1830,13 +1878,14 @@ function settleOverlay(sel, wanted, show) {
     return;
   }
   if (pending) return;
+  const delay = Math.max(OVERLAY_DELAY, talkUntil - Date.now() + 800);
   overlayTimers.set(
     sel,
     setTimeout(() => {
       overlayTimers.delete(sel);
       overlayPending.delete(sel);
       show();
-    }, OVERLAY_DELAY),
+    }, delay),
   );
 }
 

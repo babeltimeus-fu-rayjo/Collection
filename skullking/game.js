@@ -16,10 +16,19 @@
 //     bid pays ±10 × the round number. Bonuses only with an exact bid:
 //     captured 14s +10 (black +20), Skull King +30 per pirate played before
 //     him, a mermaid capturing the Skull King +50.
-//   - Deck: the modern 70-card deck (mermaids included). The Legendary
-//     expansion menu (Loot, Kraken, White Whale) is not implemented.
+//   - Deck: the modern 70-card deck (mermaids included) PLUS the Legendary
+//     expansion menu: 2 Loot, the Kraken and the White Whale (74 cards).
+//       · Loot plays like an escape, but allies its player with whoever wins
+//         the trick: if BOTH hit their bids exactly, each earns +20.
+//       · Kraken: nobody wins the trick — it is devoured, nothing is
+//         captured. Whoever WOULD have won leads the next trick.
+//       · White Whale: every special card in the trick is swallowed; the
+//         highest number wins regardless of suit (first played breaks ties,
+//         only the numbers are captured). No numbers at all → the trick is
+//         destroyed like the Kraken. Kraken + Whale together: the one played
+//         LAST takes precedence. Leading either frees the trick of suit.
 
-export const PROTO = 2;
+export const PROTO = 3;
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 8;
 export const ROUNDS = 10;
@@ -70,6 +79,9 @@ export const KIND_META = {
   sk: { name: 'Skull King', icon: '☠' },
   mermaid: { name: 'Mermaid', icon: '🧜' },
   tigress: { name: 'Tigress', icon: '🐯' },
+  loot: { name: 'Loot', icon: '💰' },
+  kraken: { name: 'Kraken', icon: '🐙' },
+  whale: { name: 'White Whale', icon: '🐋' },
 };
 
 export function buildDeck() {
@@ -83,6 +95,9 @@ export function buildDeck() {
   for (let i = 0; i < 2; i++) deck.push({ id: id++, kind: 'mermaid' });
   deck.push({ id: id++, kind: 'sk' });
   deck.push({ id: id++, kind: 'tigress' });
+  for (let i = 0; i < 2; i++) deck.push({ id: id++, kind: 'loot' });
+  deck.push({ id: id++, kind: 'kraken' });
+  deck.push({ id: id++, kind: 'whale' });
   return deck;
 }
 
@@ -124,9 +139,11 @@ function setFx(G, fx) {
   G.fx = { seq: G.fxSeq, ...fx };
 }
 
-// effective kind of a played card (the Tigress becomes what was declared)
+// effective kind of a played card (the Tigress becomes what was declared;
+// Loot behaves exactly like an escape in the trick itself)
 function effKind(play) {
   if (play.card.kind === 'tigress') return play.as === 'pirate' ? 'pirate' : 'escape';
+  if (play.card.kind === 'loot') return 'escape';
   return play.card.kind;
 }
 
@@ -159,6 +176,7 @@ export function newMatch(roster, scoringKey) {
     players,
     trick: null,
     trickNo: 0,
+    alliances: [],
     log: [],
     chatter: [],
     chatSeq: 0,
@@ -176,6 +194,7 @@ export function dealRound(G) {
   G.phase = 'bid';
   G.trick = null;
   G.trickNo = 0;
+  G.alliances = []; // loot pacts live for one round
   G.roundResult = null;
   G.dealerIdx = (G.dealerIdx + 1) % G.players.length;
   const deck = shuffle(buildDeck());
@@ -196,7 +215,10 @@ export function dealRound(G) {
 }
 
 function handOrder(a, b) {
-  const rank = (c) => (c.kind === 'num' ? SUITS.indexOf(c.suit) * 20 + c.v : 100 + ['escape', 'tigress', 'mermaid', 'pirate', 'sk'].indexOf(c.kind) * 5);
+  const rank = (c) =>
+    c.kind === 'num'
+      ? SUITS.indexOf(c.suit) * 20 + c.v
+      : 100 + ['escape', 'loot', 'tigress', 'mermaid', 'pirate', 'sk', 'whale', 'kraken'].indexOf(c.kind) * 5;
   return rank(a) - rank(b);
 }
 
@@ -289,7 +311,10 @@ function doPlay(G, p, move) {
   }
   p.lastAction = `played ${cardLabel(card, as)}`;
   addLog(G, `${p.name} plays ${cardLabel(card, as)}.`);
-  say(G, p.seat, `I play ${cardLabel(card, as)}.`);
+  if (card.kind === 'kraken') say(G, p.seat, 'Release the Kraken! 🐙');
+  else if (card.kind === 'whale') say(G, p.seat, 'Thar she blows — the White Whale! 🐋');
+  else if (card.kind === 'loot') say(G, p.seat, 'Loot on the table — allies with whoever takes this trick. 🤝');
+  else say(G, p.seat, `I play ${cardLabel(card, as)}.`);
 
   if (t.plays.length === G.players.length) resolveTrick(G);
   return { ok: true };
@@ -297,25 +322,67 @@ function doPlay(G, p, move) {
 
 function resolveTrick(G) {
   const t = G.trick;
-  const winnerPlay = trickWinner(t);
-  const winner = playerBySeat(G, winnerPlay.seat);
-  winner.tricksWon += 1;
-  winner.captured.push(t.plays.map((pl) => ({ seat: pl.seat, card: pl.card, as: pl.as })));
-  const withCard = cardLabel(winnerPlay.card, winnerPlay.as);
-  addLog(G, `${winner.name} takes trick ${G.trickNo} with ${withCard} (${winner.tricksWon} so far, bid ${winner.bid}).`);
-  say(G, winner.seat, `Mine! Trick ${G.trickNo} with ${withCard}.`, 900);
-  winner.lastAction = `took trick ${G.trickNo} with ${withCard}`;
-  setFx(G, { kind: 'trick', seat: winner.seat, trick: t.plays, winnerCard: winnerPlay.card.id });
+  const r = evalTrick(t);
+
+  if (!r.winner) {
+    // the Kraken (or an all-special Whale) destroyed the trick: nothing is
+    // captured, nobody's count moves — the would-be winner leads next
+    const beast = r.destroyed === 'kraken' ? 'Kraken' : 'White Whale';
+    const beastPlay = t.plays.find((pl) => pl.card.kind === r.destroyed);
+    const leader = playerBySeat(G, r.leadPlay.seat);
+    addLog(G, `The ${beast} devours trick ${G.trickNo} — nobody takes it. ${leader.name} would have won and leads next.`);
+    if (beastPlay) {
+      say(
+        G,
+        beastPlay.seat,
+        r.destroyed === 'kraken' ? 'The Kraken devours the trick — nobody takes it! 🐙' : 'The Whale swallows the lot — nobody takes it! 🐋',
+        900,
+      );
+    }
+    say(G, leader.seat, 'It would have been mine… I lead next.', 1000);
+    leader.lastAction = `lost trick ${G.trickNo} to the ${beast}`;
+    setFx(G, { kind: 'trick', seat: leader.seat, trick: t.plays, winnerCard: null, destroyed: r.destroyed });
+  } else {
+    const winnerPlay = r.winner;
+    const winner = playerBySeat(G, winnerPlay.seat);
+    winner.tricksWon += 1;
+    // a Whale-won trick captures only the numbers — the specials it
+    // swallowed carry no bonuses for anyone
+    const kept = r.byWhale ? t.plays.filter((pl) => pl.card.kind === 'num') : t.plays;
+    winner.captured.push(kept.map((pl) => ({ seat: pl.seat, card: pl.card, as: pl.as })));
+    const withCard = cardLabel(winnerPlay.card, winnerPlay.as);
+    addLog(G, `${winner.name} takes trick ${G.trickNo} with ${withCard} (${winner.tricksWon} so far, bid ${winner.bid}).`);
+    say(
+      G,
+      winner.seat,
+      r.byWhale ? `Mine! The Whale sinks the specials — trick ${G.trickNo} goes to my ${withCard}.` : `Mine! Trick ${G.trickNo} with ${withCard}.`,
+      900,
+    );
+    winner.lastAction = `took trick ${G.trickNo} with ${withCard}`;
+    // Loot pacts: each loot in a (normally) won trick allies its player with
+    // the winner. The Whale swallows loot along with the other specials.
+    if (!r.byWhale) {
+      for (const pl of t.plays) {
+        if (pl.card.kind !== 'loot' || pl.seat === winnerPlay.seat) continue;
+        G.alliances.push({ a: pl.seat, b: winnerPlay.seat });
+        const giver = playerBySeat(G, pl.seat);
+        addLog(G, `${winner.name} pockets ${giver.name}'s loot — allies: both bids exact pays each +20.`);
+        say(G, winnerPlay.seat, `And ${giver.name}'s loot — we're allies now. 🤝`, 900);
+      }
+    }
+    setFx(G, { kind: 'trick', seat: winner.seat, trick: t.plays, winnerCard: winnerPlay.card.id });
+  }
 
   if (G.players.every((p) => p.hand.length === 0)) {
     scoreRound(G);
     return;
   }
   G.trickNo += 1;
-  G.trick = { leader: winner.seat, plays: [], suit: null, free: false };
+  G.trick = { leader: r.leadPlay.seat, plays: [], suit: null, free: false };
 }
 
-// exported for tests: decide who wins a completed trick
+// exported for tests: decide who wins a completed trick under the standard
+// rules (no Kraken/Whale in sight — resolveTrick handles those via evalTrick)
 export function trickWinner(t) {
   const plays = t.plays;
   const sk = plays.find((pl) => effKind(pl) === 'sk');
@@ -332,6 +399,43 @@ export function trickWinner(t) {
   const led = nums.filter((pl) => pl.card.suit === t.suit);
   const pool = led.length ? led : nums; // suit is always set when numbers exist
   return pool.reduce((a, b) => (b.card.v > a.card.v ? b : a));
+}
+
+// highest number regardless of suit; first played breaks ties (reduce keeps
+// the earlier play unless strictly beaten)
+function whaleWinner(plays) {
+  const nums = plays.filter((pl) => pl.card.kind === 'num');
+  if (!nums.length) return null;
+  return nums.reduce((a, b) => (b.card.v > a.card.v ? b : a));
+}
+
+// exported for tests: full evaluation of a completed trick, expansion cards
+// included. Returns { winner, leadPlay, destroyed, byWhale }:
+//   winner    — the capturing play, or null when the trick is destroyed
+//   leadPlay  — whose play leads the next trick (the would-be winner when
+//               the trick is destroyed)
+//   destroyed — null | 'kraken' | 'whale'
+//   byWhale   — true when the Whale decided it (only numbers are captured)
+export function evalTrick(t) {
+  const plays = t.plays;
+  const kIdx = plays.findIndex((pl) => pl.card.kind === 'kraken');
+  const wIdx = plays.findIndex((pl) => pl.card.kind === 'whale');
+  const rest = plays.filter((pl) => pl.card.kind !== 'kraken' && pl.card.kind !== 'whale');
+  const stdRest = () => (rest.length ? trickWinner({ suit: t.suit, plays: rest }) : plays[0]);
+  if (kIdx >= 0 && (wIdx < 0 || kIdx > wIdx)) {
+    // Kraken governs (played after the Whale, if both): trick destroyed; the
+    // would-be winner — under Whale rules if the Whale is out — leads next
+    const would = wIdx >= 0 ? whaleWinner(rest) || stdRest() : stdRest();
+    return { winner: null, leadPlay: would, destroyed: 'kraken', byWhale: false };
+  }
+  if (wIdx >= 0) {
+    const w = whaleWinner(rest);
+    if (w) return { winner: w, leadPlay: w, destroyed: null, byWhale: true };
+    // nothing but specials — the Whale swallows the trick whole
+    return { winner: null, leadPlay: stdRest(), destroyed: 'whale', byWhale: false };
+  }
+  const w = trickWinner(t);
+  return { winner: w, leadPlay: w, destroyed: null, byWhale: false };
 }
 
 // exported for tests: bonus points for one captured trick won with `winnerPlay`
@@ -352,7 +456,7 @@ export function trickBonus(plays, winnerPlay) {
 }
 
 function scoreRound(G) {
-  const lines = [];
+  const tallies = new Map();
   for (const p of G.players) {
     const off = Math.abs(p.tricksWon - p.bid);
     const exact = off === 0;
@@ -376,6 +480,21 @@ function scoreRound(G) {
       else bidPts = exact ? 20 * p.bid : -10 * off;
       bonusPts = exact ? rawBonus : 0;
     }
+    tallies.set(p.seat, { p, exact, bidPts, bonusPts });
+  }
+  // Loot pacts pay out last: +20 to each partner, but only when BOTH bids
+  // landed exactly (in every scoring system — it is a bonus among bonuses)
+  for (const al of G.alliances) {
+    const ta = tallies.get(al.a);
+    const tb = tallies.get(al.b);
+    if (!ta || !tb || !ta.exact || !tb.exact) continue;
+    ta.bonusPts += 20;
+    tb.bonusPts += 20;
+    addLog(G, `Allied plunder! ${ta.p.name} & ${tb.p.name} both made their bids — +20 each.`);
+  }
+  const lines = [];
+  for (const p of G.players) {
+    const { bidPts, bonusPts } = tallies.get(p.seat);
     p.score += bidPts + bonusPts;
     p.history.push({ round: G.round, bid: p.bid, tricks: p.tricksWon, bidPts, bonusPts, total: p.score });
     lines.push({ seat: p.seat, bid: p.bid, tricks: p.tricksWon, bidPts, bonusPts, total: p.score });
@@ -390,7 +509,7 @@ function scoreRound(G) {
   // so clients can still show who took the final trick
   const lastTrickFx = G.fx && G.fx.kind === 'trick' ? G.fx : null;
   const carry = lastTrickFx
-    ? { seat: lastTrickFx.seat, trick: lastTrickFx.trick, winnerCard: lastTrickFx.winnerCard }
+    ? { seat: lastTrickFx.seat, trick: lastTrickFx.trick, winnerCard: lastTrickFx.winnerCard, destroyed: lastTrickFx.destroyed || null }
     : {};
   if (G.round >= ROUNDS) {
     G.phase = 'over';
@@ -522,6 +641,8 @@ function cardStrength(c) {
   if (c.kind === 'tigress') return 0.65; // flexible either way
   if (c.kind === 'mermaid') return 0.55;
   if (c.kind === 'escape') return 0;
+  // loot never wins; the beasts sink tricks rather than take them
+  if (c.kind === 'loot' || c.kind === 'kraken' || c.kind === 'whale') return 0;
   if (c.suit === 'black') {
     if (c.v >= 12) return 0.75;
     if (c.v >= 8) return 0.5;
@@ -537,7 +658,7 @@ function cardStrength(c) {
 function beatsSoFar(t, plays, cand, as) {
   const virt = { seat: -1, card: cand, as };
   const test = { suit: t.suit, plays: [...plays, virt] };
-  return trickWinner(test) === virt;
+  return evalTrick(test).winner === virt;
 }
 
 export function botChoose(G, seat) {
