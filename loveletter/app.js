@@ -28,6 +28,24 @@ import {
   viewFor,
   botChoose,
 } from './game.js';
+import { initSettings } from '../common/settings.js';
+
+// The ⚙ drawer (bottom-left): live-tunable pacing for testing. Defaults
+// reproduce the shipped behavior exactly; overrides stay in this browser.
+const cfg = initSettings('ll', [
+  { key: 'botPlay', label: 'Bot turn delay', def: [4600, 1600], section: 'Host pacing', host: true },
+  { key: 'talkPausePad', label: 'Talk pause padding', def: 4400, section: 'Host pacing', host: true, hint: 'Extra host hold after the newest speech line, before bots act.' },
+  { key: 'autoNext', label: 'Auto-deal the next round', def: false, bool: true, section: 'Host pacing', host: true },
+  { key: 'autoNextMs', label: '…once the tally showed for', def: 4000, section: 'Host pacing', host: true },
+  { key: 'talkScale', label: 'Speech-line waits ×', def: 1, min: 0, max: 4, step: 0.1, unit: '×', ms: false, section: 'Table talk', hint: 'Scales the scripted pauses between table-talk lines.' },
+  { key: 'talkHoldPad', label: 'Turn hold after last line', def: 1600, section: 'Table talk' },
+  { key: 'bubbleSay', label: 'Game bubbles linger', def: 4200, section: 'Bubbles & banners' },
+  { key: 'bubbleChat', label: 'Chat bubbles linger', def: 6500, section: 'Bubbles & banners' },
+  { key: 'bubbleTrunc', label: 'Bubble text cap', def: 84, min: 12, max: 400, step: 4, unit: 'ch', ms: false, section: 'Bubbles & banners' },
+  { key: 'flashMs', label: 'Small banner duration', def: 1600, section: 'Bubbles & banners' },
+  { key: 'flashBig', label: 'Big banner duration', def: 3600, section: 'Bubbles & banners', hint: 'The YOUR TURN banner.' },
+  { key: 'overlayDelay', label: 'Round/game tally delay', def: 4800, section: 'Overlays' },
+]);
 
 // ---------------------------------------------------------------- networking
 
@@ -125,14 +143,14 @@ function toast(text, ms = 3000) {
 }
 
 let flashTimer = null;
-function flash(text, cls = '', ms = 1600) {
+function flash(text, cls = '', ms = 0) {
   const b = $('#banner');
   b.textContent = text;
   b.className = 'flash hidden';
   void b.offsetWidth;
   b.className = `flash ${cls}`;
   clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => b.classList.add('hidden'), ms);
+  flashTimer = setTimeout(() => b.classList.add('hidden'), ms || cfg('flashMs'));
 }
 
 function setHomeStatus(text, isError = false) {
@@ -249,11 +267,11 @@ function showChatBubble(m) {
   if (prev) clearTimeout(prev.timer);
   chatBubbles.set(m.seat, {
     say: !!m.say,
-    text: m.text.length > 84 ? `${m.text.slice(0, 84)}…` : m.text,
+    text: m.text.length > cfg.raw('bubbleTrunc') ? `${m.text.slice(0, cfg.raw('bubbleTrunc'))}…` : m.text,
     timer: setTimeout(() => {
       chatBubbles.delete(m.seat);
       paintChatBubbles();
-    }, m.say ? 4200 : 6500),
+    }, m.say ? cfg('bubbleSay') : cfg('bubbleChat')),
   });
   paintChatBubbles();
 }
@@ -633,7 +651,7 @@ class HostSession {
         else if (me && me.hand[0]) applyMove(g, seat, { kind: 'play', cardId: me.hand[0].id });
       }
       this.broadcast();
-    }, Math.max(4600 + Math.random() * 1600, this.talkPauseUntil ? this.talkPauseUntil - Date.now() : 0));
+    }, Math.max(cfg.range('botPlay'), this.talkPauseUntil ? this.talkPauseUntil - Date.now() : 0));
   }
 
   lobbyMsg() {
@@ -715,7 +733,8 @@ class HostSession {
           this._talkSeen = c.n;
         }
       }
-      if (talkTotal != null) this.talkPauseUntil = Math.max(this.talkPauseUntil || 0, Date.now() + talkTotal + 4400);
+      if (talkTotal != null)
+        this.talkPauseUntil = Math.max(this.talkPauseUntil || 0, Date.now() + Math.round(talkTotal * cfg.raw('talkScale')) + cfg('talkPausePad'));
     }
     const wnames = this.watchers.map((x) => x.name);
     for (const [seat, conn] of this.conns) {
@@ -728,6 +747,13 @@ class HostSession {
     resetChoice();
     showScreen('game');
     renderGame({ ...viewFor(this.G, 0, this.code), watchers: wnames }, this);
+    // testing convenience: the host can let rounds deal themselves out
+    clearTimeout(this.autoNextTimer);
+    if (this.G.phase === 'roundEnd' && cfg.on('autoNext')) {
+      this.autoNextTimer = setTimeout(() => {
+        if (this.G && this.G.phase === 'roundEnd') this.nextRound();
+      }, cfg('overlayDelay') + cfg('autoNextMs'));
+    }
     this.scheduleBots();
   }
 
@@ -756,6 +782,7 @@ class HostSession {
   destroy() {
     clearInterval(this.hb);
     clearTimeout(this.botTimer);
+    clearTimeout(this.autoNextTimer);
     try {
       this.peer.destroy();
     } catch {}
@@ -1719,7 +1746,7 @@ function playChatter(view) {
   for (const c of items) {
     if (c.n <= chatterSeen) continue;
     chatterSeen = c.n;
-    at += c.wait || 0;
+    at += Math.round((c.wait || 0) * cfg.raw('talkScale'));
     if (at <= 0) showChatBubble({ seat: c.seat, text: c.text, say: true });
     else {
       const line = c;
@@ -1728,7 +1755,7 @@ function playChatter(view) {
     heard = true;
   }
   if (heard) {
-    talkUntil = Math.max(talkUntil, Date.now() + at + 1600);
+    talkUntil = Math.max(talkUntil, Date.now() + at + cfg('talkHoldPad'));
     clearTimeout(talkTimer);
     talkTimer = setTimeout(() => {
       if (lastView) renderGame(lastView, session);
@@ -1750,7 +1777,7 @@ function announceTurn(view, isMine) {
     hadTurn = isMine;
     return;
   }
-  if (isMine && !hadTurn) flash('YOUR TURN', '', 3600);
+  if (isMine && !hadTurn) flash('YOUR TURN', '', cfg('flashBig'));
   hadTurn = isMine;
 }
 
@@ -1873,7 +1900,6 @@ function showGameover(view, sess) {
 
 // Overlays hold back so the final play — and any table talk about it —
 // stays visible for a good while; once shown they update instantly.
-const OVERLAY_DELAY = 4800;
 const overlayTimers = new Map();
 
 function settleOverlay(sel, wanted, show) {
@@ -1892,7 +1918,7 @@ function settleOverlay(sel, wanted, show) {
     return;
   }
   if (pending) return;
-  const delay = Math.max(OVERLAY_DELAY, talkUntil - Date.now() + 800);
+  const delay = Math.max(cfg('overlayDelay'), talkUntil - Date.now() + 800);
   overlayTimers.set(
     sel,
     setTimeout(() => {

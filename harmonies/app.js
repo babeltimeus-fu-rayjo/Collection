@@ -33,6 +33,18 @@ import {
   markSeatClaimed,
   markSeatResigned,
 } from './game.js';
+import { initSettings } from '../common/settings.js';
+
+// The ⚙ drawer (bottom-left): live-tunable pacing for testing. Defaults
+// reproduce the shipped behavior exactly; overrides stay in this browser.
+const cfg = initSettings('hrm', [
+  { key: 'botTurn', label: 'Bot turn delay', def: [2400, 1400], section: 'Host pacing', host: true },
+  { key: 'botMid', label: 'Bot mid-turn step delay', def: [650, 550], section: 'Host pacing', host: true, hint: 'Pauses between one bot turn’s token placements.' },
+  { key: 'bubbleChat', label: 'Chat bubbles linger', def: 6500, section: 'Bubbles & banners' },
+  { key: 'bubbleTrunc', label: 'Bubble text cap', def: 84, min: 12, max: 400, step: 4, unit: 'ch', ms: false, section: 'Bubbles & banners' },
+  { key: 'flashMs', label: 'Banner duration', def: 1700, section: 'Bubbles & banners' },
+  { key: 'overlayDelay', label: 'Result screen delay', def: 4800, section: 'Overlays' },
+]);
 
 // ---------------------------------------------------------------- networking
 
@@ -141,7 +153,7 @@ function flash(text, cls = '') {
   void b.offsetWidth;
   b.className = `flash ${cls}`;
   clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => b.classList.add('hidden'), 1700);
+  flashTimer = setTimeout(() => b.classList.add('hidden'), cfg('flashMs'));
 }
 
 function setHomeStatus(text, isError = false) {
@@ -257,11 +269,11 @@ function showChatBubble(m) {
   const prev = chatBubbles.get(m.seat);
   if (prev) clearTimeout(prev.timer);
   chatBubbles.set(m.seat, {
-    text: m.text.length > 84 ? `${m.text.slice(0, 84)}…` : m.text,
+    text: m.text.length > cfg.raw('bubbleTrunc') ? `${m.text.slice(0, cfg.raw('bubbleTrunc'))}…` : m.text,
     timer: setTimeout(() => {
       chatBubbles.delete(m.seat);
       paintChatBubbles();
-    }, 6500),
+    }, cfg('bubbleChat')),
   });
   paintChatBubbles();
 }
@@ -635,7 +647,7 @@ class HostSession {
     if (!this.seatCovered(seat)) return;
     const p = this.G.players.find((q) => q.seat === seat);
     const midTurn = p && (p.tookTokens || p.tray.length);
-    const delay = midTurn ? 650 + Math.random() * 550 : 2400 + Math.random() * 1400;
+    const delay = midTurn ? cfg.range('botMid') : cfg.range('botTurn');
     this.botTimer = setTimeout(() => {
       if (!this.G || this.G.phase !== 'playing') return;
       const seat2 = this.G.turn;
@@ -1885,7 +1897,6 @@ function showGameover(view, sess) {
 }
 
 // Overlays hold back a good while so the final placement stays visible.
-const OVERLAY_DELAY = 4800;
 const overlayTimers = new Map();
 const overlayPending = new Map();
 
@@ -1912,7 +1923,7 @@ function settleOverlay(sel, wanted, show) {
       overlayTimers.delete(sel);
       overlayPending.delete(sel);
       show();
-    }, OVERLAY_DELAY),
+    }, cfg('overlayDelay')),
   );
 }
 

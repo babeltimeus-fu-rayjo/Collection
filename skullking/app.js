@@ -32,6 +32,28 @@ import {
   markSeatResigned,
   turnSeat,
 } from './game.js';
+import { initSettings } from '../common/settings.js';
+
+// The ⚙ drawer (bottom-left): live-tunable pacing for testing. Defaults
+// reproduce the shipped behavior exactly; overrides stay in this browser.
+const cfg = initSettings('skk', [
+  { key: 'botBid', label: 'Bot bid delay', def: [900, 900], section: 'Host pacing', host: true },
+  { key: 'botPlay', label: 'Bot play delay', def: [4600, 1600], section: 'Host pacing', host: true },
+  { key: 'botForced', label: 'Forced last-card delay', def: [1600, 600], section: 'Host pacing', host: true },
+  { key: 'trickPause', label: 'Hold after each trick', def: 3400, section: 'Host pacing', host: true },
+  { key: 'talkPausePad', label: 'Talk pause padding', def: 4400, section: 'Host pacing', host: true, hint: 'Extra host hold after the newest speech line, before bots act.' },
+  { key: 'autoNext', label: 'Auto-deal the next round', def: false, bool: true, section: 'Host pacing', host: true },
+  { key: 'autoNextMs', label: '…once the tally showed for', def: 4000, section: 'Host pacing', host: true },
+  { key: 'talkScale', label: 'Speech-line waits ×', def: 1, min: 0, max: 4, step: 0.1, unit: '×', ms: false, section: 'Table talk', hint: 'Scales the scripted pauses between table-talk lines.' },
+  { key: 'talkHoldPad', label: 'Turn hold after last line', def: 1600, section: 'Table talk' },
+  { key: 'bubbleSay', label: 'Game bubbles linger', def: 4200, section: 'Bubbles & banners' },
+  { key: 'bubbleChat', label: 'Chat bubbles linger', def: 6500, section: 'Bubbles & banners' },
+  { key: 'bubbleTrunc', label: 'Bubble text cap', def: 84, min: 12, max: 400, step: 4, unit: 'ch', ms: false, section: 'Bubbles & banners' },
+  { key: 'flashMs', label: 'Small banner duration', def: 1700, section: 'Bubbles & banners' },
+  { key: 'flashBig', label: 'Big banner duration', def: 3700, section: 'Bubbles & banners', hint: 'YOUR TURN and trick-winner banners.' },
+  { key: 'trickLinger', label: 'Taken trick lingers', def: 3200, section: 'Overlays' },
+  { key: 'overlayDelay', label: 'Round/game tally delay', def: 6200, section: 'Overlays' },
+]);
 
 // ---------------------------------------------------------------- networking
 
@@ -138,14 +160,14 @@ function toast(text, ms = 3000) {
 }
 
 let flashTimer = null;
-function flash(text, cls = '', ms = 1700) {
+function flash(text, cls = '', ms = 0) {
   const b = $('#banner');
   b.textContent = text;
   b.className = 'flash hidden';
   void b.offsetWidth;
   b.className = `flash ${cls}`;
   clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => b.classList.add('hidden'), ms);
+  flashTimer = setTimeout(() => b.classList.add('hidden'), ms || cfg('flashMs'));
 }
 
 function setHomeStatus(text, isError = false) {
@@ -262,11 +284,11 @@ function showChatBubble(m) {
   if (prev) clearTimeout(prev.timer);
   chatBubbles.set(m.seat, {
     say: !!m.say,
-    text: m.text.length > 84 ? `${m.text.slice(0, 84)}…` : m.text,
+    text: m.text.length > cfg.raw('bubbleTrunc') ? `${m.text.slice(0, cfg.raw('bubbleTrunc'))}…` : m.text,
     timer: setTimeout(() => {
       chatBubbles.delete(m.seat);
       paintChatBubbles();
-    }, m.say ? 4200 : 6500),
+    }, m.say ? cfg('bubbleSay') : cfg('bubbleChat')),
   });
   paintChatBubbles();
 }
@@ -676,8 +698,8 @@ class HostSession {
     const actor = this.botActor();
     if (actor == null && forced == null) return;
     let delay;
-    if (forced != null) delay = 1600 + Math.random() * 600;
-    else delay = this.G.phase === 'bid' ? 900 + Math.random() * 900 : 4600 + Math.random() * 1600;
+    if (forced != null) delay = cfg.range('botForced');
+    else delay = this.G.phase === 'bid' ? cfg.range('botBid') : cfg.range('botPlay');
     if (this.trickPauseUntil) delay = Math.max(delay, this.trickPauseUntil - Date.now());
     if (this.talkPauseUntil) delay = Math.max(delay, this.talkPauseUntil - Date.now());
     this.botTimer = setTimeout(() => {
@@ -779,7 +801,7 @@ class HostSession {
   broadcast() {
     if (this.G && this.G.fx && this.G.fx.kind === 'trick' && this.G.fx.seq !== this._trickFxSeen) {
       this._trickFxSeen = this.G.fx.seq;
-      this.trickPauseUntil = Date.now() + 3400; // let everyone see who took it
+      this.trickPauseUntil = Date.now() + cfg('trickPause'); // let everyone see who took it
     }
     // pace the table: note how long the newest spoken exchange needs to
     // air, so bots do not start the next turn mid-conversation
@@ -795,7 +817,8 @@ class HostSession {
           this._talkSeen = c.n;
         }
       }
-      if (talkTotal != null) this.talkPauseUntil = Math.max(this.talkPauseUntil || 0, Date.now() + talkTotal + 4400);
+      if (talkTotal != null)
+        this.talkPauseUntil = Math.max(this.talkPauseUntil || 0, Date.now() + Math.round(talkTotal * cfg.raw('talkScale')) + cfg('talkPausePad'));
     }
     const wnames = this.watchers.map((x) => x.name);
     for (const [seat, conn] of this.conns) {
@@ -807,6 +830,13 @@ class HostSession {
     pendingMove = false;
     showScreen('game');
     renderGame({ ...viewFor(this.G, 0, this.code), watchers: wnames }, this);
+    // testing convenience: the host can let rounds deal themselves out
+    clearTimeout(this.autoNextTimer);
+    if (this.G.phase === 'roundEnd' && cfg.on('autoNext')) {
+      this.autoNextTimer = setTimeout(() => {
+        if (this.G && this.G.phase === 'roundEnd') this.nextRound(0);
+      }, cfg('overlayDelay') + cfg('autoNextMs'));
+    }
     this.scheduleBots();
   }
 
@@ -839,6 +869,7 @@ class HostSession {
   destroy() {
     clearInterval(this.hb);
     clearTimeout(this.botTimer);
+    clearTimeout(this.autoNextTimer);
     try {
       this.peer.destroy();
     } catch {}
@@ -1229,7 +1260,7 @@ function tableRows(view) {
 function playSlotEl(view, p) {
   const slot = el('div', 'pslot');
   const showLast =
-    lastTrick && Date.now() - lastTrick.ts < 3200 && (!view.trick || view.trick.plays.length === 0);
+    lastTrick && Date.now() - lastTrick.ts < cfg('trickLinger') && (!view.trick || view.trick.plays.length === 0);
   const t = showLast ? lastTrick : view.trick;
   const pl = t && t.plays ? t.plays.find((x) => x.seat === p.seat) : null;
   if (pl) {
@@ -1280,7 +1311,7 @@ function renderTrick(view) {
   // a finished trick lingers a moment so everyone sees who took it — including
   // the round's last trick, while the score overlay is still on its way
   const showLast =
-    lastTrick && Date.now() - lastTrick.ts < 3200 && (!view.trick || view.trick.plays.length === 0);
+    lastTrick && Date.now() - lastTrick.ts < cfg('trickLinger') && (!view.trick || view.trick.plays.length === 0);
   const t = showLast ? lastTrick : view.trick;
 
   if (view.phase === 'bid') {
@@ -1642,10 +1673,10 @@ function renderGame(view, sess) {
             ? '🐙 The Kraken devours the trick — nobody takes it!'
             : '🐋 The White Whale swallows the trick whole!',
           '',
-          3700,
+          cfg('flashBig'),
         );
       } else {
-        flash(`${seatName(view, fx.seat)} takes the trick${wp ? ` with ${cardLabel(wp.card, wp.as)}` : ''}!`, '', 3700);
+        flash(`${seatName(view, fx.seat)} takes the trick${wp ? ` with ${cardLabel(wp.card, wp.as)}` : ''}!`, '', cfg('flashBig'));
       }
       const tile = fx.destroyed ? null : document.querySelector(`.seat[data-seat="${fx.seat}"]`);
       if (tile) {
@@ -1659,7 +1690,7 @@ function renderGame(view, sess) {
           renderTrick(lastView);
           renderTable(lastView);
         }
-      }, 3300);
+      }, cfg('trickLinger') + 100);
       renderTrick(view);
       renderTable(view);
     } else if (fx.kind === 'bids') {
@@ -1723,7 +1754,7 @@ function playChatter(view) {
   for (const c of items) {
     if (c.n <= chatterSeen) continue;
     chatterSeen = c.n;
-    at += c.wait || 0;
+    at += Math.round((c.wait || 0) * cfg.raw('talkScale'));
     if (at <= 0) showChatBubble({ seat: c.seat, text: c.text, say: true });
     else {
       const line = c;
@@ -1732,7 +1763,7 @@ function playChatter(view) {
     heard = true;
   }
   if (heard) {
-    talkUntil = Math.max(talkUntil, Date.now() + at + 1600);
+    talkUntil = Math.max(talkUntil, Date.now() + at + cfg('talkHoldPad'));
     clearTimeout(talkTimer);
     talkTimer = setTimeout(() => {
       if (lastView) renderGame(lastView, session);
@@ -1754,7 +1785,7 @@ function announceTurn(view, isMine) {
     hadTurn = isMine;
     return;
   }
-  if (isMine && !hadTurn) flash('YOUR TURN', '', 3700);
+  if (isMine && !hadTurn) flash('YOUR TURN', '', cfg('flashBig'));
   hadTurn = isMine;
 }
 
@@ -1857,7 +1888,6 @@ function showGameover(view, sess) {
 
 // Overlays hold back so the final trick — and any table talk about it —
 // stays visible for a good while before the tally covers the table.
-const OVERLAY_DELAY = 6200;
 const overlayTimers = new Map();
 const overlayPending = new Map();
 
@@ -1878,7 +1908,7 @@ function settleOverlay(sel, wanted, show) {
     return;
   }
   if (pending) return;
-  const delay = Math.max(OVERLAY_DELAY, talkUntil - Date.now() + 800);
+  const delay = Math.max(cfg('overlayDelay'), talkUntil - Date.now() + 800);
   overlayTimers.set(
     sel,
     setTimeout(() => {

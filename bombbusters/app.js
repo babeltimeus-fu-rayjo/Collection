@@ -24,6 +24,17 @@ import {
   markSeatClaimed,
   markSeatResigned,
 } from './game.js';
+import { initSettings } from '../common/settings.js';
+
+// The ⚙ drawer (bottom-left): live-tunable pacing for testing. Defaults
+// reproduce the shipped behavior exactly; overrides stay in this browser.
+const cfg = initSettings('bmb', [
+  { key: 'botPlay', label: 'Bot turn delay', def: [2600, 1600], section: 'Host pacing', host: true },
+  { key: 'bubbleChat', label: 'Chat bubbles linger', def: 6500, section: 'Bubbles & banners' },
+  { key: 'bubbleTrunc', label: 'Bubble text cap', def: 84, min: 12, max: 400, step: 4, unit: 'ch', ms: false, section: 'Bubbles & banners' },
+  { key: 'flashMs', label: 'Banner duration', def: 1700, section: 'Bubbles & banners' },
+  { key: 'overlayDelay', label: 'Result screen delay', def: 4800, section: 'Overlays' },
+]);
 
 // ---------------------------------------------------------------- networking
 
@@ -136,7 +147,7 @@ function flash(text, cls = '') {
   void b.offsetWidth;
   b.className = `flash ${cls}`;
   clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => b.classList.add('hidden'), 1700);
+  flashTimer = setTimeout(() => b.classList.add('hidden'), cfg('flashMs'));
 }
 
 function boomFlash() {
@@ -260,11 +271,11 @@ function showChatBubble(m) {
   const prev = chatBubbles.get(m.seat);
   if (prev) clearTimeout(prev.timer);
   chatBubbles.set(m.seat, {
-    text: m.text.length > 84 ? `${m.text.slice(0, 84)}…` : m.text,
+    text: m.text.length > cfg.raw('bubbleTrunc') ? `${m.text.slice(0, cfg.raw('bubbleTrunc'))}…` : m.text,
     timer: setTimeout(() => {
       chatBubbles.delete(m.seat);
       paintChatBubbles();
-    }, 6500),
+    }, cfg('bubbleChat')),
   });
   paintChatBubbles();
 }
@@ -647,7 +658,7 @@ class HostSession {
         }
       }
       this.broadcast();
-    }, 2600 + Math.random() * 1600);
+    }, cfg.range('botPlay'));
   }
 
   lobbyMsg() {
@@ -1965,7 +1976,6 @@ function showResult(view, sess) {
 
 // Overlays hold back so the final play stays visible for a good while;
 // once shown they update instantly.
-const OVERLAY_DELAY = 4800;
 const overlayTimers = new Map();
 const overlayPending = new Map();
 
@@ -1992,7 +2002,7 @@ function settleOverlay(sel, wanted, show) {
       overlayTimers.delete(sel);
       overlayPending.delete(sel);
       show();
-    }, OVERLAY_DELAY),
+    }, cfg('overlayDelay')),
   );
 }
 
