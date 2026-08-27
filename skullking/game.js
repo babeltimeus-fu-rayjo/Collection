@@ -314,7 +314,7 @@ function doPlay(G, p, move) {
   if (card.kind === 'kraken') say(G, p.seat, 'Release the Kraken! 🐙');
   else if (card.kind === 'whale') say(G, p.seat, 'Thar she blows — the White Whale! 🐋');
   else if (card.kind === 'loot') say(G, p.seat, 'Loot on the table — allies with whoever takes this trick. 🤝');
-  else say(G, p.seat, `I play ${cardLabel(card, as)}.`);
+  else if (card.kind !== 'num' || card.v === 14) say(G, p.seat, `I play ${cardLabel(card, as)}.`);
 
   if (t.plays.length === G.players.length) resolveTrick(G);
   return { ok: true };

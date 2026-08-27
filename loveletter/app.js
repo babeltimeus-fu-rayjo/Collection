@@ -29,6 +29,7 @@ import {
   botChoose,
 } from './game.js';
 import { initSettings } from '../common/settings.js';
+import '../common/version.js';
 
 // The ⚙ drawer (bottom-left): live-tunable pacing for testing. Defaults
 // reproduce the shipped behavior exactly; overrides stay in this browser.

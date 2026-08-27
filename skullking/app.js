@@ -33,6 +33,7 @@ import {
   turnSeat,
 } from './game.js';
 import { initSettings } from '../common/settings.js';
+import '../common/version.js';
 
 // The ⚙ drawer (bottom-left): live-tunable pacing for testing. Defaults
 // reproduce the shipped behavior exactly; overrides stay in this browser.
@@ -165,9 +166,11 @@ function flash(text, cls = '', ms = 0) {
   b.textContent = text;
   b.className = 'flash hidden';
   void b.offsetWidth;
+  const dur = ms || cfg('flashMs');
+  b.style.animationDuration = `${dur}ms`;
   b.className = `flash ${cls}`;
   clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => b.classList.add('hidden'), ms || cfg('flashMs'));
+  flashTimer = setTimeout(() => b.classList.add('hidden'), dur);
 }
 
 function setHomeStatus(text, isError = false) {
