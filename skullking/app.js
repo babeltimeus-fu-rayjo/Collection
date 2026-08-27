@@ -39,7 +39,7 @@ import { initSettings } from '../common/settings.js';
 const cfg = initSettings('skk', [
   { key: 'botBid', label: 'Bot bid delay', def: [900, 900], section: 'Host pacing', host: true },
   { key: 'botPlay', label: 'Bot play delay', def: [4600, 1600], section: 'Host pacing', host: true },
-  { key: 'botForced', label: 'Forced last-card delay', def: [1600, 600], section: 'Host pacing', host: true },
+  { key: 'botForced', label: 'Forced last-card delay', def: [1600, 600], section: 'Host pacing', host: true, hint: 'A lone card (anyone’s) snaps down after this — it skips the table-talk hold; only the post-trick pause can also delay it.' },
   { key: 'trickPause', label: 'Hold after each trick', def: 3400, section: 'Host pacing', host: true },
   { key: 'talkPausePad', label: 'Talk pause padding', def: 4400, section: 'Host pacing', host: true, hint: 'Extra host hold after the newest speech line, before bots act.' },
   { key: 'autoNext', label: 'Auto-deal the next round', def: false, bool: true, section: 'Host pacing', host: true },
@@ -701,7 +701,10 @@ class HostSession {
     if (forced != null) delay = cfg.range('botForced');
     else delay = this.G.phase === 'bid' ? cfg.range('botBid') : cfg.range('botPlay');
     if (this.trickPauseUntil) delay = Math.max(delay, this.trickPauseUntil - Date.now());
-    if (this.talkPauseUntil) delay = Math.max(delay, this.talkPauseUntil - Date.now());
+    // a lone card is no decision: it plays at its own quick cadence instead
+    // of waiting out the table-talk hold that paces "thinking" turns —
+    // only the post-trick pause above still applies to it
+    if (this.talkPauseUntil && forced == null) delay = Math.max(delay, this.talkPauseUntil - Date.now());
     this.botTimer = setTimeout(() => {
       if (!this.G) return;
       const fseat = this.forcedActor();
