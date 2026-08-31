@@ -231,10 +231,9 @@ function addChatMsg(m, self) {
 // Chat floats briefly over the sender's seat tile; kept in a map so the
 // bubbles survive re-renders.
 const chatBubbles = new Map();
+let bubbleId = 0;
 
 function paintChatBubbles() {
-  // Bubbles live on a fixed overlay so seat re-renders never destroy them
-  // (no flicker) and no container can clip them.
   let layer = document.querySelector('#bubble-layer');
   if (!layer) {
     layer = el('div', '');
@@ -244,45 +243,63 @@ function paintChatBubbles() {
     window.addEventListener('resize', paintChatBubbles);
   }
   const seen = new Set();
-  for (const [seat, b] of chatBubbles) {
+  for (const [seat, arr] of chatBubbles) {
     const host = document.querySelector(`.seat[data-seat="${seat}"]`) || document.querySelector(`.seat-row[data-seat="${seat}"]`);
     if (!host || !host.offsetParent) continue;
     const key = String(seat);
     seen.add(key);
-    let bub = layer.querySelector(`.chat-bubble[data-seat="${key}"]`);
-    if (!bub) {
-      bub = el('div', 'chat-bubble', b.text);
-      bub.dataset.seat = key;
-      layer.append(bub);
-    } else if (bub.textContent !== b.text) {
-      bub.textContent = b.text;
+    let stack = layer.querySelector(`.bubble-stack[data-seat="${key}"]`);
+    if (!stack) {
+      stack = el('div', 'bubble-stack');
+      stack.dataset.seat = key;
+      layer.append(stack);
     }
-    bub.classList.toggle('say', !!b.say);
+    const kept = new Set();
+    for (const b of arr) {
+      const bid = String(b.id);
+      kept.add(bid);
+      let bub = stack.querySelector(`.chat-bubble[data-id="${bid}"]`);
+      if (!bub) {
+        bub = el('div', 'chat-bubble', b.text);
+        bub.dataset.id = bid;
+        stack.append(bub);
+      }
+    }
+    for (const n of stack.querySelectorAll('.chat-bubble')) {
+      if (!kept.has(n.dataset.id)) n.remove();
+    }
     const r = host.getBoundingClientRect();
-    bub.style.left = `${Math.round(r.left + r.width / 2)}px`;
-    bub.style.top = `${Math.round(Math.max(r.top, bub.offsetHeight + 14))}px`;
+    stack.style.left = `${Math.round(r.left + r.width / 2)}px`;
+    stack.style.top = `${Math.round(Math.max(r.top, stack.offsetHeight + 14))}px`;
   }
-  for (const n of layer.querySelectorAll('.chat-bubble')) {
+  for (const n of layer.querySelectorAll('.bubble-stack')) {
     if (!seen.has(n.dataset.seat)) n.remove();
   }
 }
 
 function showChatBubble(m) {
   if (m.seat == null) return;
-  const prev = chatBubbles.get(m.seat);
-  if (prev) clearTimeout(prev.timer);
-  chatBubbles.set(m.seat, {
+  const arr = chatBubbles.get(m.seat) || [];
+  const id = ++bubbleId;
+  arr.push({
+    id,
     text: m.text.length > cfg.raw('bubbleTrunc') ? `${m.text.slice(0, cfg.raw('bubbleTrunc'))}…` : m.text,
     timer: setTimeout(() => {
-      chatBubbles.delete(m.seat);
+      const a = chatBubbles.get(m.seat);
+      if (a) {
+        const idx = a.findIndex((b) => b.id === id);
+        if (idx >= 0) a.splice(idx, 1);
+        if (!a.length) chatBubbles.delete(m.seat);
+      }
       paintChatBubbles();
     }, cfg('bubbleChat')),
   });
+  chatBubbles.set(m.seat, arr);
   paintChatBubbles();
 }
 
 function clearChatBubbles() {
-  for (const b of chatBubbles.values()) clearTimeout(b.timer);
+  for (const arr of chatBubbles.values()) for (const b of arr) clearTimeout(b.timer);
   chatBubbles.clear();
   paintChatBubbles();
 }

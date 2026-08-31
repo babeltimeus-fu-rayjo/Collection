@@ -1440,10 +1440,11 @@ a {
 
 /* Bubbles on a fixed overlay: flicker-free, unclippable, above the seats */
 #bubble-layer { position: fixed; inset: 0; pointer-events: none; z-index: 70; }
-#bubble-layer .chat-bubble { position: absolute; bottom: auto; right: auto; margin: 0; transform: translate(-50%, calc(-100% - 10px)); }
-#bubble-layer .chat-bubble::after { left: 50%; right: auto; bottom: -12px; top: auto; transform: translateX(-50%); border: 6px solid transparent; }
-#bubble-layer .chat-bubble::after { border-top-color: #fff; }
-#bubble-layer .chat-bubble.say::after { border-top-color: rgba(66, 52, 22, 0.96); }
+#bubble-layer .bubble-stack { position: absolute; display: flex; flex-direction: column; gap: 4px; transform: translate(-50%, calc(-100% - 10px)); }
+#bubble-layer .chat-bubble { position: relative; left: auto; top: auto; bottom: auto; right: auto; margin: 0; transform: none; }
+#bubble-layer .chat-bubble::after { display: none; }
+#bubble-layer .chat-bubble:last-child::after { display: block; left: 50%; right: auto; bottom: -12px; top: auto; transform: translateX(-50%); border: 6px solid transparent; border-top-color: #fff; }
+#bubble-layer .chat-bubble.say:last-child::after { border-top-color: rgba(66, 52, 22, 0.96); }
 /* headroom for table talk above the top row; fixed seat footprints */
 #row-top { margin-top: 84px; }
 .pcell { width: 168px; min-width: 168px; }
