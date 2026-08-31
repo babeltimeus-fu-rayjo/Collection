@@ -650,7 +650,8 @@ class HostSession {
     if (!this.seatCovered(seat)) return;
     const p = this.G.players.find((q) => q.seat === seat);
     const midTurn = p && (p.tookTokens || p.tray.length);
-    const delay = midTurn ? cfg.range('botMid') : cfg.range('botTurn');
+    let delay = midTurn ? cfg.range('botMid') : cfg.range('botTurn');
+    if (this.bannerUntil) delay = Math.max(delay, this.bannerUntil - Date.now());
     this.botTimer = setTimeout(() => {
       if (!this.G || this.G.phase !== 'playing') return;
       const seat2 = this.G.turn;
@@ -738,6 +739,12 @@ class HostSession {
   }
 
   broadcast() {
+    if (this.G && this.G.fx && this.G.fx.seq !== this._bannerFxSeen) {
+      this._bannerFxSeen = this.G.fx.seq;
+      if (this.G.fx.kind === 'lastround') {
+        this.bannerUntil = Math.max(this.bannerUntil || 0, Date.now() + cfg('flashMs'));
+      }
+    }
     const wnames = this.watchers.map((x) => x.name);
     for (const [seat, conn] of this.conns) {
       try {

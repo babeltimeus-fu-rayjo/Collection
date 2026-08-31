@@ -704,9 +704,7 @@ class HostSession {
     if (forced != null) delay = cfg.range('botForced');
     else delay = this.G.phase === 'bid' ? cfg.range('botBid') : cfg.range('botPlay');
     if (this.trickPauseUntil) delay = Math.max(delay, this.trickPauseUntil - Date.now());
-    // a lone card is no decision: it plays at its own quick cadence instead
-    // of waiting out the table-talk hold that paces "thinking" turns —
-    // only the post-trick pause above still applies to it
+    if (this.bannerUntil) delay = Math.max(delay, this.bannerUntil - Date.now());
     if (this.talkPauseUntil && forced == null) delay = Math.max(delay, this.talkPauseUntil - Date.now());
     this.botTimer = setTimeout(() => {
       if (!this.G) return;
@@ -807,7 +805,14 @@ class HostSession {
   broadcast() {
     if (this.G && this.G.fx && this.G.fx.kind === 'trick' && this.G.fx.seq !== this._trickFxSeen) {
       this._trickFxSeen = this.G.fx.seq;
-      this.trickPauseUntil = Date.now() + cfg('trickPause'); // let everyone see who took it
+      this.trickPauseUntil = Date.now() + cfg('trickPause');
+    }
+    if (this.G && this.G.fx && this.G.fx.seq !== this._bannerFxSeen) {
+      this._bannerFxSeen = this.G.fx.seq;
+      const fk = this.G.fx.kind;
+      if (fk === 'bids' || (fk === 'deal' && this.G.fx.round > 1)) {
+        this.bannerUntil = Math.max(this.bannerUntil || 0, Date.now() + cfg('flashMs'));
+      }
     }
     // pace the table: note how long the newest spoken exchange needs to
     // air, so bots do not start the next turn mid-conversation
@@ -1671,19 +1676,6 @@ function renderGame(view, sess) {
     const fx = view.fx;
     if (fx.kind === 'trick' || ((fx.kind === 'roundEnd' || fx.kind === 'over') && fx.trick)) {
       lastTrick = { plays: fx.trick, winnerCard: fx.winnerCard, seat: fx.seat, destroyed: fx.destroyed || null, ts: Date.now() };
-      // the trick winner is the headline — big flash, and the table holds
-      const wp = (fx.trick || []).find((x) => x.card.id === fx.winnerCard);
-      if (fx.destroyed) {
-        flash(
-          fx.destroyed === 'kraken'
-            ? '🐙 The Kraken devours the trick — nobody takes it!'
-            : '🐋 The White Whale swallows the trick whole!',
-          '',
-          cfg('flashBig'),
-        );
-      } else {
-        flash(`${seatName(view, fx.seat)} takes the trick${wp ? ` with ${cardLabel(wp.card, wp.as)}` : ''}!`, '', cfg('flashBig'));
-      }
       const tile = fx.destroyed ? null : document.querySelector(`.seat[data-seat="${fx.seat}"]`);
       if (tile) {
         tile.classList.remove('won-pulse');

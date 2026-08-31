@@ -661,7 +661,7 @@ class HostSession {
         }
       }
       this.broadcast();
-    }, cfg.range('botPlay'));
+    }, Math.max(cfg.range('botPlay'), this.bannerUntil ? this.bannerUntil - Date.now() : 0));
   }
 
   lobbyMsg() {
@@ -727,6 +727,13 @@ class HostSession {
   }
 
   broadcast() {
+    if (this.G && this.G.fx && this.G.fx.seq !== this._bannerFxSeen) {
+      this._bannerFxSeen = this.G.fx.seq;
+      const fk = this.G.fx.kind;
+      if (fk === 'save' || fk === 'boom' || fk === 'won') {
+        this.bannerUntil = Math.max(this.bannerUntil || 0, Date.now() + cfg('flashMs'));
+      }
+    }
     const wnames = this.watchers.map((x) => x.name);
     for (const [seat, conn] of this.conns) {
       try {

@@ -671,7 +671,7 @@ class HostSession {
       const res = applyMove(this.G, seat, botChoose(this.G, seat));
       if (!res.ok) applyMove(this.G, seat, { kind: 'rotate' }); // safety net
       this.broadcast();
-    }, Math.max(cfg.range('botPlay'), this.talkPauseUntil ? this.talkPauseUntil - Date.now() : 0)); // deliberate pause; never talk over a running exchange
+    }, Math.max(cfg.range('botPlay'), this.talkPauseUntil ? this.talkPauseUntil - Date.now() : 0, this.bannerUntil ? this.bannerUntil - Date.now() : 0));
   }
 
   lobbyMsg() {
@@ -755,6 +755,12 @@ class HostSession {
       }
       if (talkTotal != null)
         this.talkPauseUntil = Math.max(this.talkPauseUntil || 0, Date.now() + Math.round(talkTotal * cfg.raw('talkScale')) + cfg('talkPausePad'));
+    }
+    if (this.G && this.G.fx && this.G.fx.seq !== this._bannerFxSeen) {
+      this._bannerFxSeen = this.G.fx.seq;
+      if (this.G.fx.kind === 'out') {
+        this.bannerUntil = Math.max(this.bannerUntil || 0, Date.now() + cfg('flashMs'));
+      }
     }
     const wnames = this.watchers.map((x) => x.name);
     for (const [seat, conn] of this.conns) {
