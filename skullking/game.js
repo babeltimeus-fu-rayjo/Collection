@@ -314,7 +314,25 @@ function doPlay(G, p, move) {
   if (card.kind === 'kraken') say(G, p.seat, 'Release the Kraken! 🐙');
   else if (card.kind === 'whale') say(G, p.seat, 'Thar she blows — the White Whale! 🐋');
   else if (card.kind === 'loot') say(G, p.seat, 'Loot on the table — allies with whoever takes this trick. 🤝');
-  else if (card.kind !== 'num' || card.v === 14) say(G, p.seat, `I play ${cardLabel(card, as)}.`);
+  else if (card.kind === 'num' && card.v === 14) {
+    const pts = card.suit === 'black' ? 20 : 10;
+    say(G, p.seat, `I play ${cardLabel(card, as)}. +${pts} bonus to the trick winner.`);
+  } else if (effKind({ card, as }) === 'pirate') {
+    say(G, p.seat, `I play ${cardLabel(card, as)}. +30 for the Skull King.`);
+  } else if (card.kind === 'sk') {
+    const pirates = t.plays.slice(0, -1).filter((pl) => effKind(pl) === 'pirate').length;
+    let msg = `I play ${cardLabel(card, as)}.`;
+    if (pirates) msg += ` +${pirates * 30} from ${pirates} pirate${pirates > 1 ? 's' : ''}.`;
+    msg += ' Mermaids earn +50.';
+    say(G, p.seat, msg);
+  } else if (card.kind === 'mermaid') {
+    const hasSK = t.plays.slice(0, -1).some((pl) => effKind(pl) === 'sk');
+    say(G, p.seat, hasSK
+      ? `I play ${cardLabel(card, as)}! +50 from the Skull King!`
+      : `I play ${cardLabel(card, as)}. +50 against the Skull King.`);
+  } else if (card.kind !== 'num') {
+    say(G, p.seat, `I play ${cardLabel(card, as)}.`);
+  }
 
   if (t.plays.length === G.players.length) resolveTrick(G);
   return { ok: true };
