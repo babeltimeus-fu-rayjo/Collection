@@ -450,6 +450,7 @@ a {
   gap: 10px;
   padding: 10px 14px;
   flex-wrap: wrap;
+  min-height: 50px;
 }
 
 #room-chip,
@@ -925,6 +926,7 @@ a {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  min-height: 48px;
 }
 
 /* ---------------------------------------------------------------- action bar */
@@ -1609,7 +1611,8 @@ a {
 .mbhex.hascube::after { content: ''; position: absolute; inset: 32%; border-radius: 50%; background: #14100c; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.75); }
 
 /* The tokens you are about to place: unmissable */
-#tray:has(.tray-tok) { background: rgba(143, 214, 168, 0.1); border: 1px solid rgba(143, 214, 168, 0.4); border-radius: 12px; padding: 8px 14px; }
+#tray { background: rgba(143, 214, 168, 0.1); border: 1px solid transparent; border-radius: 12px; padding: 8px 14px; }
+#tray:has(.tray-tok) { border-color: rgba(143, 214, 168, 0.4); }
 #tray .tray-label { font-weight: 800; }
 .tray-tok .tok { width: 46px; height: 46px; }
 .tray-tok.sel .tok { outline: 3px solid var(--accent); outline-offset: 2px; transform: translateY(-3px) scale(1.06); }
