@@ -14,8 +14,8 @@
 //     lead frees the whole trick; an escape lead passes suit-setting on.
 //   - Scoring: exact bid ≥1 → +20/trick; miss → −10 per trick off; a zero
 //     bid pays ±10 × the round number. Bonuses only with an exact bid:
-//     captured 14s +10 (black +20), Skull King +30 per pirate played before
-//     him, a mermaid capturing the Skull King +50.
+//     captured 14s +10 (black +20), pirate +20 per mermaid captured,
+//     Skull King +30 per pirate played before him, mermaid +50 for the SK.
 //   - Deck: the modern 70-card deck (mermaids included) PLUS the Legendary
 //     expansion menu: 2 Loot, the Kraken and the White Whale (74 cards).
 //       · Loot plays like an escape, but allies its player with whoever wins
@@ -318,7 +318,7 @@ function doPlay(G, p, move) {
     const pts = card.suit === 'black' ? 20 : 10;
     say(G, p.seat, `I play ${cardLabel(card, as)}. +${pts} bonus to the trick winner.`);
   } else if (effKind({ card, as }) === 'pirate') {
-    say(G, p.seat, `I play ${cardLabel(card, as)}. +30 for the Skull King.`);
+    say(G, p.seat, `I play ${cardLabel(card, as)}. +20 per mermaid, +30 for the Skull King.`);
   } else if (card.kind === 'sk') {
     const pirates = t.plays.slice(0, -1).filter((pl) => effKind(pl) === 'pirate').length;
     let msg = `I play ${cardLabel(card, as)}.`;
@@ -329,7 +329,7 @@ function doPlay(G, p, move) {
     const hasSK = t.plays.slice(0, -1).some((pl) => effKind(pl) === 'sk');
     say(G, p.seat, hasSK
       ? `I play ${cardLabel(card, as)}! +50 from the Skull King!`
-      : `I play ${cardLabel(card, as)}. +50 against the Skull King.`);
+      : `I play ${cardLabel(card, as)}. +50 against the Skull King, +20 for pirates.`);
   } else if (card.kind !== 'num') {
     say(G, p.seat, `I play ${cardLabel(card, as)}.`);
   }
@@ -467,6 +467,11 @@ export function trickBonus(plays, winnerPlay) {
     const skIdx = plays.indexOf(winnerPlay);
     for (let i = 0; i < skIdx; i++) {
       if (effKind(plays[i]) === 'pirate') bonus += 30;
+    }
+  }
+  if (wk === 'pirate') {
+    for (const pl of plays) {
+      if (effKind(pl) === 'mermaid') bonus += 20;
     }
   }
   if (wk === 'mermaid' && plays.some((pl) => effKind(pl) === 'sk')) bonus += 50;
