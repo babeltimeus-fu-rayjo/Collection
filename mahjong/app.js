@@ -119,11 +119,10 @@ function avatarEl(name, seat, bot = false) {
 
 // ---------------------------------------------------------------- tile rendering
 
-// Two ways to draw a tile face:
-//   'art' — a full Unicode mahjong tile glyph (the default, looks like the
-//           real thing); 'num' — a simplified value + suit letter, easier to
-//           read for beginners. Per-viewer preference, saved in localStorage.
-let tileMode = (() => { try { return localStorage.getItem('mjg-tilemode') === 'num' ? 'num' : 'art'; } catch { return 'art'; } })();
+// Tiles are drawn as full-colour Unicode mahjong faces. Each glyph is forced
+// to text presentation with U+FE0E so it renders uniformly (no stray emoji
+// styling) and can be tinted by suit. A small English number sits in the
+// top-right corner of numbered tiles (not flowers) as a reading aid.
 
 const ART = {
   m: ['', '🀇', '🀈', '🀉', '🀊', '🀋', '🀌', '🀍', '🀎', '🀏'],
@@ -133,6 +132,7 @@ const ART = {
 const ART_WIND = { E: '🀀', S: '🀁', W: '🀂', N: '🀃' };
 const ART_DRAGON = { R: '🀄', G: '🀅', W: '🀆' };
 const ART_FLOWER = ['', '🀢', '🀣', '🀤', '🀥', '🀦', '🀧', '🀨', '🀩'];
+const TEXT_VS = '︎'; // variation selector — force a monochrome text glyph
 
 function artGlyph(t) {
   if (t.kind === 'm' || t.kind === 'p' || t.kind === 's') return ART[t.kind][t.v] || '?';
@@ -142,16 +142,21 @@ function artGlyph(t) {
   return '?';
 }
 
-function numGlyph(t) {
+// small corner index — the digit for number suits; nothing for honours/flowers
+function cornerIndex(t) {
+  if (t.kind === 'm' || t.kind === 'p' || t.kind === 's') return String(t.v);
+  return '';
+}
+
+// compact text label for buttons (chi/kan)
+function shortTag(t) {
+  if (!t) return '?';
   if (t.kind === 'm' || t.kind === 'p' || t.kind === 's') return `${t.v}${t.kind}`;
-  if (t.kind === 'wind') return t.v; // E S W N
-  if (t.kind === 'dragon') return { R: 'R', G: 'G', W: 'Wt' }[t.v] || t.v;
+  if (t.kind === 'wind') return t.v;
+  if (t.kind === 'dragon') return { R: 'R', G: 'G', W: 'W' }[t.v] || t.v;
   if (t.kind === 'flower') return `F${t.v}`;
   return t.key;
 }
-
-// short text label for a tile (used in buttons), following the current mode
-function tileText(t) { return t ? (tileMode === 'art' ? artGlyph(t) : numGlyph(t)) : '?'; }
 
 function tileSuitClass(t) {
   if (!t) return '';
@@ -172,7 +177,9 @@ function renderTile(t, opts = {}) {
   if (opts.lastDraw) cls.push('last-draw');
   if (opts.riichi) cls.push('riichi-mark');
   const d = el('div', cls.join(' '));
-  d.append(el('span', tileMode === 'art' ? 'art-glyph' : 'num-main', tileText(t)));
+  d.append(el('span', 'art-glyph', artGlyph(t) + TEXT_VS));
+  const idx = cornerIndex(t);
+  if (idx) d.append(el('span', 'tile-idx', idx));
   if (opts.onClick) { d.style.cursor = 'pointer'; d.addEventListener('click', opts.onClick); }
   return d;
 }
@@ -183,18 +190,22 @@ function renderMeld(meld) {
   return g;
 }
 
-function updateTileBtn() {
-  const b = $('#btn-tiles');
-  if (!b) return;
-  b.textContent = tileMode === 'art' ? '🀄 Art' : 'AB Letters';
-  b.title = tileMode === 'art' ? 'Switch to simplified letters' : 'Switch to tile art';
+// -------- tile size (per-viewer, saved in localStorage) --------
+const SIZES = ['s', 'm', 'l'];
+const SIZE_LABEL = { s: 'Small', m: 'Medium', l: 'Large' };
+let tileSize = (() => { try { const v = localStorage.getItem('mjg-tilesize'); return SIZES.includes(v) ? v : 'm'; } catch { return 'm'; } })();
+
+function applyTileSize() {
+  const g = $('#screen-game');
+  if (g) { g.classList.remove('size-s', 'size-m', 'size-l'); g.classList.add(`size-${tileSize}`); }
+  const b = $('#btn-size');
+  if (b) b.textContent = `Size: ${SIZE_LABEL[tileSize]}`;
 }
 
-function toggleTileMode() {
-  tileMode = tileMode === 'art' ? 'num' : 'art';
-  try { localStorage.setItem('mjg-tilemode', tileMode); } catch {}
-  updateTileBtn();
-  if (lastView && session) renderGame(lastView, session);
+function cycleTileSize() {
+  tileSize = SIZES[(SIZES.indexOf(tileSize) + 1) % SIZES.length];
+  try { localStorage.setItem('mjg-tilesize', tileSize); } catch {}
+  applyTileSize();
 }
 
 // ---------------------------------------------------------------- chat
@@ -315,6 +326,8 @@ let session = null;
 let lastView = null;
 let pendingMove = false;
 let selectedTile = null;
+let handOrder = [];   // tile-id display order for my hand (drag to rearrange)
+let handDrag = null;  // in-progress hand-tile drag
 
 class HostSession {
   constructor(peer, code, name) {
@@ -747,18 +760,18 @@ function renderGame(view, sess) {
     myMelds.append(ff);
   }
 
-  // hand
+  // hand — rendered in the player's chosen order (drag tiles to rearrange)
   const handEl = $('#hand');
   handEl.replaceChildren();
   if (me && me.hand) {
     const isMyTurn = view.phase === 'discard' && view.turn === my;
-    for (const t of me.hand) {
+    for (const t of orderedHand(me.hand)) {
       const isLastDraw = view.lastDraw && t.id === view.lastDraw.id;
-      const tile = renderTile(t, {
-        lastDraw: isLastDraw,
-        onClick: isMyTurn ? () => handleTileClick(t, sess, view) : null,
-      });
+      const tile = renderTile(t, { lastDraw: isLastDraw });
+      tile.dataset.tid = String(t.id);
+      tile.style.cursor = 'pointer';
       if (selectedTile === t.id) tile.classList.add('selected');
+      attachHandTile(tile, t, sess, isMyTurn);
       handEl.append(tile);
     }
   }
@@ -808,10 +821,10 @@ function renderGame(view, sess) {
   paintChatBubbles();
 }
 
-function handleTileClick(t, sess, view) {
+function handleTileClick(t, sess) {
   if (pendingMove) return;
   if (selectedTile === t.id) {
-    // double-click = discard
+    // tap again = discard
     pendingMove = true;
     selectedTile = null;
     sess.localMove({ kind: 'discard', tileId: t.id });
@@ -819,6 +832,60 @@ function handleTileClick(t, sess, view) {
     selectedTile = t.id;
     if (lastView) renderGame(lastView, sess);
   }
+}
+
+// Keep my hand in the order I've arranged it: drop tile-ids that are no
+// longer in hand, and append freshly drawn/claimed ones on the right.
+function orderedHand(hand) {
+  const byId = new Map(hand.map((t) => [t.id, t]));
+  handOrder = handOrder.filter((id) => byId.has(id));
+  for (const t of hand) if (!handOrder.includes(t.id)) handOrder.push(t.id);
+  return handOrder.map((id) => byId.get(id));
+}
+
+// Drag a hand tile left/right to rearrange; a tap (no drag) selects/discards.
+function attachHandTile(tile, t, sess, isMyTurn) {
+  tile.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    handDrag = { id: t.id, el: tile, startX: e.clientX, startY: e.clientY, moved: false };
+    try { tile.setPointerCapture(e.pointerId); } catch {}
+  });
+  tile.addEventListener('pointermove', (e) => {
+    if (!handDrag || handDrag.id !== t.id) return;
+    const dx = e.clientX - handDrag.startX;
+    const dy = e.clientY - handDrag.startY;
+    if (!handDrag.moved && Math.hypot(dx, dy) > 6) { handDrag.moved = true; tile.classList.add('dragging'); }
+    if (handDrag.moved) tile.style.transform = `translate(${dx}px, ${Math.min(6, dy)}px)`;
+  });
+  const finish = (e) => {
+    if (!handDrag || handDrag.id !== t.id) return;
+    const moved = handDrag.moved;
+    tile.classList.remove('dragging');
+    tile.style.transform = '';
+    try { tile.releasePointerCapture(e.pointerId); } catch {}
+    handDrag = null;
+    if (moved) { commitReorder(t.id, e.clientX); if (lastView) renderGame(lastView, sess); }
+    else if (isMyTurn) handleTileClick(t, sess);
+  };
+  tile.addEventListener('pointerup', finish);
+  tile.addEventListener('pointercancel', () => {
+    if (!handDrag || handDrag.id !== t.id) return;
+    tile.classList.remove('dragging');
+    tile.style.transform = '';
+    handDrag = null;
+  });
+}
+
+function commitReorder(id, clientX) {
+  const others = [...$('#hand').querySelectorAll('.tile')].filter((n) => n.dataset.tid !== String(id));
+  let idx = others.length;
+  for (let i = 0; i < others.length; i++) {
+    const r = others[i].getBoundingClientRect();
+    if (clientX < r.left + r.width / 2) { idx = i; break; }
+  }
+  const cur = handOrder.filter((x) => x !== id);
+  cur.splice(idx, 0, id);
+  handOrder = cur;
 }
 
 function renderActions(view, sess) {
@@ -846,7 +913,7 @@ function renderActions(view, sess) {
     }
     if (opts.options.includes('chi')) {
       for (const combo of opts.chiCombos) {
-        const label = `Chi ${combo.map((t) => tileText(t)).join('')}`;
+        const label = `Chi ${combo.map((t) => shortTag(t)).join('+')}`;
         const b = el('button', 'btn chi-btn', label);
         b.addEventListener('click', () => {
           if (!pendingMove) { pendingMove = true; sess.localMove({ kind: 'chi', tile1: combo[0].id, tile2: combo[1].id }); }
@@ -890,7 +957,7 @@ function renderActions(view, sess) {
     if (a.canAddKan && a.addKanOptions.length > 0) {
       for (const tid of a.addKanOptions) {
         const t = view.players.find((q) => q.seat === my)?.hand.find((h) => h.id === tid);
-        const b = el('button', 'btn kan-btn', `Kan+ (${t ? tileText(t) : '?'})`);
+        const b = el('button', 'btn kan-btn', `Kan+ (${t ? shortTag(t) : '?'})`);
         b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; sess.localMove({ kind: 'kan', type: 'add', tileId: tid }); } });
         bar.append(b);
       }
@@ -1035,6 +1102,7 @@ function leaveRoom() {
   lastView = null;
   pendingMove = false;
   selectedTile = null;
+  handOrder = [];
   seenFxSeq = 0;
   chatSeenN = 0;
   clearChatBubbles();
@@ -1050,8 +1118,8 @@ $('#code-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') joi
 $('#name-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btn-create').click(); });
 $('#btn-add-bot').addEventListener('click', () => session?.addBot());
 $('#btn-start').addEventListener('click', () => session?.start());
-$('#btn-tiles').addEventListener('click', toggleTileMode);
-updateTileBtn();
+$('#btn-size').addEventListener('click', cycleTileSize);
+applyTileSize();
 for (const b of document.querySelectorAll('.btn-leave')) b.addEventListener('click', leaveRoom);
 for (const b of document.querySelectorAll('.btn-rules')) b.addEventListener('click', () => $('#modal-rules').classList.remove('hidden'));
 $('#btn-rules-close').addEventListener('click', () => $('#modal-rules').classList.add('hidden'));

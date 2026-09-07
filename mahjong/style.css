@@ -50,7 +50,7 @@ body {
 
 /* ================================================================ game layout */
 #screen-game { padding: 0; display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
-.topbar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: #0a2a1a; border-bottom: 1px solid #1a4a32; min-height: 40px; font-size: 13px; flex-shrink: 0; }
+.topbar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: #0a2a1a; border-bottom: 1px solid #1a4a32; min-height: 40px; font-size: 13px; flex-shrink: 0; position: relative; z-index: 70; }
 .topbar span { color: #8ab89a; }
 .spacer { flex: 1; }
 #room-chip { font-weight: 700; color: #e8d5a3 !important; letter-spacing: 2px; }
@@ -65,7 +65,10 @@ body {
 
 /* ---- opponent seats */
 .seat { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; overflow: visible; padding: 2px; min-width: 0; min-height: 0; }
-.seat-inner { display: flex; flex-direction: column; align-items: center; gap: 3px; max-width: 168px; }
+/* column-reverse so that, once the block is rotated to face the middle, the
+   sections read from the player's outer edge inward: hand, melds, discards
+   (name sits just outside, above). */
+.seat-inner { display: flex; flex-direction: column-reverse; align-items: center; gap: 3px; max-width: 168px; }
 .seat-top   .seat-inner { transform: rotate(180deg); }
 .seat-left  .seat-inner { transform: rotate(90deg); }
 .seat-right .seat-inner { transform: rotate(-90deg); }
@@ -99,56 +102,69 @@ body {
 #my-melds { display: flex; gap: 6px; justify-content: center; margin: 2px 0; flex-wrap: wrap; }
 
 /* ================================================================ tiles */
+/* --ts scales every tile; the Size button toggles S / M / L. */
+#screen-game { --ts: 1; }
+#screen-game.size-s { --ts: 0.82; }
+#screen-game.size-l { --ts: 1.24; }
+
 .tile {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 32px; height: 42px; border-radius: 4px; font-weight: 700;
-  background: linear-gradient(165deg, #fbf7ea, #e7ddc4);
-  color: #1a1a1a; border: 1px solid #c8c0a8;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 1px 2px rgba(0,0,0,.18);
-  cursor: default; flex-shrink: 0; position: relative; line-height: 1; text-align: center;
+  width: calc(30px * var(--ts)); height: calc(40px * var(--ts));
+  border-radius: calc(5px * var(--ts));
+  background: linear-gradient(165deg, #fdf9ee, #ece1c6);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.75), 0 1px 2px rgba(0,0,0,.3);
+  color: #1a1a1a; flex-shrink: 0; position: relative; line-height: 1; text-align: center; cursor: default;
 }
-.tile.small { width: 22px; height: 30px; }
+.tile.small { width: calc(25px * var(--ts)); height: calc(33px * var(--ts)); }
 
-/* art mode: a big tile glyph */
-.tile .art-glyph { font-size: 30px; line-height: 1; }
-.tile.small .art-glyph { font-size: 19px; }
+/* coloured tile face — a big glyph tinted by suit */
+.art-glyph { font-size: calc(29px * var(--ts)); line-height: 1; }
+.tile.small .art-glyph { font-size: calc(24px * var(--ts)); }
+.tile.man    .art-glyph { color: #17439b; }
+.tile.pin    .art-glyph { color: #b0202a; }
+.tile.sou    .art-glyph { color: #1a7d31; }
+.tile.wind   .art-glyph { color: #2b2b2b; }
+.tile.dragon-R .art-glyph { color: #c62828; }
+.tile.dragon-G .art-glyph { color: #1a7d31; }
+.tile.dragon-W .art-glyph { color: #5a5a5a; }
+.tile.flower  .art-glyph { color: #b5651d; }
 
-/* letters mode: value + suit letter, suit-coloured */
-.tile .num-main { font-size: 16px; font-weight: 800; letter-spacing: -0.5px; }
-.tile.small .num-main { font-size: 11px; }
-.tile.man .num-main { color: #1c46a6; }
-.tile.pin .num-main { color: #b02222; }
-.tile.sou .num-main { color: #1a7a2c; }
-.tile.wind .num-main { color: #222; }
-.tile.dragon-R .num-main { color: #cc2222; }
-.tile.dragon-G .num-main { color: #1a8a2c; }
-.tile.dragon-W .num-main { color: #555; }
-.tile.flower .num-main { color: #a06010; }
+/* small English index, top-right of numbered tiles */
+.tile-idx {
+  position: absolute; top: 1px; right: calc(2px * var(--ts));
+  font-size: calc(10px * var(--ts)); font-weight: 800; line-height: 1;
+  color: rgba(20,20,20,.55);
+}
+.tile.small .tile-idx { top: 0; right: 1px; font-size: calc(8px * var(--ts)); }
+.tile.man .tile-idx { color: rgba(23,67,155,.78); }
+.tile.pin .tile-idx { color: rgba(176,32,42,.82); }
+.tile.sou .tile-idx { color: rgba(26,125,49,.8); }
 
-.tile.facedown { background: linear-gradient(160deg, #2f7a4a, #1d5230); border-color: #123a24; color: transparent; }
+.tile.facedown { background: linear-gradient(160deg, #2f7a4a, #1d5230); color: transparent; box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 1px 2px rgba(0,0,0,.3); }
 .tile.facedown::after { content: ''; position: absolute; inset: 3px; border: 1px solid rgba(255,255,255,.14); border-radius: 2px; }
-.tile.highlight { box-shadow: 0 0 0 2px #4db87a, 0 1px 3px rgba(0,0,0,.3); }
-.tile.last-draw { box-shadow: 0 0 0 2px #e8d5a3, 0 1px 3px rgba(0,0,0,.3); }
-.tile.riichi-mark { border-bottom: 3px solid #cc2222; }
+.tile.highlight { outline: 2px solid #4db87a; }
+.tile.last-draw { outline: 2px solid #e8d5a3; }
+.tile.riichi-mark { box-shadow: inset 0 calc(-3px * var(--ts)) 0 #cc2222, 0 1px 2px rgba(0,0,0,.3); }
 
 /* hand tiles */
 #hand {
   display: flex; gap: 3px; justify-content: center; align-items: flex-end;
-  padding: 6px 12px 8px; min-height: 60px; flex-wrap: wrap;
+  padding: 6px 12px 8px; min-height: 60px; flex-wrap: wrap; touch-action: pan-y;
 }
 #hand .tile {
   cursor: pointer; transition: transform .1s, box-shadow .1s;
-  width: 38px; height: 50px;
+  width: calc(40px * var(--ts)); height: calc(52px * var(--ts));
 }
-#hand .tile .art-glyph { font-size: 35px; }
-#hand .tile .num-main { font-size: 19px; }
+#hand .tile .art-glyph { font-size: calc(38px * var(--ts)); }
+#hand .tile .tile-idx { font-size: calc(12px * var(--ts)); }
 #hand .tile:hover { transform: translateY(-4px); box-shadow: 0 4px 12px rgba(0,0,0,.3); }
 #hand .tile.selected { transform: translateY(-8px); box-shadow: 0 0 0 2px #e8d5a3, 0 6px 16px rgba(0,0,0,.4); }
+#hand .tile.dragging { opacity: .92; box-shadow: 0 8px 18px rgba(0,0,0,.5); transition: none; z-index: 5; }
 
 /* meld tiles & opponents' concealed (face-down) hands */
 .meld { display: flex; gap: 1px; }
-.meld .tile { width: 24px; height: 32px; }
-.seat-hand .tile { width: 11px; height: 16px; }
+.meld .tile { width: calc(27px * var(--ts)); height: calc(36px * var(--ts)); }
+.seat-hand .tile { width: calc(15px * var(--ts)); height: calc(21px * var(--ts)); }
 .seat-hand .tile::after { inset: 2px; }
 
 /* ================================================================ action bar */
@@ -248,23 +264,16 @@ body {
 
 /* ================================================================ responsive */
 @media (max-width: 600px) {
+  /* shrink the whole tile scale so a square table fits a phone */
+  #screen-game.size-s { --ts: 0.62; }
+  #screen-game.size-m { --ts: 0.76; }
+  #screen-game.size-l { --ts: 0.94; }
   #table {
-    grid-template-columns: minmax(84px, 1fr) minmax(120px, 1.4fr) minmax(84px, 1fr);
-    grid-template-rows: minmax(60px, 1fr) minmax(150px, 1.7fr) minmax(28px, auto);
+    grid-template-columns: minmax(80px, 1fr) minmax(116px, 1.4fr) minmax(80px, 1fr);
+    grid-template-rows: minmax(56px, 1fr) minmax(150px, 1.7fr) minmax(24px, auto);
     padding: 4px;
   }
-  .seat-name { max-width: 66px; font-size: 11px; }
-  .seat-inner { max-width: 144px; }
-  .seat-discards, .seat-melds { max-width: 144px; }
-  .tile { width: 26px; height: 34px; }
-  .tile .art-glyph { font-size: 24px; }
-  .tile .num-main { font-size: 13px; }
-  #hand .tile { width: 30px; height: 40px; }
-  #hand .tile .art-glyph { font-size: 28px; }
-  #hand .tile .num-main { font-size: 16px; }
-  .meld .tile { width: 19px; height: 25px; }
-  .tile.small { width: 15px; height: 20px; }
-  .tile.small .art-glyph { font-size: 13px; }
-  .tile.small .num-main { font-size: 9px; }
-  .seat-hand .tile { width: 10px; height: 14px; }
+  .seat-name { max-width: 64px; font-size: 11px; }
+  .seat-inner { max-width: 150px; }
+  .seat-discards, .seat-melds { max-width: 150px; }
 }

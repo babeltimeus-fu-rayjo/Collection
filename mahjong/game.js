@@ -488,6 +488,7 @@ function doDiscard(G, p, move) {
   G.kanThisTurn = false;
 
   addLog(G, `${p.name} discards ${tileName(tile)}.`);
+  say(G, p.seat, `${tileName(tile)}.`);
 
   // check if anyone can claim
   enterClaimPhase(G);
