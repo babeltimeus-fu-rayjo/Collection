@@ -15,7 +15,7 @@
 //   - Scoring: exact bid ≥1 → +20/trick; miss → −10 per trick off; a zero
 //     bid pays ±10 × the round number. Bonuses only with an exact bid:
 //     captured 14s +10 (black +20), pirate +20 per mermaid captured,
-//     Skull King +30 per pirate played before him, mermaid +50 for the SK.
+//     Skull King +30 per pirate captured, mermaid +40 for the SK.
 //   - Deck: the modern 70-card deck (mermaids included) PLUS the Legendary
 //     expansion menu: 2 Loot, the Kraken and the White Whale (74 cards).
 //       · Loot plays like an escape, but allies its player with whoever wins
@@ -323,13 +323,13 @@ function doPlay(G, p, move) {
     const pirates = t.plays.slice(0, -1).filter((pl) => effKind(pl) === 'pirate').length;
     let msg = `I play ${cardLabel(card, as)}.`;
     if (pirates) msg += ` +${pirates * 30} from ${pirates} pirate${pirates > 1 ? 's' : ''}.`;
-    msg += ' Mermaids earn +50.';
+    msg += ' Mermaids earn +40.';
     say(G, p.seat, msg);
   } else if (card.kind === 'mermaid') {
     const hasSK = t.plays.slice(0, -1).some((pl) => effKind(pl) === 'sk');
     say(G, p.seat, hasSK
-      ? `I play ${cardLabel(card, as)}! +50 from the Skull King!`
-      : `I play ${cardLabel(card, as)}. +50 against the Skull King, +20 for pirates.`);
+      ? `I play ${cardLabel(card, as)}! +40 from the Skull King!`
+      : `I play ${cardLabel(card, as)}. +40 against the Skull King, +20 for pirates.`);
   } else if (card.kind !== 'num') {
     say(G, p.seat, `I play ${cardLabel(card, as)}.`);
   }
@@ -464,9 +464,8 @@ export function trickBonus(plays, winnerPlay) {
   }
   const wk = effKind(winnerPlay);
   if (wk === 'sk') {
-    const skIdx = plays.indexOf(winnerPlay);
-    for (let i = 0; i < skIdx; i++) {
-      if (effKind(plays[i]) === 'pirate') bonus += 30;
+    for (const pl of plays) {
+      if (effKind(pl) === 'pirate') bonus += 30;
     }
   }
   if (wk === 'pirate') {
@@ -474,7 +473,7 @@ export function trickBonus(plays, winnerPlay) {
       if (effKind(pl) === 'mermaid') bonus += 20;
     }
   }
-  if (wk === 'mermaid' && plays.some((pl) => effKind(pl) === 'sk')) bonus += 50;
+  if (wk === 'mermaid' && plays.some((pl) => effKind(pl) === 'sk')) bonus += 40;
   return bonus;
 }
 
