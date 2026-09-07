@@ -11,9 +11,7 @@ import {
   VARIANTS,
   variantByKey,
   tileName,
-  tileShort,
   tileSort,
-  isNumber,
   isHonor,
   isTerminal,
   buildDeck,
@@ -121,22 +119,39 @@ function avatarEl(name, seat, bot = false) {
 
 // ---------------------------------------------------------------- tile rendering
 
-const TILE_LABELS = {
-  m: ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'],
-  p: ['', '①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨'],
+// Two ways to draw a tile face:
+//   'art' — a full Unicode mahjong tile glyph (the default, looks like the
+//           real thing); 'num' — a simplified value + suit letter, easier to
+//           read for beginners. Per-viewer preference, saved in localStorage.
+let tileMode = (() => { try { return localStorage.getItem('mjg-tilemode') === 'num' ? 'num' : 'art'; } catch { return 'art'; } })();
+
+const ART = {
+  m: ['', '🀇', '🀈', '🀉', '🀊', '🀋', '🀌', '🀍', '🀎', '🀏'],
+  p: ['', '🀙', '🀚', '🀛', '🀜', '🀝', '🀞', '🀟', '🀠', '🀡'],
   s: ['', '🀐', '🀑', '🀒', '🀓', '🀔', '🀕', '🀖', '🀗', '🀘'],
 };
+const ART_WIND = { E: '🀀', S: '🀁', W: '🀂', N: '🀃' };
+const ART_DRAGON = { R: '🀄', G: '🀅', W: '🀆' };
+const ART_FLOWER = ['', '🀢', '🀣', '🀤', '🀥', '🀦', '🀧', '🀨', '🀩'];
 
-function tileLabel(t) {
-  if (!t) return '?';
-  if (t.kind === 'wind') return { E: '東', S: '南', W: '西', N: '北' }[t.v] || t.v;
-  if (t.kind === 'dragon') return { R: '中', G: '發', W: '　' }[t.v] || t.v;
-  if (t.kind === 'flower') return t.v <= 4 ? ['🌸', '🌺', '🌻', '🌷'][t.v - 1] : ['🌲', '🌴', '🍁', '🎋'][t.v - 5];
-  if (t.kind === 'm') return TILE_LABELS.m[t.v] || t.v;
-  if (t.kind === 'p') return TILE_LABELS.p[t.v] || t.v;
-  if (t.kind === 's') return `${t.v}`;
+function artGlyph(t) {
+  if (t.kind === 'm' || t.kind === 'p' || t.kind === 's') return ART[t.kind][t.v] || '?';
+  if (t.kind === 'wind') return ART_WIND[t.v] || '?';
+  if (t.kind === 'dragon') return ART_DRAGON[t.v] || '?';
+  if (t.kind === 'flower') return ART_FLOWER[t.v] || '?';
+  return '?';
+}
+
+function numGlyph(t) {
+  if (t.kind === 'm' || t.kind === 'p' || t.kind === 's') return `${t.v}${t.kind}`;
+  if (t.kind === 'wind') return t.v; // E S W N
+  if (t.kind === 'dragon') return { R: 'R', G: 'G', W: 'Wt' }[t.v] || t.v;
+  if (t.kind === 'flower') return `F${t.v}`;
   return t.key;
 }
+
+// short text label for a tile (used in buttons), following the current mode
+function tileText(t) { return t ? (tileMode === 'art' ? artGlyph(t) : numGlyph(t)) : '?'; }
 
 function tileSuitClass(t) {
   if (!t) return '';
@@ -150,23 +165,14 @@ function tileSuitClass(t) {
 }
 
 function renderTile(t, opts = {}) {
-  if (!t) {
-    const d = el('div', `tile facedown${opts.small ? ' small' : ''}`);
-    return d;
-  }
+  if (!t) return el('div', `tile facedown${opts.small ? ' small' : ''}`);
   const cls = ['tile', tileSuitClass(t)];
   if (opts.small) cls.push('small');
   if (opts.highlight) cls.push('highlight');
   if (opts.lastDraw) cls.push('last-draw');
   if (opts.riichi) cls.push('riichi-mark');
   const d = el('div', cls.join(' '));
-  // two-line label: suit indicator on top, value below
-  const suitLine = { m: '萬', p: '筒', s: '索' }[t.kind] || '';
-  if (isNumber(t)) {
-    d.innerHTML = `<span style="font-size:0.7em;opacity:0.6">${suitLine}</span><br>${tileLabel(t)}`;
-  } else {
-    d.textContent = tileLabel(t);
-  }
+  d.append(el('span', tileMode === 'art' ? 'art-glyph' : 'num-main', tileText(t)));
   if (opts.onClick) { d.style.cursor = 'pointer'; d.addEventListener('click', opts.onClick); }
   return d;
 }
@@ -175,6 +181,20 @@ function renderMeld(meld) {
   const g = el('div', 'meld');
   for (const t of meld.tiles) g.append(renderTile(t, { small: true }));
   return g;
+}
+
+function updateTileBtn() {
+  const b = $('#btn-tiles');
+  if (!b) return;
+  b.textContent = tileMode === 'art' ? '🀄 Art' : 'AB Letters';
+  b.title = tileMode === 'art' ? 'Switch to simplified letters' : 'Switch to tile art';
+}
+
+function toggleTileMode() {
+  tileMode = tileMode === 'art' ? 'num' : 'art';
+  try { localStorage.setItem('mjg-tilemode', tileMode); } catch {}
+  updateTileBtn();
+  if (lastView && session) renderGame(lastView, session);
 }
 
 // ---------------------------------------------------------------- chat
@@ -654,6 +674,13 @@ function renderGame(view, sess) {
     windEl.classList.toggle('dealer', s === view.dealer);
     el_.querySelector('.seat-score').textContent = p ? `${p.score}` : '';
 
+    // concealed hand (face-down), so each seat looks like a real player
+    const handFd = el_.querySelector('.seat-hand');
+    if (handFd) {
+      handFd.replaceChildren();
+      if (p) for (let k = 0; k < p.tileCount; k++) handFd.append(renderTile(null, { small: true }));
+    }
+
     // melds
     const meldsEl = el_.querySelector('.seat-melds');
     meldsEl.replaceChildren();
@@ -819,7 +846,7 @@ function renderActions(view, sess) {
     }
     if (opts.options.includes('chi')) {
       for (const combo of opts.chiCombos) {
-        const label = `Chi: ${combo.map((t) => tileShort(t)).join('+')}`;
+        const label = `Chi ${combo.map((t) => tileText(t)).join('')}`;
         const b = el('button', 'btn chi-btn', label);
         b.addEventListener('click', () => {
           if (!pendingMove) { pendingMove = true; sess.localMove({ kind: 'chi', tile1: combo[0].id, tile2: combo[1].id }); }
@@ -863,7 +890,7 @@ function renderActions(view, sess) {
     if (a.canAddKan && a.addKanOptions.length > 0) {
       for (const tid of a.addKanOptions) {
         const t = view.players.find((q) => q.seat === my)?.hand.find((h) => h.id === tid);
-        const b = el('button', 'btn kan-btn', `Kan+ (${t ? tileShort(t) : '?'})`);
+        const b = el('button', 'btn kan-btn', `Kan+ (${t ? tileText(t) : '?'})`);
         b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; sess.localMove({ kind: 'kan', type: 'add', tileId: tid }); } });
         bar.append(b);
       }
@@ -1023,6 +1050,8 @@ $('#code-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') joi
 $('#name-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btn-create').click(); });
 $('#btn-add-bot').addEventListener('click', () => session?.addBot());
 $('#btn-start').addEventListener('click', () => session?.start());
+$('#btn-tiles').addEventListener('click', toggleTileMode);
+updateTileBtn();
 for (const b of document.querySelectorAll('.btn-leave')) b.addEventListener('click', leaveRoom);
 for (const b of document.querySelectorAll('.btn-rules')) b.addEventListener('click', () => $('#modal-rules').classList.remove('hidden'));
 $('#btn-rules-close').addEventListener('click', () => $('#modal-rules').classList.add('hidden'));

@@ -58,6 +58,7 @@
       <span id="wind-chip">E1</span>
       <span id="wall-chip">70</span>
       <span class="spacer"></span>
+      <button id="btn-tiles" class="btn ghost" type="button" title="Switch tile style">🀄 Art</button>
       <button class="btn ghost btn-rules" type="button">Rules</button>
       <button class="btn ghost btn-leave" type="button">Leave</button>
     </div>
@@ -66,20 +67,29 @@
       <!-- opponent across (seat+2) -->
       <div class="seat seat-top" data-seat="">
         <div class="seat-info"><span class="seat-name"></span><span class="seat-wind"></span><span class="seat-score"></span></div>
-        <div class="seat-melds"></div>
-        <div class="seat-discards"></div>
+        <div class="seat-inner">
+          <div class="seat-hand"></div>
+          <div class="seat-melds"></div>
+          <div class="seat-discards"></div>
+        </div>
       </div>
       <!-- opponent right (seat+1) -->
       <div class="seat seat-right" data-seat="">
         <div class="seat-info"><span class="seat-name"></span><span class="seat-wind"></span><span class="seat-score"></span></div>
-        <div class="seat-melds"></div>
-        <div class="seat-discards"></div>
+        <div class="seat-inner">
+          <div class="seat-hand"></div>
+          <div class="seat-melds"></div>
+          <div class="seat-discards"></div>
+        </div>
       </div>
       <!-- opponent left (seat+3) -->
       <div class="seat seat-left" data-seat="">
         <div class="seat-info"><span class="seat-name"></span><span class="seat-wind"></span><span class="seat-score"></span></div>
-        <div class="seat-melds"></div>
-        <div class="seat-discards"></div>
+        <div class="seat-inner">
+          <div class="seat-hand"></div>
+          <div class="seat-melds"></div>
+          <div class="seat-discards"></div>
+        </div>
       </div>
       <!-- center area -->
       <div id="center">
