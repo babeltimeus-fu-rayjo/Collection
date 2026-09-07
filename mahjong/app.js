@@ -190,23 +190,28 @@ function renderMeld(meld) {
   return g;
 }
 
-// -------- tile size (per-viewer, saved in localStorage) --------
-const SIZES = ['s', 'm', 'l'];
-const SIZE_LABEL = { s: 'Small', m: 'Medium', l: 'Large' };
-let tileSize = (() => { try { const v = localStorage.getItem('mjg-tilesize'); return SIZES.includes(v) ? v : 'm'; } catch { return 'm'; } })();
+// -------- tile size — two independent knobs, saved per browser --------
+const SZ_MIN = 0.6, SZ_MAX = 2.8;
+function loadSize(key) {
+  try { const v = parseFloat(localStorage.getItem(key)); if (Number.isFinite(v)) return Math.min(SZ_MAX, Math.max(SZ_MIN, v)); } catch {}
+  return 1;
+}
+let tsHand = loadSize('mjg-ts-hand');
+let tsOther = loadSize('mjg-ts-other');
 
-function applyTileSize() {
+function applySizes() {
   const g = $('#screen-game');
-  if (g) { g.classList.remove('size-s', 'size-m', 'size-l'); g.classList.add(`size-${tileSize}`); }
-  const b = $('#btn-size');
-  if (b) b.textContent = `Size: ${SIZE_LABEL[tileSize]}`;
+  if (g) { g.style.setProperty('--ts-hand', tsHand); g.style.setProperty('--ts-other', tsOther); }
+  const h = $('#sz-hand'), o = $('#sz-other');
+  if (h) h.value = tsHand;
+  if (o) o.value = tsOther;
+  const hv = $('#sz-hand-v'), ov = $('#sz-other-v');
+  if (hv) hv.textContent = `${Math.round(tsHand * 100)}%`;
+  if (ov) ov.textContent = `${Math.round(tsOther * 100)}%`;
 }
 
-function cycleTileSize() {
-  tileSize = SIZES[(SIZES.indexOf(tileSize) + 1) % SIZES.length];
-  try { localStorage.setItem('mjg-tilesize', tileSize); } catch {}
-  applyTileSize();
-}
+function setHandSize(v) { tsHand = v; try { localStorage.setItem('mjg-ts-hand', String(v)); } catch {} applySizes(); }
+function setOtherSize(v) { tsOther = v; try { localStorage.setItem('mjg-ts-other', String(v)); } catch {} applySizes(); }
 
 // ---------------------------------------------------------------- chat
 
@@ -694,10 +699,13 @@ function renderGame(view, sess) {
       if (p) for (let k = 0; k < p.tileCount; k++) handFd.append(renderTile(null, { small: true }));
     }
 
-    // melds
-    const meldsEl = el_.querySelector('.seat-melds');
-    meldsEl.replaceChildren();
-    if (p) for (const m of p.melds) meldsEl.append(renderMeld(m));
+    // played: flowers first, then melds (sets)
+    const playedEl = el_.querySelector('.seat-played');
+    playedEl.replaceChildren();
+    if (p) {
+      for (const f of (p.flowers || [])) playedEl.append(renderTile(f, { small: true }));
+      for (const m of p.melds) playedEl.append(renderMeld(m));
+    }
 
     // discards
     const discEl = el_.querySelector('.seat-discards');
@@ -843,19 +851,23 @@ function orderedHand(hand) {
   return handOrder.map((id) => byId.get(id));
 }
 
-// Drag a hand tile left/right to rearrange; a tap (no drag) selects/discards.
+// Drag a hand tile to rearrange it; the other tiles shift live to preview
+// where it will land. A tap (no drag) selects/discards.
 function attachHandTile(tile, t, sess, isMyTurn) {
   tile.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
-    handDrag = { id: t.id, el: tile, startX: e.clientX, startY: e.clientY, moved: false };
+    const r = tile.getBoundingClientRect();
+    handDrag = { id: t.id, el: tile, startX: e.clientX, grabX: e.clientX - r.left, moved: false };
     try { tile.setPointerCapture(e.pointerId); } catch {}
   });
   tile.addEventListener('pointermove', (e) => {
     if (!handDrag || handDrag.id !== t.id) return;
-    const dx = e.clientX - handDrag.startX;
-    const dy = e.clientY - handDrag.startY;
-    if (!handDrag.moved && Math.hypot(dx, dy) > 6) { handDrag.moved = true; tile.classList.add('dragging'); }
-    if (handDrag.moved) tile.style.transform = `translate(${dx}px, ${Math.min(6, dy)}px)`;
+    if (tile.parentNode !== $('#hand')) { handDrag = null; return; }
+    if (!handDrag.moved && Math.abs(e.clientX - handDrag.startX) > 6) {
+      handDrag.moved = true;
+      tile.classList.add('dragging');
+    }
+    if (handDrag.moved) dragPreview(tile, e.clientX);
   });
   const finish = (e) => {
     if (!handDrag || handDrag.id !== t.id) return;
@@ -864,8 +876,13 @@ function attachHandTile(tile, t, sess, isMyTurn) {
     tile.style.transform = '';
     try { tile.releasePointerCapture(e.pointerId); } catch {}
     handDrag = null;
-    if (moved) { commitReorder(t.id, e.clientX); if (lastView) renderGame(lastView, sess); }
-    else if (isMyTurn) handleTileClick(t, sess);
+    if (moved) {
+      // the live preview already put the tiles in their final order
+      handOrder = [...$('#hand').children].map((n) => Number(n.dataset.tid));
+      if (lastView) renderGame(lastView, sess);
+    } else if (isMyTurn) {
+      handleTileClick(t, sess);
+    }
   };
   tile.addEventListener('pointerup', finish);
   tile.addEventListener('pointercancel', () => {
@@ -873,19 +890,25 @@ function attachHandTile(tile, t, sess, isMyTurn) {
     tile.classList.remove('dragging');
     tile.style.transform = '';
     handDrag = null;
+    if (lastView) renderGame(lastView, session);
   });
 }
 
-function commitReorder(id, clientX) {
-  const others = [...$('#hand').querySelectorAll('.tile')].filter((n) => n.dataset.tid !== String(id));
-  let idx = others.length;
-  for (let i = 0; i < others.length; i++) {
-    const r = others[i].getBoundingClientRect();
-    if (clientX < r.left + r.width / 2) { idx = i; break; }
+// Reinsert the dragged tile where the pointer is (siblings reflow to preview
+// the result), then translate it so it stays under the finger/cursor.
+function dragPreview(tile, clientX) {
+  const handEl = $('#hand');
+  const sibs = [...handEl.children].filter((n) => n !== tile);
+  let ref = null;
+  for (const s of sibs) {
+    const r = s.getBoundingClientRect();
+    if (clientX < r.left + r.width / 2) { ref = s; break; }
   }
-  const cur = handOrder.filter((x) => x !== id);
-  cur.splice(idx, 0, id);
-  handOrder = cur;
+  if (ref) { if (tile.nextSibling !== ref) handEl.insertBefore(tile, ref); }
+  else if (handEl.lastChild !== tile) handEl.appendChild(tile);
+  tile.style.transform = '';
+  const natLeft = tile.getBoundingClientRect().left;
+  tile.style.transform = `translate(${Math.round(clientX - handDrag.grabX - natLeft)}px, -8px)`;
 }
 
 function renderActions(view, sess) {
@@ -1118,8 +1141,12 @@ $('#code-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') joi
 $('#name-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btn-create').click(); });
 $('#btn-add-bot').addEventListener('click', () => session?.addBot());
 $('#btn-start').addEventListener('click', () => session?.start());
-$('#btn-size').addEventListener('click', cycleTileSize);
-applyTileSize();
+$('#btn-size').addEventListener('click', (e) => { e.stopPropagation(); $('#size-popover').classList.toggle('hidden'); });
+$('#sz-hand').addEventListener('input', (e) => setHandSize(parseFloat(e.target.value)));
+$('#sz-other').addEventListener('input', (e) => setOtherSize(parseFloat(e.target.value)));
+$('#size-popover').addEventListener('click', (e) => e.stopPropagation());
+document.addEventListener('click', () => $('#size-popover').classList.add('hidden'));
+applySizes();
 for (const b of document.querySelectorAll('.btn-leave')) b.addEventListener('click', leaveRoom);
 for (const b of document.querySelectorAll('.btn-rules')) b.addEventListener('click', () => $('#modal-rules').classList.remove('hidden'));
 $('#btn-rules-close').addEventListener('click', () => $('#modal-rules').classList.add('hidden'));

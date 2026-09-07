@@ -58,9 +58,22 @@
       <span id="wind-chip">E1</span>
       <span id="wall-chip">70</span>
       <span class="spacer"></span>
-      <button id="btn-size" class="btn ghost" type="button" title="Change tile size">Size: Medium</button>
+      <button id="btn-size" class="btn ghost" type="button" title="Change tile size">Size</button>
       <button class="btn ghost btn-rules" type="button">Rules</button>
       <button class="btn ghost btn-leave" type="button">Leave</button>
+    </div>
+
+    <div id="size-popover" class="hidden">
+      <div class="sp-row">
+        <label for="sz-hand">My hand</label>
+        <input type="range" id="sz-hand" min="0.6" max="2.8" step="0.05">
+        <span id="sz-hand-v"></span>
+      </div>
+      <div class="sp-row">
+        <label for="sz-other">Other tiles</label>
+        <input type="range" id="sz-other" min="0.6" max="2.8" step="0.05">
+        <span id="sz-other-v"></span>
+      </div>
     </div>
 
     <div id="table">
@@ -69,7 +82,7 @@
         <div class="seat-info"><span class="seat-name"></span><span class="seat-wind"></span><span class="seat-score"></span></div>
         <div class="seat-inner">
           <div class="seat-hand"></div>
-          <div class="seat-melds"></div>
+          <div class="seat-played"></div>
           <div class="seat-discards"></div>
         </div>
       </div>
@@ -78,7 +91,7 @@
         <div class="seat-info"><span class="seat-name"></span><span class="seat-wind"></span><span class="seat-score"></span></div>
         <div class="seat-inner">
           <div class="seat-hand"></div>
-          <div class="seat-melds"></div>
+          <div class="seat-played"></div>
           <div class="seat-discards"></div>
         </div>
       </div>
@@ -87,7 +100,7 @@
         <div class="seat-info"><span class="seat-name"></span><span class="seat-wind"></span><span class="seat-score"></span></div>
         <div class="seat-inner">
           <div class="seat-hand"></div>
-          <div class="seat-melds"></div>
+          <div class="seat-played"></div>
           <div class="seat-discards"></div>
         </div>
       </div>

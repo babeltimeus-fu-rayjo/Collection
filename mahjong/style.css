@@ -55,39 +55,44 @@ body {
 .spacer { flex: 1; }
 #room-chip { font-weight: 700; color: #e8d5a3 !important; letter-spacing: 2px; }
 
-/* A square table: three opponents on the top/left/right edges, me at the
-   bottom, everyone's tiles rotated to face the center like a real table. */
+/* tile-size popover (opened by the Size button) */
+#size-popover {
+  position: absolute; top: 44px; right: 8px; z-index: 80;
+  background: #0d3320; border: 1px solid #2a6b45; border-radius: 10px;
+  padding: 10px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  display: flex; flex-direction: column; gap: 8px; min-width: 220px;
+}
+#size-popover .sp-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #b0c8a8; }
+#size-popover label { width: 72px; flex-shrink: 0; }
+#size-popover input[type="range"] { flex: 1; accent-color: #4db87a; }
+#size-popover span { width: 40px; text-align: right; color: #8ab89a; font-variant-numeric: tabular-nums; }
+
+/* Opponents sit around the table (top / left / right, me at the bottom) but
+   every hand faces the viewer, upright, so it's easy to read. Each seat
+   stacks: name, concealed hand, tiles played (flowers + sets), discards. */
 #table {
-  flex: 1; display: grid; gap: 4px; padding: 8px; position: relative; min-height: 300px;
-  grid-template-columns: minmax(100px, 1fr) minmax(168px, 1.7fr) minmax(100px, 1fr);
-  grid-template-rows: minmax(72px, 1fr) minmax(172px, 1.7fr) minmax(36px, auto);
+  flex: 1; display: grid; gap: 6px; padding: 8px; position: relative; min-height: 300px;
+  grid-template-columns: minmax(120px, 1fr) minmax(150px, 1.4fr) minmax(120px, 1fr);
+  grid-template-rows: auto 1fr;
 }
 
 /* ---- opponent seats */
-.seat { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; overflow: visible; padding: 2px; min-width: 0; min-height: 0; }
-/* column-reverse so that, once the block is rotated to face the middle, the
-   sections read from the player's outer edge inward: hand, melds, discards
-   (name sits just outside, above). */
-.seat-inner { display: flex; flex-direction: column-reverse; align-items: center; gap: 3px; max-width: 168px; }
-.seat-top   .seat-inner { transform: rotate(180deg); }
-.seat-left  .seat-inner { transform: rotate(90deg); }
-.seat-right .seat-inner { transform: rotate(-90deg); }
+.seat { display: flex; flex-direction: column; align-items: center; gap: 4px; overflow: visible; padding: 4px 2px; min-width: 0; min-height: 0; }
+.seat-inner { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; }
 
-.seat-info { display: flex; align-items: center; gap: 6px; font-size: 12px; flex-wrap: wrap; justify-content: center; position: relative; z-index: 3; text-shadow: 0 1px 3px #0d3320, 0 0 4px #0d3320; }
-.seat-name { font-weight: 600; color: #e8d5a3; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seat-info { display: flex; align-items: center; gap: 6px; font-size: 12px; flex-wrap: wrap; justify-content: center; }
+.seat-name { font-weight: 600; color: #e8d5a3; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .seat-wind { background: #2a6b45; color: #e8d5a3; padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; }
 .seat-wind.dealer { background: #b85a2a; }
 .seat-score { color: #8ab89a; font-size: 11px; }
 
-.seat-top   { grid-column: 2; grid-row: 1; }
-.seat-left  { grid-column: 1; grid-row: 2; }
-.seat-right { grid-column: 3; grid-row: 2; }
+.seat-top   { grid-column: 1 / -1; grid-row: 1; }
+.seat-left  { grid-column: 1; grid-row: 2; align-self: start; }
+.seat-right { grid-column: 3; grid-row: 2; align-self: start; }
 
-/* face-down concealed hand: a thin single-row strip on the outer edge */
-.seat-hand { display: flex; gap: 1px; flex-wrap: nowrap; justify-content: center; }
-/* discard river: wraps wide so it stays a few rows deep (thin once rotated) */
-.seat-discards { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; max-width: 168px; }
-.seat-melds { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; max-width: 168px; }
+.seat-hand { display: flex; gap: 1px; flex-wrap: wrap; justify-content: center; }
+.seat-played { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
+.seat-discards { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; opacity: .96; }
 
 /* ---- center */
 #center { grid-column: 2; grid-row: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-width: 0; }
@@ -102,24 +107,24 @@ body {
 #my-melds { display: flex; gap: 6px; justify-content: center; margin: 2px 0; flex-wrap: wrap; }
 
 /* ================================================================ tiles */
-/* --ts scales every tile; the Size button toggles S / M / L. */
-#screen-game { --ts: 1; }
-#screen-game.size-s { --ts: 0.82; }
-#screen-game.size-l { --ts: 1.24; }
+/* Two independent size knobs (set live by the Size sliders): --ts-hand for my
+   own hand, --ts-other for everyone else's tiles, discards, melds and the
+   centre. --ts-base is a device factor (smaller on phones). */
+#screen-game { --ts-base: 1; --ts-hand: 1; --ts-other: 1; }
 
 .tile {
   display: inline-flex; align-items: center; justify-content: center;
-  width: calc(30px * var(--ts)); height: calc(40px * var(--ts));
-  border-radius: calc(5px * var(--ts));
+  width: calc(30px * var(--ts-base) * var(--ts-other)); height: calc(40px * var(--ts-base) * var(--ts-other));
+  border-radius: calc(4px * var(--ts-base) * var(--ts-other));
   background: linear-gradient(165deg, #fdf9ee, #ece1c6);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.75), 0 1px 2px rgba(0,0,0,.3);
   color: #1a1a1a; flex-shrink: 0; position: relative; line-height: 1; text-align: center; cursor: default;
 }
-.tile.small { width: calc(25px * var(--ts)); height: calc(33px * var(--ts)); }
+.tile.small { width: calc(25px * var(--ts-base) * var(--ts-other)); height: calc(33px * var(--ts-base) * var(--ts-other)); }
 
 /* coloured tile face — a big glyph tinted by suit */
-.art-glyph { font-size: calc(29px * var(--ts)); line-height: 1; }
-.tile.small .art-glyph { font-size: calc(24px * var(--ts)); }
+.art-glyph { font-size: calc(29px * var(--ts-base) * var(--ts-other)); line-height: 1; }
+.tile.small .art-glyph { font-size: calc(24px * var(--ts-base) * var(--ts-other)); }
 .tile.man    .art-glyph { color: #17439b; }
 .tile.pin    .art-glyph { color: #b0202a; }
 .tile.sou    .art-glyph { color: #1a7d31; }
@@ -131,11 +136,11 @@ body {
 
 /* small English index, top-right of numbered tiles */
 .tile-idx {
-  position: absolute; top: 1px; right: calc(2px * var(--ts));
-  font-size: calc(10px * var(--ts)); font-weight: 800; line-height: 1;
+  position: absolute; top: 1px; right: 2px;
+  font-size: calc(10px * var(--ts-base) * var(--ts-other)); font-weight: 800; line-height: 1;
   color: rgba(20,20,20,.55);
 }
-.tile.small .tile-idx { top: 0; right: 1px; font-size: calc(8px * var(--ts)); }
+.tile.small .tile-idx { top: 0; right: 1px; font-size: calc(8px * var(--ts-base) * var(--ts-other)); }
 .tile.man .tile-idx { color: rgba(23,67,155,.78); }
 .tile.pin .tile-idx { color: rgba(176,32,42,.82); }
 .tile.sou .tile-idx { color: rgba(26,125,49,.8); }
@@ -144,27 +149,27 @@ body {
 .tile.facedown::after { content: ''; position: absolute; inset: 3px; border: 1px solid rgba(255,255,255,.14); border-radius: 2px; }
 .tile.highlight { outline: 2px solid #4db87a; }
 .tile.last-draw { outline: 2px solid #e8d5a3; }
-.tile.riichi-mark { box-shadow: inset 0 calc(-3px * var(--ts)) 0 #cc2222, 0 1px 2px rgba(0,0,0,.3); }
+.tile.riichi-mark { box-shadow: inset 0 -3px 0 #cc2222, 0 1px 2px rgba(0,0,0,.3); }
 
-/* hand tiles */
+/* hand tiles — sized by --ts-hand */
 #hand {
   display: flex; gap: 3px; justify-content: center; align-items: flex-end;
   padding: 6px 12px 8px; min-height: 60px; flex-wrap: wrap; touch-action: pan-y;
 }
 #hand .tile {
-  cursor: pointer; transition: transform .1s, box-shadow .1s;
-  width: calc(40px * var(--ts)); height: calc(52px * var(--ts));
+  cursor: pointer; transition: transform .12s ease, box-shadow .1s;
+  width: calc(40px * var(--ts-base) * var(--ts-hand)); height: calc(52px * var(--ts-base) * var(--ts-hand));
 }
-#hand .tile .art-glyph { font-size: calc(38px * var(--ts)); }
-#hand .tile .tile-idx { font-size: calc(12px * var(--ts)); }
+#hand .tile .art-glyph { font-size: calc(38px * var(--ts-base) * var(--ts-hand)); }
+#hand .tile .tile-idx { font-size: calc(12px * var(--ts-base) * var(--ts-hand)); }
 #hand .tile:hover { transform: translateY(-4px); box-shadow: 0 4px 12px rgba(0,0,0,.3); }
 #hand .tile.selected { transform: translateY(-8px); box-shadow: 0 0 0 2px #e8d5a3, 0 6px 16px rgba(0,0,0,.4); }
-#hand .tile.dragging { opacity: .92; box-shadow: 0 8px 18px rgba(0,0,0,.5); transition: none; z-index: 5; }
+#hand .tile.dragging { opacity: .95; box-shadow: 0 8px 18px rgba(0,0,0,.5); transition: none; z-index: 5; }
 
-/* meld tiles & opponents' concealed (face-down) hands */
+/* meld tiles & opponents' concealed (face-down) hands — sized by --ts-other */
 .meld { display: flex; gap: 1px; }
-.meld .tile { width: calc(27px * var(--ts)); height: calc(36px * var(--ts)); }
-.seat-hand .tile { width: calc(15px * var(--ts)); height: calc(21px * var(--ts)); }
+.meld .tile { width: calc(24px * var(--ts-base) * var(--ts-other)); height: calc(32px * var(--ts-base) * var(--ts-other)); }
+.seat-hand .tile { width: calc(20px * var(--ts-base) * var(--ts-other)); height: calc(27px * var(--ts-base) * var(--ts-other)); }
 .seat-hand .tile::after { inset: 2px; }
 
 /* ================================================================ action bar */
@@ -264,16 +269,13 @@ body {
 
 /* ================================================================ responsive */
 @media (max-width: 600px) {
-  /* shrink the whole tile scale so a square table fits a phone */
-  #screen-game.size-s { --ts: 0.62; }
-  #screen-game.size-m { --ts: 0.76; }
-  #screen-game.size-l { --ts: 0.94; }
+  /* device factor shrinks every tile so the table fits a phone; the Size
+     sliders still scale on top of this. */
+  #screen-game { --ts-base: 0.72; }
   #table {
-    grid-template-columns: minmax(80px, 1fr) minmax(116px, 1.4fr) minmax(80px, 1fr);
-    grid-template-rows: minmax(56px, 1fr) minmax(150px, 1.7fr) minmax(24px, auto);
+    grid-template-columns: minmax(96px, 1fr) minmax(110px, 1.3fr) minmax(96px, 1fr);
+    grid-template-rows: auto 1fr;
     padding: 4px;
   }
-  .seat-name { max-width: 64px; font-size: 11px; }
-  .seat-inner { max-width: 150px; }
-  .seat-discards, .seat-melds { max-width: 150px; }
+  .seat-name { max-width: 78px; font-size: 11px; }
 }
