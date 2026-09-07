@@ -33,7 +33,7 @@ import '../common/version.js';
 
 const cfg = initSettings('mjg', [
   { key: 'botDelay', label: 'Bot thinking delay', def: [1200, 800], section: 'Host pacing', host: true },
-  { key: 'claimTimeout', label: 'Claim timeout', def: 8000, section: 'Host pacing', host: true, hint: 'Auto-pass after this long if a player hasn\'t responded to a claim.' },
+  { key: 'claimTimeout', label: 'Claim timeout (0 = off)', def: 0, section: 'Host pacing', host: true, hint: 'Auto-pass a player who hasn\'t responded to a claim after this long. 0 waits indefinitely (the default).' },
   { key: 'talkScale', label: 'Speech-line waits ×', def: 1, min: 0, max: 4, step: 0.1, unit: '×', ms: false, section: 'Table talk' },
   { key: 'talkHoldPad', label: 'Turn hold after last line', def: 1200, section: 'Table talk' },
   { key: 'bubbleSay', label: 'Game bubbles linger', def: 4000, section: 'Bubbles & banners' },
@@ -535,13 +535,15 @@ class HostSession {
   scheduleClaimTimeout() {
     clearTimeout(this.claimTimer);
     if (!this.G || this.G.phase !== 'claim') return;
+    const ms = cfg('claimTimeout');
+    if (!ms || ms <= 0) return; // 0 = wait indefinitely for a response
     this.claimTimer = setTimeout(() => {
       if (!this.G || this.G.phase !== 'claim' || !this.G.claimPhase) return;
       // auto-pass for anyone who hasn't responded
       for (const e of this.G.claimPhase.eligible) {
         if (!e.response) this.move(e.seat, { kind: 'pass' });
       }
-    }, cfg('claimTimeout'));
+    }, ms);
   }
 
   destroy() {
@@ -630,16 +632,25 @@ function renderLobby(sess, lobbyMsg) {
   const variant = isHost ? sess.selectedVariant : (lobbyMsg && lobbyMsg.variant) || 'hk';
 
   $('#lobby-code').textContent = sess.code;
+  // Always render NUM_PLAYERS seats (filled or "Open seat") so the list height
+  // stays constant — adding a bot fills a slot instead of growing the panel.
   const list = $('#lobby-players');
   list.replaceChildren();
-  for (const p of roster) {
-    const li = el('li', '');
-    li.append(avatarEl(p.name, p.seat, p.bot));
-    li.append(el('span', '', p.name));
-    if (p.bot && isHost) {
-      const rm = el('button', 'btn ghost', '✕');
-      rm.addEventListener('click', () => sess.removeBot(p.seat));
-      li.append(rm);
+  const bySeat = [...roster].sort((a, b) => a.seat - b.seat);
+  for (let i = 0; i < NUM_PLAYERS; i++) {
+    const p = bySeat[i];
+    const li = el('li', p ? '' : 'empty');
+    if (p) {
+      li.append(avatarEl(p.name, p.seat, p.bot));
+      li.append(el('span', 'p-name', p.name));
+      if (p.bot && isHost) {
+        const rm = el('button', 'btn ghost seat-remove', '✕');
+        rm.addEventListener('click', () => sess.removeBot(p.seat));
+        li.append(rm);
+      }
+    } else {
+      li.append(el('div', 'av empty-av'));
+      li.append(el('span', 'p-name empty-label', 'Open seat'));
     }
     list.append(li);
   }
@@ -872,30 +883,34 @@ function attachHandTile(tile, t, sess, isMyTurn) {
   const finish = (e) => {
     if (!handDrag || handDrag.id !== t.id) return;
     const moved = handDrag.moved;
-    tile.classList.remove('dragging');
-    tile.style.transform = '';
     try { tile.releasePointerCapture(e.pointerId); } catch {}
     handDrag = null;
     if (moved) {
-      // the live preview already put the tiles in their final order
+      // the live preview already put the DOM in its final order — just record
+      // it and let the tile glide from the cursor into its slot (no re-render,
+      // so it settles smoothly).
       handOrder = [...$('#hand').children].map((n) => Number(n.dataset.tid));
-      if (lastView) renderGame(lastView, sess);
-    } else if (isMyTurn) {
-      handleTileClick(t, sess);
+      tile.classList.remove('dragging');
+      tile.style.transform = '';
+    } else {
+      tile.classList.remove('dragging');
+      tile.style.transform = '';
+      if (isMyTurn) handleTileClick(t, sess);
     }
   };
   tile.addEventListener('pointerup', finish);
   tile.addEventListener('pointercancel', () => {
     if (!handDrag || handDrag.id !== t.id) return;
+    handOrder = [...$('#hand').children].map((n) => Number(n.dataset.tid));
+    handDrag = null;
     tile.classList.remove('dragging');
     tile.style.transform = '';
-    handDrag = null;
-    if (lastView) renderGame(lastView, session);
   });
 }
 
-// Reinsert the dragged tile where the pointer is (siblings reflow to preview
-// the result), then translate it so it stays under the finger/cursor.
+// Reinsert the dragged tile where the pointer is, animating the other tiles
+// (FLIP) so they glide aside to preview the result; the dragged tile tracks
+// the cursor.
 function dragPreview(tile, clientX) {
   const handEl = $('#hand');
   const sibs = [...handEl.children].filter((n) => n !== tile);
@@ -904,8 +919,18 @@ function dragPreview(tile, clientX) {
     const r = s.getBoundingClientRect();
     if (clientX < r.left + r.width / 2) { ref = s; break; }
   }
-  if (ref) { if (tile.nextSibling !== ref) handEl.insertBefore(tile, ref); }
-  else if (handEl.lastChild !== tile) handEl.appendChild(tile);
+  const willChange = ref ? (tile.nextSibling !== ref) : (handEl.lastChild !== tile);
+  if (willChange) {
+    const before = sibs.map((s) => [s, s.getBoundingClientRect().left]);
+    if (ref) handEl.insertBefore(tile, ref); else handEl.appendChild(tile);
+    for (const [s, x0] of before) {
+      const dx = x0 - s.getBoundingClientRect().left;
+      if (!dx) continue;
+      s.style.transition = 'none';
+      s.style.transform = `translateX(${dx}px)`;
+      requestAnimationFrame(() => { s.style.transition = 'transform .16s ease'; s.style.transform = ''; });
+    }
+  }
   tile.style.transform = '';
   const natLeft = tile.getBoundingClientRect().left;
   tile.style.transform = `translate(${Math.round(clientX - handDrag.grabX - natLeft)}px, -8px)`;

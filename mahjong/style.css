@@ -38,10 +38,15 @@ body {
 #lobby-code { font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #e8d5a3; }
 .copy-row { display: flex; gap: 8px; margin: 4px 0 12px; }
 #lobby-players { list-style: none; }
-#lobby-players li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #1a4a32; font-size: 15px; }
-.av { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; color: #fff; }
+#lobby-players li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #1a4a32; font-size: 15px; min-height: 42px; }
+#lobby-players li.empty { opacity: .55; }
+.p-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.empty-label { color: #6a9a7a; font-style: italic; }
+.seat-remove { margin-left: auto; }
+.av { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; color: #fff; flex-shrink: 0; }
 .av.s0 { background: #2a8c52; } .av.s1 { background: #b85a2a; } .av.s2 { background: #5a5ab8; } .av.s3 { background: #8a2a6a; }
 .av.bot { background: #4a4a4a; }
+.empty-av { background: transparent; border: 2px dashed #2a6b45; }
 #variant-picker { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
 #variant-picker .chip { padding: 6px 14px; border-radius: 16px; font-size: 13px; cursor: pointer; background: #1a4a32; color: #8ab89a; border: 2px solid transparent; }
 #variant-picker .chip.active { background: #2a6b45; color: #e8d5a3; border-color: #4db87a; }
@@ -72,7 +77,7 @@ body {
    stacks: name, concealed hand, tiles played (flowers + sets), discards. */
 #table {
   flex: 1; display: grid; gap: 6px; padding: 8px; position: relative; min-height: 300px;
-  grid-template-columns: minmax(120px, 1fr) minmax(150px, 1.4fr) minmax(120px, 1fr);
+  grid-template-columns: minmax(210px, 1fr) minmax(150px, 1fr) minmax(210px, 1fr);
   grid-template-rows: auto 1fr;
 }
 
@@ -87,8 +92,8 @@ body {
 .seat-score { color: #8ab89a; font-size: 11px; }
 
 .seat-top   { grid-column: 1 / -1; grid-row: 1; }
-.seat-left  { grid-column: 1; grid-row: 2; align-self: start; }
-.seat-right { grid-column: 3; grid-row: 2; align-self: start; }
+.seat-left  { grid-column: 1; grid-row: 2; align-self: center; }
+.seat-right { grid-column: 3; grid-row: 2; align-self: center; }
 
 .seat-hand { display: flex; gap: 1px; flex-wrap: wrap; justify-content: center; }
 .seat-played { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
@@ -169,7 +174,9 @@ body {
 /* meld tiles & opponents' concealed (face-down) hands — sized by --ts-other */
 .meld { display: flex; gap: 1px; }
 .meld .tile { width: calc(24px * var(--ts-base) * var(--ts-other)); height: calc(32px * var(--ts-base) * var(--ts-other)); }
-.seat-hand .tile { width: calc(20px * var(--ts-base) * var(--ts-other)); height: calc(27px * var(--ts-base) * var(--ts-other)); }
+/* face-down concealed hand stays compact so it fits one row (not scaled by
+   the "other tiles" slider) */
+.seat-hand .tile { width: calc(15px * var(--ts-base)); height: calc(20px * var(--ts-base)); }
 .seat-hand .tile::after { inset: 2px; }
 
 /* ================================================================ action bar */
@@ -271,9 +278,9 @@ body {
 @media (max-width: 600px) {
   /* device factor shrinks every tile so the table fits a phone; the Size
      sliders still scale on top of this. */
-  #screen-game { --ts-base: 0.72; }
+  #screen-game { --ts-base: 0.66; }
   #table {
-    grid-template-columns: minmax(96px, 1fr) minmax(110px, 1.3fr) minmax(96px, 1fr);
+    grid-template-columns: minmax(132px, 1fr) minmax(84px, 0.7fr) minmax(132px, 1fr);
     grid-template-rows: auto 1fr;
     padding: 4px;
   }
