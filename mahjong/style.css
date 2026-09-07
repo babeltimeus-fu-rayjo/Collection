@@ -92,8 +92,11 @@ body {
 .seat-score { color: #8ab89a; font-size: 11px; }
 
 .seat-top   { grid-column: 1 / -1; grid-row: 1; }
-.seat-left  { grid-column: 1; grid-row: 2; align-self: center; }
-.seat-right { grid-column: 3; grid-row: 2; align-self: center; }
+/* top-aligned so left & right are level with each other and don't shift
+   vertically as discards accumulate */
+.seat-left  { grid-column: 1; grid-row: 2; align-self: start; }
+.seat-right { grid-column: 3; grid-row: 2; align-self: start; }
+#center     { align-self: start; }
 
 .seat-hand { display: flex; gap: 1px; flex-wrap: wrap; justify-content: center; }
 .seat-played { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
@@ -174,9 +177,9 @@ body {
 /* meld tiles & opponents' concealed (face-down) hands — sized by --ts-other */
 .meld { display: flex; gap: 1px; }
 .meld .tile { width: calc(24px * var(--ts-base) * var(--ts-other)); height: calc(32px * var(--ts-base) * var(--ts-other)); }
-/* face-down concealed hand stays compact so it fits one row (not scaled by
-   the "other tiles" slider) */
-.seat-hand .tile { width: calc(15px * var(--ts-base)); height: calc(20px * var(--ts-base)); }
+/* face-down concealed hand — scales with the "other tiles" slider like the
+   rest; compact base so it fits one row at the default size */
+.seat-hand .tile { width: calc(15px * var(--ts-base) * var(--ts-other)); height: calc(20px * var(--ts-base) * var(--ts-other)); }
 .seat-hand .tile::after { inset: 2px; }
 
 /* ================================================================ action bar */
@@ -198,12 +201,16 @@ body {
 .btn.kan-btn { background: #8c5a2a; color: #fff; }
 .btn.kan-btn:hover { background: #9c6a3a; }
 
-/* ================================================================ feed */
+/* ================================================================ feed (history log, top-right) */
 #feed {
-  max-height: 80px; overflow-y: auto; padding: 4px 12px; font-size: 12px; color: #5a8a6a;
-  border-top: 1px solid #1a4a32; flex-shrink: 0;
+  position: fixed; top: 48px; right: 8px; z-index: 45;
+  width: 190px; max-height: 128px; overflow-y: auto;
+  padding: 6px 10px; font-size: 11px; line-height: 1.35; color: #8ab89a;
+  background: rgba(10, 42, 26, 0.8); border: 1px solid #1a4a32; border-radius: 8px;
+  backdrop-filter: blur(3px);
 }
 #feed div { padding: 1px 0; }
+#feed:empty { display: none; }
 
 /* ================================================================ modals */
 .modal { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.65); padding: 16px; overflow-y: auto; }

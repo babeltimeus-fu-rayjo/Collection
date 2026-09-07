@@ -863,48 +863,42 @@ function orderedHand(hand) {
 }
 
 // Drag a hand tile to rearrange it; the other tiles shift live to preview
-// where it will land. A tap (no drag) selects/discards.
+// where it will land. A tap (no drag) selects/discards. Move/up are bound to
+// the window so the drag keeps tracking even when the cursor leaves the tiles.
 function attachHandTile(tile, t, sess, isMyTurn) {
   tile.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (handDrag) return;
+    e.preventDefault();
     const r = tile.getBoundingClientRect();
-    handDrag = { id: t.id, el: tile, startX: e.clientX, grabX: e.clientX - r.left, moved: false };
-    try { tile.setPointerCapture(e.pointerId); } catch {}
-  });
-  tile.addEventListener('pointermove', (e) => {
-    if (!handDrag || handDrag.id !== t.id) return;
-    if (tile.parentNode !== $('#hand')) { handDrag = null; return; }
-    if (!handDrag.moved && Math.abs(e.clientX - handDrag.startX) > 6) {
-      handDrag.moved = true;
-      tile.classList.add('dragging');
-    }
-    if (handDrag.moved) dragPreview(tile, e.clientX);
-  });
-  const finish = (e) => {
-    if (!handDrag || handDrag.id !== t.id) return;
-    const moved = handDrag.moved;
-    try { tile.releasePointerCapture(e.pointerId); } catch {}
-    handDrag = null;
-    if (moved) {
-      // the live preview already put the DOM in its final order — just record
-      // it and let the tile glide from the cursor into its slot (no re-render,
-      // so it settles smoothly).
-      handOrder = [...$('#hand').children].map((n) => Number(n.dataset.tid));
+    const drag = { id: t.id, el: tile, startX: e.clientX, grabX: e.clientX - r.left, moved: false };
+    handDrag = drag;
+
+    const onMove = (ev) => {
+      if (handDrag !== drag) return;
+      if (!drag.moved && Math.abs(ev.clientX - drag.startX) > 5) {
+        drag.moved = true;
+        tile.classList.add('dragging');
+      }
+      if (drag.moved) dragPreview(tile, ev.clientX);
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      const moved = drag.moved;
+      handDrag = null;
       tile.classList.remove('dragging');
       tile.style.transform = '';
-    } else {
-      tile.classList.remove('dragging');
-      tile.style.transform = '';
-      if (isMyTurn) handleTileClick(t, sess);
-    }
-  };
-  tile.addEventListener('pointerup', finish);
-  tile.addEventListener('pointercancel', () => {
-    if (!handDrag || handDrag.id !== t.id) return;
-    handOrder = [...$('#hand').children].map((n) => Number(n.dataset.tid));
-    handDrag = null;
-    tile.classList.remove('dragging');
-    tile.style.transform = '';
+      if (moved) {
+        handOrder = [...$('#hand').children].map((n) => Number(n.dataset.tid));
+      } else if (isMyTurn) {
+        handleTileClick(t, sess);
+      }
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
   });
 }
 
@@ -921,14 +915,21 @@ function dragPreview(tile, clientX) {
   }
   const willChange = ref ? (tile.nextSibling !== ref) : (handEl.lastChild !== tile);
   if (willChange) {
+    // FLIP without rAF: record positions, reorder, apply the inverse transform,
+    // force one reflow, then transition to zero so siblings glide across.
     const before = sibs.map((s) => [s, s.getBoundingClientRect().left]);
     if (ref) handEl.insertBefore(tile, ref); else handEl.appendChild(tile);
+    let any = false;
     for (const [s, x0] of before) {
       const dx = x0 - s.getBoundingClientRect().left;
       if (!dx) continue;
+      any = true;
       s.style.transition = 'none';
       s.style.transform = `translateX(${dx}px)`;
-      requestAnimationFrame(() => { s.style.transition = 'transform .16s ease'; s.style.transform = ''; });
+    }
+    if (any) {
+      void handEl.offsetWidth; // flush the "from" transforms in one reflow
+      for (const [s] of before) { s.style.transition = 'transform .15s ease'; s.style.transform = ''; }
     }
   }
   tile.style.transform = '';
