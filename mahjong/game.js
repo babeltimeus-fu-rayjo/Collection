@@ -265,18 +265,8 @@ function dealHand(G) {
 
   // dealer gets an extra tile (the opening draw)
   const dealerP = playerBySeat(G, G.dealer);
-  const drawn = drawFromWall(G);
-  if (drawn) {
-    dealerP.hand.push(drawn);
-    dealerP.hand.sort(tileSort);
-    G.lastDraw = drawn;
-    // replace if flower
-    if (G.variant !== 'jp' && drawn.kind === 'flower') {
-      dealerP.flowers.push(drawn);
-      dealerP.hand = dealerP.hand.filter((t) => t.id !== drawn.id);
-      replaceFlowers(G, dealerP);
-    }
-  }
+  const drawn = drawTileFor(G, dealerP);
+  if (drawn) G.lastDraw = drawn;
 
   G.phase = 'discard'; // dealer discards first
   const ew = seatWind(G, G.dealer);
@@ -297,27 +287,33 @@ function drawFromDeadWall(G) {
   return t;
 }
 
+// Move every flower out of the hand and draw a real replacement for each — a
+// replacement that is itself a flower is set aside and re-drawn, so the hand
+// keeps its exact size. Used after the initial deal (hand may hold several).
 function replaceFlowers(G, p) {
-  let replaced = true;
-  while (replaced) {
-    replaced = false;
-    const flowers = p.hand.filter((t) => t.kind === 'flower');
-    for (const f of flowers) {
-      p.flowers.push(f);
-      p.hand = p.hand.filter((t) => t.id !== f.id);
-      const rep = drawFromWall(G);
-      if (rep) {
-        if (rep.kind === 'flower') {
-          p.flowers.push(rep);
-          replaced = true;
-        } else {
-          p.hand.push(rep);
-          replaced = true;
-        }
-      }
-    }
+  let f;
+  while ((f = p.hand.find((t) => t.kind === 'flower'))) {
+    p.hand = p.hand.filter((t) => t.id !== f.id);
+    p.flowers.push(f);
+    let rep = drawFromWall(G);
+    while (rep && rep.kind === 'flower') { p.flowers.push(rep); rep = drawFromWall(G); }
+    if (rep) p.hand.push(rep);
+    else break; // wall exhausted mid-replacement — the hand ends short, but the round is ending
   }
   p.hand.sort(tileSort);
+}
+
+// Draw one tile into p's hand; if it (or its replacement) is a flower, set the
+// flower(s) aside and keep drawing until a non-flower lands. Returns the tile
+// that actually entered the hand (for lastDraw), or null if the source ran dry.
+function drawTileFor(G, p, fromDeadWall = false) {
+  const draw = () => (fromDeadWall ? drawFromDeadWall(G) : drawFromWall(G));
+  let t = draw();
+  while (t && G.variant !== 'jp' && t.kind === 'flower') { p.flowers.push(t); t = draw(); }
+  if (!t) return null;
+  p.hand.push(t);
+  p.hand.sort(tileSort);
+  return t;
 }
 
 // ---------------------------------------------------------------- legality
@@ -567,17 +563,8 @@ function doKan(G, p, move) {
         G.uraDora.push(G.deadWall[5 + (G.uraDora.length) * 2]);
       }
       // draw replacement from dead wall
-      const rep = drawFromDeadWall(G);
-      if (rep) {
-        if (G.variant !== 'jp' && rep.kind === 'flower') {
-          p.flowers.push(rep);
-          replaceFlowers(G, p);
-        } else {
-          p.hand.push(rep);
-          p.hand.sort(tileSort);
-          G.lastDraw = rep;
-        }
-      }
+      const rep = drawTileFor(G, p, true);
+      if (rep) G.lastDraw = rep;
       G.kanThisTurn = true;
       // still in discard phase — player must discard (or tsumo)
       return { ok: true };
@@ -597,17 +584,8 @@ function doKan(G, p, move) {
         G.dora.push(G.deadWall[4 + (G.dora.length) * 2]);
         G.uraDora.push(G.deadWall[5 + (G.uraDora.length) * 2]);
       }
-      const rep = drawFromDeadWall(G);
-      if (rep) {
-        if (G.variant !== 'jp' && rep.kind === 'flower') {
-          p.flowers.push(rep);
-          replaceFlowers(G, p);
-        } else {
-          p.hand.push(rep);
-          p.hand.sort(tileSort);
-          G.lastDraw = rep;
-        }
-      }
+      const rep = drawTileFor(G, p, true);
+      if (rep) G.lastDraw = rep;
       G.kanThisTurn = true;
       return { ok: true };
     }
@@ -712,17 +690,8 @@ function resolveClaims(G) {
       G.dora.push(G.deadWall[4 + (G.dora.length) * 2]);
       G.uraDora.push(G.deadWall[5 + (G.uraDora.length) * 2]);
     }
-    const rep = drawFromDeadWall(G);
-    if (rep) {
-      if (G.variant !== 'jp' && rep.kind === 'flower') {
-        p.flowers.push(rep);
-        replaceFlowers(G, p);
-      } else {
-        p.hand.push(rep);
-        p.hand.sort(tileSort);
-        G.lastDraw = rep;
-      }
-    }
+    const rep = drawTileFor(G, p, true);
+    if (rep) G.lastDraw = rep;
     G.turn = p.seat;
     G.phase = 'discard';
     G.kanThisTurn = true;
@@ -768,13 +737,7 @@ function advanceTurn(G) {
     return;
   }
 
-  // draw a tile
   const p = playerBySeat(G, next);
-  const tile = drawFromWall(G);
-  if (!tile) {
-    resolveExhaustiveDraw(G);
-    return;
-  }
 
   // JP: clear ippatsu for everyone after a full round
   if (G.variant === 'jp') {
@@ -783,16 +746,13 @@ function advanceTurn(G) {
     }
   }
 
-  // HK/TW: replace flowers
-  if (G.variant !== 'jp' && tile.kind === 'flower') {
-    p.flowers.push(tile);
-    replaceFlowers(G, p);
-    G.lastDraw = p.hand[p.hand.length - 1]; // last added tile
-  } else {
-    p.hand.push(tile);
-    p.hand.sort(tileSort);
-    G.lastDraw = tile;
+  // draw (flowers are set aside and re-drawn, so the hand keeps its size)
+  const drawn = drawTileFor(G, p);
+  if (!drawn) {
+    resolveExhaustiveDraw(G);
+    return;
   }
+  G.lastDraw = drawn;
 
   G.phase = 'discard';
   G.kanThisTurn = false;
