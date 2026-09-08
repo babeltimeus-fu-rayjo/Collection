@@ -75,11 +75,10 @@ body {
 /* Opponents sit around the table (top / left / right, me at the bottom) but
    every hand faces the viewer, upright, so it's easy to read. Each seat
    stacks: name, concealed hand, tiles played (flowers + sets), discards. */
-/* The table sizes to its content and is centred in the space below the topbar
-   (margin-top:auto here + margin-bottom:auto on the action bar), so opponents
-   sit just above the hand instead of leaving a big gap. */
+/* The table sizes to its content and stays anchored to the top (below the
+   topbar); opponents sit just above the hand with no big gap. */
 #table {
-  flex: 0 1 auto; margin-top: auto; display: grid; gap: 6px; padding: 8px 8px 0; position: relative;
+  flex: 0 1 auto; display: grid; gap: 6px; padding: 8px 8px 0; position: relative;
   grid-template-columns: minmax(210px, 1fr) minmax(150px, 1fr) minmax(210px, 1fr);
   grid-template-rows: auto auto;
 }
@@ -123,7 +122,7 @@ body {
    (every discard). --ts-base is a device factor (smaller on phones). Each tile
    derives a unit --u from base × its knob; every dimension is a multiple of it,
    and the glyph is sized in em so it tracks the tile. */
-#screen-game { --ts-base: 1; --ts-hand: 1; --ts-played: 1; --ts-disc: 1; }
+#screen-game { --ts-base: 1; --ts-hand: 1; --ts-ohand: 1; --ts-played: 1; --ts-disc: 1; }
 
 .tile {
   --u: calc(1px * var(--ts-base) * var(--ts-disc));
@@ -136,9 +135,13 @@ body {
 }
 .tile.small { width: calc(25 * var(--u)); height: calc(33 * var(--u)); font-size: calc(33 * var(--u)); }
 
-/* coloured tile face — oversized and clipped by the tile so its built-in frame
-   is cropped and the art fills the tile edge to edge */
-.art-glyph { font-size: 1.46em; line-height: 1; }
+/* coloured tile face — oversized and clipped by the tile so the glyph's own
+   frame is pushed off-tile and the art fills it edge to edge. Character glyphs
+   (man/winds/dragons) fill their em box, so a smaller blow-up avoids clipping
+   the character; the pictorial glyphs (pin/sou/flowers) carry a wide frame and
+   need a bigger blow-up to crop it. */
+.art-glyph { font-size: 1.44em; line-height: 1; }
+.tile.pin .art-glyph, .tile.sou .art-glyph, .tile.flower .art-glyph { font-size: 1.98em; }
 .tile.man    .art-glyph { color: #17439b; }
 .tile.pin    .art-glyph { color: #b0202a; }
 .tile.sou    .art-glyph { color: #1a7d31; }
@@ -181,11 +184,12 @@ body {
 #hand .tile.selected { transform: translateY(-8px); box-shadow: 0 0 0 2px #e8d5a3, 0 6px 16px rgba(0,0,0,.4); }
 #hand .tile.dragging { opacity: .95; box-shadow: 0 8px 18px rgba(0,0,0,.5); transition: none; z-index: 5; }
 
-/* played (flowers + melds) & opponents' concealed hands — sized by --ts-played */
-.seat-played .tile, #my-played .tile, .meld .tile, .seat-hand .tile { --u: calc(1px * var(--ts-base) * var(--ts-played)); }
+/* played (flowers + melds) — sized by --ts-played */
+.seat-played .tile, #my-played .tile, .meld .tile { --u: calc(1px * var(--ts-base) * var(--ts-played)); }
 .meld { display: flex; gap: 1px; }
 .meld .tile { width: calc(24 * var(--u)); height: calc(32 * var(--u)); font-size: calc(32 * var(--u)); }
-.seat-hand .tile { width: calc(15 * var(--u)); height: calc(20 * var(--u)); }
+/* opponents' concealed (face-down) hands — sized independently by --ts-ohand */
+.seat-hand .tile { --u: calc(1px * var(--ts-base) * var(--ts-ohand)); width: calc(15 * var(--u)); height: calc(20 * var(--u)); }
 
 /* discards — sized by --ts-disc */
 .seat-discards .tile, #my-discards .tile, #last-discard .tile { --u: calc(1px * var(--ts-base) * var(--ts-disc)); }
@@ -193,7 +197,7 @@ body {
 /* ================================================================ action bar */
 #action-bar {
   display: flex; gap: 6px; justify-content: center; align-items: center;
-  padding: 6px 12px; min-height: 48px; flex-wrap: wrap; flex-shrink: 0; margin-bottom: auto;
+  padding: 6px 12px; min-height: 48px; flex-wrap: wrap; flex-shrink: 0;
 }
 #action-bar .btn { padding: 8px 16px; font-size: 14px; }
 .btn.ron { background: #cc2222; color: #fff; }

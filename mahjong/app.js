@@ -194,17 +194,18 @@ function renderMeld(meld) {
 
 // -------- tile size — three independent knobs, saved per browser --------
 const SZ_MIN = 0.6, SZ_MAX = 2.8;
-const SZ_KEYS = ['hand', 'played', 'disc'];
+const SZ_KEYS = ['hand', 'ohand', 'played', 'disc'];
 function loadSize(key) {
   try { const v = parseFloat(localStorage.getItem(`mjg-ts-${key}`)); if (Number.isFinite(v)) return Math.min(SZ_MAX, Math.max(SZ_MIN, v)); } catch {}
   return 1;
 }
-const sizes = { hand: loadSize('hand'), played: loadSize('played'), disc: loadSize('disc') };
+const sizes = { hand: loadSize('hand'), ohand: loadSize('ohand'), played: loadSize('played'), disc: loadSize('disc') };
 
 function applySizes() {
   const g = $('#screen-game');
   if (g) {
     g.style.setProperty('--ts-hand', sizes.hand);
+    g.style.setProperty('--ts-ohand', sizes.ohand);
     g.style.setProperty('--ts-played', sizes.played);
     g.style.setProperty('--ts-disc', sizes.disc);
   }
