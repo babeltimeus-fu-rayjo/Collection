@@ -117,11 +117,11 @@ body {
 #my-played { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
 
 /* ================================================================ tiles */
-/* Three size knobs, set live by the Size sliders: --ts-hand (my hand),
-   --ts-played (flowers, melds & opponents' concealed hands) and --ts-disc
-   (every discard). --ts-base is a device factor (smaller on phones). Each tile
-   derives a unit --u from base × its knob; every dimension is a multiple of it,
-   and the glyph is sized in em so it tracks the tile. */
+/* Four size knobs, set live by the Size sliders: --ts-hand (my hand),
+   --ts-ohand (opponents' concealed hands), --ts-played (flowers & melds) and
+   --ts-disc (every discard). --ts-base is a device factor (smaller on phones).
+   Each tile derives a unit --u from base × its knob; every dimension — the tile
+   and the face drawn inside it (in em, so it tracks the tile) — is a multiple. */
 #screen-game { --ts-base: 1; --ts-hand: 1; --ts-ohand: 1; --ts-played: 1; --ts-disc: 1; }
 
 .tile {
@@ -135,25 +135,30 @@ body {
 }
 .tile.small { width: calc(25 * var(--u)); height: calc(33 * var(--u)); font-size: calc(33 * var(--u)); }
 
-/* coloured tile face — oversized and clipped by the tile so the glyph's own
-   frame is pushed off-tile and the art fills it edge to edge. Character glyphs
-   (man/winds/dragons) fill their em box, so a smaller blow-up avoids clipping
-   the character; the pictorial glyphs (pin/sou/flowers) carry a wide frame and
-   need a bigger blow-up to crop it. */
-.art-glyph { font-size: 1.44em; line-height: 1; }
-.tile.pin .art-glyph, .tile.sou .art-glyph, .tile.flower .art-glyph { font-size: 1.98em; }
-.tile.man    .art-glyph { color: #17439b; }
-.tile.pin    .art-glyph { color: #b0202a; }
-.tile.sou    .art-glyph { color: #1a7d31; }
-.tile.wind   .art-glyph { color: #2b2b2b; }
-.tile.dragon-R .art-glyph { color: #c62828; }
-.tile.dragon-G .art-glyph { color: #1a7d31; }
-.tile.dragon-W .art-glyph { color: #5a5a5a; }
-.tile.flower  .art-glyph { color: #b5651d; }
+/* hand-drawn tile face (sized in em, relative to the tile) */
+.face { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+/* man — numeral over 萬 */
+.face.man { flex-direction: column; line-height: .8; color: #17439b; }
+.face.man .mnum { font-size: .62em; font-weight: 800; }
+.face.man .msuit { font-size: .3em; font-weight: 700; opacity: .9; margin-top: .05em; }
+/* honours — a single character */
+.face .honor { font-size: .66em; font-weight: 800; line-height: 1; }
+.face.wind .honor { color: #27324a; }
+.face.dragon-R .honor { color: #c62828; }
+.face.dragon-G .honor { color: #1a7d31; }
+.face.dragon-W .honor { color: #2560c8; }
+.face.flower .honor { color: #b5651d; font-size: .48em; }
+/* pin dots & sou bamboo share a rows-of-pips grid */
+.pip-grid { display: flex; flex-direction: column; gap: .08em; align-items: center; justify-content: center; }
+.pip-row { display: flex; gap: .08em; align-items: center; justify-content: center; }
+.pip { width: .18em; height: .18em; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #7fb0ea, #163f86); }
+.face.pin.one .pip { width: .34em; height: .34em; background: radial-gradient(circle at 35% 30%, #e78aa0, #b0202a); box-shadow: 0 0 0 .03em #b0202a inset; }
+.bamboo { width: .13em; height: .32em; border-radius: .065em; background: linear-gradient(#3fbe6d, #147a30); box-shadow: inset 0 0 0 .012em rgba(0,0,0,.18); }
+.face.sou.one .bamboo { width: .17em; height: .58em; }
 
 /* small English index in a light chip, top-right */
 .tile-idx {
-  position: absolute; top: 0; right: 0;
+  position: absolute; top: 0; right: 0; z-index: 1;
   font-size: calc(11 * var(--u)); font-weight: 800; line-height: 1;
   padding: calc(1 * var(--u)) calc(2 * var(--u));
   border-bottom-left-radius: calc(3 * var(--u));
@@ -162,7 +167,7 @@ body {
 .tile.man .tile-idx { color: #17439b; }
 .tile.pin .tile-idx { color: #b0202a; }
 .tile.sou .tile-idx { color: #1a7d31; }
-.tile.wind .tile-idx { color: #2b2b2b; }
+.tile.wind .tile-idx { color: #27324a; }
 
 .tile.facedown { background: linear-gradient(160deg, #2f7a4a, #1d5230); color: transparent; box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 1px 2px rgba(0,0,0,.3); }
 .tile.facedown::after { content: ''; position: absolute; inset: calc(3 * var(--u)); border: 1px solid rgba(255,255,255,.14); border-radius: 2px; }

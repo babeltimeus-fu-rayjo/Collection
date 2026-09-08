@@ -119,27 +119,40 @@ function avatarEl(name, seat, bot = false) {
 
 // ---------------------------------------------------------------- tile rendering
 
-// Tiles are drawn as full-colour Unicode mahjong faces. Each glyph is forced
-// to text presentation with U+FE0E so it renders uniformly (no stray emoji
-// styling) and can be tinted by suit. A small English number sits in the
-// top-right corner of numbered tiles (not flowers) as a reading aid.
+// Tile faces are drawn by us (not Unicode glyphs) so the art fills the tile
+// with no built-in frame: a numeral + 萬 for man, traditional pip layouts for
+// pin, bamboo sticks for sou, and characters for winds/dragons/flowers. A small
+// English index sits in the top-right corner (digit for suits, letter for winds).
 
-const ART = {
-  m: ['', '🀇', '🀈', '🀉', '🀊', '🀋', '🀌', '🀍', '🀎', '🀏'],
-  p: ['', '🀙', '🀚', '🀛', '🀜', '🀝', '🀞', '🀟', '🀠', '🀡'],
-  s: ['', '🀐', '🀑', '🀒', '🀓', '🀔', '🀕', '🀖', '🀗', '🀘'],
-};
-const ART_WIND = { E: '🀀', S: '🀁', W: '🀂', N: '🀃' };
-const ART_DRAGON = { R: '🀄', G: '🀅', W: '🀆' };
-const ART_FLOWER = ['', '🀢', '🀣', '🀤', '🀥', '🀦', '🀧', '🀨', '🀩'];
-const TEXT_VS = '︎'; // variation selector — force a monochrome text glyph
+const MNUM = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+// rows of pip counts per number — the classic dot/stick arrangements
+const PIP_LAYOUT = { 1: [1], 2: [1, 1], 3: [1, 1, 1], 4: [2, 2], 5: [2, 1, 2], 6: [2, 2, 2], 7: [3, 2, 2], 8: [2, 2, 2, 2], 9: [3, 3, 3] };
+const WIND_CHAR = { E: '東', S: '南', W: '西', N: '北' };
+const DRAGON_CHAR = { R: '中', G: '發', W: '白' };
+const FLOWER_CHAR = ['', '梅', '蘭', '菊', '竹', '春', '夏', '秋', '冬'];
 
-function artGlyph(t) {
-  if (t.kind === 'm' || t.kind === 'p' || t.kind === 's') return ART[t.kind][t.v] || '?';
-  if (t.kind === 'wind') return ART_WIND[t.v] || '?';
-  if (t.kind === 'dragon') return ART_DRAGON[t.v] || '?';
-  if (t.kind === 'flower') return ART_FLOWER[t.v] || '?';
-  return '?';
+function buildFace(t) {
+  if (t.kind === 'm') {
+    const f = el('div', 'face man');
+    f.append(el('span', 'mnum', MNUM[t.v] || t.v));
+    f.append(el('span', 'msuit', '萬'));
+    return f;
+  }
+  if (t.kind === 'p' || t.kind === 's') {
+    const f = el('div', `face ${t.kind === 'p' ? 'pin' : 'sou'}${t.v === 1 ? ' one' : ''}`);
+    const grid = el('div', 'pip-grid');
+    for (const count of (PIP_LAYOUT[t.v] || [t.v])) {
+      const row = el('div', 'pip-row');
+      for (let i = 0; i < count; i++) row.append(el('span', t.kind === 'p' ? 'pip' : 'bamboo'));
+      grid.append(row);
+    }
+    f.append(grid);
+    return f;
+  }
+  if (t.kind === 'wind') { const f = el('div', 'face wind'); f.append(el('span', 'honor', WIND_CHAR[t.v] || t.v)); return f; }
+  if (t.kind === 'dragon') { const f = el('div', `face dragon-${t.v}`); f.append(el('span', 'honor', DRAGON_CHAR[t.v] || t.v)); return f; }
+  if (t.kind === 'flower') { const f = el('div', 'face flower'); f.append(el('span', 'honor', FLOWER_CHAR[t.v] || '花')); return f; }
+  return el('div', 'face');
 }
 
 // small corner index — the digit for number suits, a letter for winds;
@@ -179,7 +192,7 @@ function renderTile(t, opts = {}) {
   if (opts.lastDraw) cls.push('last-draw');
   if (opts.riichi) cls.push('riichi-mark');
   const d = el('div', cls.join(' '));
-  d.append(el('span', 'art-glyph', artGlyph(t) + TEXT_VS));
+  d.append(buildFace(t));
   const idx = cornerIndex(t);
   if (idx) d.append(el('span', 'tile-idx', idx));
   if (opts.onClick) { d.style.cursor = 'pointer'; d.addEventListener('click', opts.onClick); }
