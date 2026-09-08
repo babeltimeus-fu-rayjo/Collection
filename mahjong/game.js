@@ -13,9 +13,9 @@ export const NUM_PLAYERS = 4;
 export const WINDS = ['E', 'S', 'W', 'N'];
 
 export const VARIANTS = [
+  { key: 'tw', name: 'Taiwanese', blurb: '16-tile hand, 5 sets + 1 pair. Flowers drawn aside for bonuses. Tai-based scoring.' },
   { key: 'hk', name: 'Hong Kong', blurb: '13-tile hand, 3-faan minimum to win. Flowers score bonuses. Classic Cantonese rules.' },
   { key: 'jp', name: 'Japanese (Riichi)', blurb: '13-tile hand, at least 1 yaku to win. Riichi bets, dora bonuses, furiten restriction.' },
-  { key: 'tw', name: 'Taiwanese', blurb: '16-tile hand, 5 sets + 1 pair. Flowers drawn aside for bonuses. Tai-based scoring.' },
 ];
 
 export function variantByKey(key) {

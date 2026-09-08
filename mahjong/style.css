@@ -75,10 +75,13 @@ body {
 /* Opponents sit around the table (top / left / right, me at the bottom) but
    every hand faces the viewer, upright, so it's easy to read. Each seat
    stacks: name, concealed hand, tiles played (flowers + sets), discards. */
+/* The table sizes to its content and is centred in the space below the topbar
+   (margin-top:auto here + margin-bottom:auto on the action bar), so opponents
+   sit just above the hand instead of leaving a big gap. */
 #table {
-  flex: 1; display: grid; gap: 6px; padding: 8px; position: relative; min-height: 300px;
+  flex: 0 1 auto; margin-top: auto; display: grid; gap: 6px; padding: 8px 8px 0; position: relative;
   grid-template-columns: minmax(210px, 1fr) minmax(150px, 1fr) minmax(210px, 1fr);
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto;
 }
 
 /* ---- opponent seats */
@@ -108,31 +111,34 @@ body {
 #round-wind-display { font-size: 16px; font-weight: 700; color: #e8d5a3; }
 #last-discard { min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 6px; }
 
-/* ---- my zone (bottom edge — already upright) */
-#my-zone { padding: 4px 12px 2px; }
+/* ---- my zone (bottom edge): discards (toward centre), played, then name */
+#my-zone { padding: 4px 12px 2px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
 #my-zone .seat-info { justify-content: center; }
-#my-discards { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; margin: 4px 0; max-width: 340px; margin-inline: auto; }
-#my-melds { display: flex; gap: 6px; justify-content: center; margin: 2px 0; flex-wrap: wrap; }
+#my-discards { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; max-width: 380px; }
+#my-played { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
 
 /* ================================================================ tiles */
-/* Two independent size knobs (set live by the Size sliders): --ts-hand for my
-   own hand, --ts-other for everyone else's tiles, discards, melds and the
-   centre. --ts-base is a device factor (smaller on phones). */
-#screen-game { --ts-base: 1; --ts-hand: 1; --ts-other: 1; }
+/* Three size knobs, set live by the Size sliders: --ts-hand (my hand),
+   --ts-played (flowers, melds & opponents' concealed hands) and --ts-disc
+   (every discard). --ts-base is a device factor (smaller on phones). Each tile
+   derives a unit --u from base × its knob; every dimension is a multiple of it,
+   and the glyph is sized in em so it tracks the tile. */
+#screen-game { --ts-base: 1; --ts-hand: 1; --ts-played: 1; --ts-disc: 1; }
 
 .tile {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: calc(30px * var(--ts-base) * var(--ts-other)); height: calc(40px * var(--ts-base) * var(--ts-other));
-  border-radius: calc(4px * var(--ts-base) * var(--ts-other));
+  --u: calc(1px * var(--ts-base) * var(--ts-disc));
+  display: inline-flex; align-items: center; justify-content: center; overflow: hidden;
+  width: calc(30 * var(--u)); height: calc(40 * var(--u)); font-size: calc(40 * var(--u));
+  border-radius: calc(4 * var(--u));
   background: linear-gradient(165deg, #fdf9ee, #ece1c6);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.75), 0 1px 2px rgba(0,0,0,.3);
   color: #1a1a1a; flex-shrink: 0; position: relative; line-height: 1; text-align: center; cursor: default;
 }
-.tile.small { width: calc(25px * var(--ts-base) * var(--ts-other)); height: calc(33px * var(--ts-base) * var(--ts-other)); }
+.tile.small { width: calc(25 * var(--u)); height: calc(33 * var(--u)); font-size: calc(33 * var(--u)); }
 
-/* coloured tile face — a big glyph tinted by suit */
-.art-glyph { font-size: calc(29px * var(--ts-base) * var(--ts-other)); line-height: 1; }
-.tile.small .art-glyph { font-size: calc(24px * var(--ts-base) * var(--ts-other)); }
+/* coloured tile face — oversized and clipped by the tile so its built-in frame
+   is cropped and the art fills the tile edge to edge */
+.art-glyph { font-size: 1.46em; line-height: 1; }
 .tile.man    .art-glyph { color: #17439b; }
 .tile.pin    .art-glyph { color: #b0202a; }
 .tile.sou    .art-glyph { color: #1a7d31; }
@@ -142,22 +148,24 @@ body {
 .tile.dragon-W .art-glyph { color: #5a5a5a; }
 .tile.flower  .art-glyph { color: #b5651d; }
 
-/* small English index, top-right of numbered tiles */
+/* small English index in a light chip, top-right */
 .tile-idx {
-  position: absolute; top: 1px; right: 2px;
-  font-size: calc(10px * var(--ts-base) * var(--ts-other)); font-weight: 800; line-height: 1;
-  color: rgba(20,20,20,.55);
+  position: absolute; top: 0; right: 0;
+  font-size: calc(11 * var(--u)); font-weight: 800; line-height: 1;
+  padding: calc(1 * var(--u)) calc(2 * var(--u));
+  border-bottom-left-radius: calc(3 * var(--u));
+  background: rgba(253,249,238,.82); color: rgba(20,20,20,.7);
 }
-.tile.small .tile-idx { top: 0; right: 1px; font-size: calc(8px * var(--ts-base) * var(--ts-other)); }
-.tile.man .tile-idx { color: rgba(23,67,155,.78); }
-.tile.pin .tile-idx { color: rgba(176,32,42,.82); }
-.tile.sou .tile-idx { color: rgba(26,125,49,.8); }
+.tile.man .tile-idx { color: #17439b; }
+.tile.pin .tile-idx { color: #b0202a; }
+.tile.sou .tile-idx { color: #1a7d31; }
+.tile.wind .tile-idx { color: #2b2b2b; }
 
 .tile.facedown { background: linear-gradient(160deg, #2f7a4a, #1d5230); color: transparent; box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 1px 2px rgba(0,0,0,.3); }
-.tile.facedown::after { content: ''; position: absolute; inset: 3px; border: 1px solid rgba(255,255,255,.14); border-radius: 2px; }
+.tile.facedown::after { content: ''; position: absolute; inset: calc(3 * var(--u)); border: 1px solid rgba(255,255,255,.14); border-radius: 2px; }
 .tile.highlight { outline: 2px solid #4db87a; }
 .tile.last-draw { outline: 2px solid #e8d5a3; }
-.tile.riichi-mark { box-shadow: inset 0 -3px 0 #cc2222, 0 1px 2px rgba(0,0,0,.3); }
+.tile.riichi-mark { box-shadow: inset 0 calc(-3 * var(--u)) 0 #cc2222, 0 1px 2px rgba(0,0,0,.3); }
 
 /* hand tiles — sized by --ts-hand */
 #hand {
@@ -165,27 +173,27 @@ body {
   padding: 6px 12px 8px; min-height: 60px; flex-wrap: wrap; touch-action: pan-y;
 }
 #hand .tile {
+  --u: calc(1px * var(--ts-base) * var(--ts-hand));
   cursor: pointer; transition: transform .12s ease, box-shadow .1s;
-  width: calc(40px * var(--ts-base) * var(--ts-hand)); height: calc(52px * var(--ts-base) * var(--ts-hand));
+  width: calc(40 * var(--u)); height: calc(52 * var(--u)); font-size: calc(52 * var(--u));
 }
-#hand .tile .art-glyph { font-size: calc(38px * var(--ts-base) * var(--ts-hand)); }
-#hand .tile .tile-idx { font-size: calc(12px * var(--ts-base) * var(--ts-hand)); }
 #hand .tile:hover { transform: translateY(-4px); box-shadow: 0 4px 12px rgba(0,0,0,.3); }
 #hand .tile.selected { transform: translateY(-8px); box-shadow: 0 0 0 2px #e8d5a3, 0 6px 16px rgba(0,0,0,.4); }
 #hand .tile.dragging { opacity: .95; box-shadow: 0 8px 18px rgba(0,0,0,.5); transition: none; z-index: 5; }
 
-/* meld tiles & opponents' concealed (face-down) hands — sized by --ts-other */
+/* played (flowers + melds) & opponents' concealed hands — sized by --ts-played */
+.seat-played .tile, #my-played .tile, .meld .tile, .seat-hand .tile { --u: calc(1px * var(--ts-base) * var(--ts-played)); }
 .meld { display: flex; gap: 1px; }
-.meld .tile { width: calc(24px * var(--ts-base) * var(--ts-other)); height: calc(32px * var(--ts-base) * var(--ts-other)); }
-/* face-down concealed hand — scales with the "other tiles" slider like the
-   rest; compact base so it fits one row at the default size */
-.seat-hand .tile { width: calc(15px * var(--ts-base) * var(--ts-other)); height: calc(20px * var(--ts-base) * var(--ts-other)); }
-.seat-hand .tile::after { inset: 2px; }
+.meld .tile { width: calc(24 * var(--u)); height: calc(32 * var(--u)); font-size: calc(32 * var(--u)); }
+.seat-hand .tile { width: calc(15 * var(--u)); height: calc(20 * var(--u)); }
+
+/* discards — sized by --ts-disc */
+.seat-discards .tile, #my-discards .tile, #last-discard .tile { --u: calc(1px * var(--ts-base) * var(--ts-disc)); }
 
 /* ================================================================ action bar */
 #action-bar {
   display: flex; gap: 6px; justify-content: center; align-items: center;
-  padding: 6px 12px; min-height: 48px; flex-wrap: wrap; flex-shrink: 0;
+  padding: 6px 12px; min-height: 48px; flex-wrap: wrap; flex-shrink: 0; margin-bottom: auto;
 }
 #action-bar .btn { padding: 8px 16px; font-size: 14px; }
 .btn.ron { background: #cc2222; color: #fff; }

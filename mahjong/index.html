@@ -70,9 +70,14 @@
         <span id="sz-hand-v"></span>
       </div>
       <div class="sp-row">
-        <label for="sz-other">Other tiles</label>
-        <input type="range" id="sz-other" min="0.6" max="2.8" step="0.05">
-        <span id="sz-other-v"></span>
+        <label for="sz-played">Played</label>
+        <input type="range" id="sz-played" min="0.6" max="2.8" step="0.05">
+        <span id="sz-played-v"></span>
+      </div>
+      <div class="sp-row">
+        <label for="sz-disc">Discards</label>
+        <input type="range" id="sz-disc" min="0.6" max="2.8" step="0.05">
+        <span id="sz-disc-v"></span>
       </div>
     </div>
 
@@ -115,11 +120,11 @@
       </div>
     </div>
 
-    <!-- my area -->
+    <!-- my area — discards (toward centre), then played, then my hand -->
     <div id="my-zone">
-      <div class="seat-info"><span id="my-name"></span><span id="my-wind"></span><span id="my-score"></span></div>
-      <div id="my-melds"></div>
       <div id="my-discards"></div>
+      <div id="my-played"></div>
+      <div class="seat-info"><span id="my-name"></span><span id="my-wind"></span><span id="my-score"></span></div>
     </div>
     <div id="hand"></div>
     <div id="action-bar"></div>

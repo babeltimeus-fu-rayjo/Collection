@@ -142,9 +142,11 @@ function artGlyph(t) {
   return '?';
 }
 
-// small corner index — the digit for number suits; nothing for honours/flowers
+// small corner index — the digit for number suits, a letter for winds;
+// nothing for dragons or flowers
 function cornerIndex(t) {
   if (t.kind === 'm' || t.kind === 'p' || t.kind === 's') return String(t.v);
+  if (t.kind === 'wind') return t.v; // E S W N
   return '';
 }
 
@@ -190,28 +192,29 @@ function renderMeld(meld) {
   return g;
 }
 
-// -------- tile size — two independent knobs, saved per browser --------
+// -------- tile size — three independent knobs, saved per browser --------
 const SZ_MIN = 0.6, SZ_MAX = 2.8;
+const SZ_KEYS = ['hand', 'played', 'disc'];
 function loadSize(key) {
-  try { const v = parseFloat(localStorage.getItem(key)); if (Number.isFinite(v)) return Math.min(SZ_MAX, Math.max(SZ_MIN, v)); } catch {}
+  try { const v = parseFloat(localStorage.getItem(`mjg-ts-${key}`)); if (Number.isFinite(v)) return Math.min(SZ_MAX, Math.max(SZ_MIN, v)); } catch {}
   return 1;
 }
-let tsHand = loadSize('mjg-ts-hand');
-let tsOther = loadSize('mjg-ts-other');
+const sizes = { hand: loadSize('hand'), played: loadSize('played'), disc: loadSize('disc') };
 
 function applySizes() {
   const g = $('#screen-game');
-  if (g) { g.style.setProperty('--ts-hand', tsHand); g.style.setProperty('--ts-other', tsOther); }
-  const h = $('#sz-hand'), o = $('#sz-other');
-  if (h) h.value = tsHand;
-  if (o) o.value = tsOther;
-  const hv = $('#sz-hand-v'), ov = $('#sz-other-v');
-  if (hv) hv.textContent = `${Math.round(tsHand * 100)}%`;
-  if (ov) ov.textContent = `${Math.round(tsOther * 100)}%`;
+  if (g) {
+    g.style.setProperty('--ts-hand', sizes.hand);
+    g.style.setProperty('--ts-played', sizes.played);
+    g.style.setProperty('--ts-disc', sizes.disc);
+  }
+  for (const k of SZ_KEYS) {
+    const inp = $(`#sz-${k}`); if (inp) inp.value = sizes[k];
+    const lbl = $(`#sz-${k}-v`); if (lbl) lbl.textContent = `${Math.round(sizes[k] * 100)}%`;
+  }
 }
 
-function setHandSize(v) { tsHand = v; try { localStorage.setItem('mjg-ts-hand', String(v)); } catch {} applySizes(); }
-function setOtherSize(v) { tsOther = v; try { localStorage.setItem('mjg-ts-other', String(v)); } catch {} applySizes(); }
+function setSize(k, v) { sizes[k] = v; try { localStorage.setItem(`mjg-ts-${k}`, String(v)); } catch {} applySizes(); }
 
 // ---------------------------------------------------------------- chat
 
@@ -332,7 +335,6 @@ let lastView = null;
 let pendingMove = false;
 let selectedTile = null;
 let handOrder = [];   // tile-id display order for my hand (drag to rearrange)
-let handDrag = null;  // in-progress hand-tile drag
 
 class HostSession {
   constructor(peer, code, name) {
@@ -345,7 +347,7 @@ class HostSession {
     this.roster = [{ seat: 0, name, connected: true, token: genCode(12) }];
     this.G = null;
     this.chatLog = [];
-    this.selectedVariant = 'hk';
+    this.selectedVariant = 'tw';
     this.botTimer = null;
     this.claimTimer = null;
 
@@ -629,7 +631,7 @@ function renderLobby(sess, lobbyMsg) {
   showScreen('lobby');
   const isHost = sess.isHost;
   const roster = isHost ? sess.roster : (lobbyMsg && lobbyMsg.roster) || [];
-  const variant = isHost ? sess.selectedVariant : (lobbyMsg && lobbyMsg.variant) || 'hk';
+  const variant = isHost ? sess.selectedVariant : (lobbyMsg && lobbyMsg.variant) || 'tw';
 
   $('#lobby-code').textContent = sess.code;
   // Always render NUM_PLAYERS seats (filled or "Open seat") so the list height
@@ -759,41 +761,24 @@ function renderGame(view, sess) {
   myWindEl.className = 'seat-wind' + (my === view.dealer ? ' dealer' : '');
   $('#my-score').textContent = me ? `${me.score}` : '';
 
-  // my melds
-  const myMelds = $('#my-melds');
-  myMelds.replaceChildren();
-  if (me) for (const m of me.melds) myMelds.append(renderMeld(m));
-
-  // my discards
+  // my discards (nearest the centre)
   const myDisc = $('#my-discards');
   myDisc.replaceChildren();
   if (me) {
     for (const t of me.discards) myDisc.append(renderTile(t, { small: true, riichi: t.riichi }));
   }
 
-  // my flowers
-  if (me && me.flowers && me.flowers.length > 0) {
-    const ff = el('div', '', '');
-    ff.style.display = 'flex'; ff.style.gap = '2px'; ff.style.justifyContent = 'center'; ff.style.margin = '2px 0';
-    for (const f of me.flowers) ff.append(renderTile(f, { small: true }));
-    myMelds.append(ff);
+  // my played: flowers first, then melds (sets)
+  const myPlayed = $('#my-played');
+  myPlayed.replaceChildren();
+  if (me) {
+    for (const f of (me.flowers || [])) myPlayed.append(renderTile(f, { small: true }));
+    for (const m of me.melds) myPlayed.append(renderMeld(m));
   }
 
-  // hand — rendered in the player's chosen order (drag tiles to rearrange)
-  const handEl = $('#hand');
-  handEl.replaceChildren();
-  if (me && me.hand) {
-    const isMyTurn = view.phase === 'discard' && view.turn === my;
-    for (const t of orderedHand(me.hand)) {
-      const isLastDraw = view.lastDraw && t.id === view.lastDraw.id;
-      const tile = renderTile(t, { lastDraw: isLastDraw });
-      tile.dataset.tid = String(t.id);
-      tile.style.cursor = 'pointer';
-      if (selectedTile === t.id) tile.classList.add('selected');
-      attachHandTile(tile, t, sess, isMyTurn);
-      handEl.append(tile);
-    }
-  }
+  // hand — reconciled by id so an in-progress drag isn't disrupted and the
+  // tile count stays exact
+  renderHand(view, me, sess);
 
   // action bar
   renderActions(view, sess);
@@ -840,101 +825,139 @@ function renderGame(view, sess) {
   paintChatBubbles();
 }
 
-function handleTileClick(t, sess) {
+function handleTileClick(id, sess) {
   if (pendingMove) return;
-  if (selectedTile === t.id) {
+  if (selectedTile === id) {
     // tap again = discard
     pendingMove = true;
     selectedTile = null;
-    sess.localMove({ kind: 'discard', tileId: t.id });
+    sess.localMove({ kind: 'discard', tileId: id });
   } else {
-    selectedTile = t.id;
+    selectedTile = id;
     if (lastView) renderGame(lastView, sess);
   }
 }
 
-// Keep my hand in the order I've arranged it: drop tile-ids that are no
-// longer in hand, and append freshly drawn/claimed ones on the right.
+// Keep my hand in the order I've arranged it: known tiles hold their slot,
+// freshly dealt/drawn tiles are inserted sorted so the opening hand is tidy.
 function orderedHand(hand) {
-  const byId = new Map(hand.map((t) => [t.id, t]));
-  handOrder = handOrder.filter((id) => byId.has(id));
-  for (const t of hand) if (!handOrder.includes(t.id)) handOrder.push(t.id);
-  return handOrder.map((id) => byId.get(id));
+  const pos = new Map(handOrder.map((id, i) => [id, i]));
+  const known = hand.filter((t) => pos.has(t.id)).sort((a, b) => pos.get(a.id) - pos.get(b.id));
+  const fresh = hand.filter((t) => !pos.has(t.id)).sort(tileSort);
+  const ordered = known.concat(fresh);
+  handOrder = ordered.map((t) => t.id);
+  return ordered;
 }
 
-// Drag a hand tile to rearrange it; the other tiles shift live to preview
-// where it will land. A tap (no drag) selects/discards. Move/up are bound to
-// the window so the drag keeps tracking even when the cursor leaves the tiles.
-function attachHandTile(tile, t, sess, isMyTurn) {
+// Reconcile the hand DOM in place: reuse each tile element by id (so an active
+// drag and exact counts are preserved) and only reshuffle when not dragging.
+function renderHand(view, me, sess) {
+  const handEl = $('#hand');
+  if (!me || !me.hand) { handEl.replaceChildren(); return; }
+  const ordered = orderedHand(me.hand);
+  const byId = new Map([...handEl.children].map((n) => [n.dataset.tid, n]));
+  const desired = ordered.map((t) => {
+    const isLastDraw = view.lastDraw && t.id === view.lastDraw.id;
+    const ex = byId.get(String(t.id));
+    if (ex) { patchHandTile(ex, t.id, isLastDraw); return ex; }
+    return handCardEl(t, sess, isLastDraw);
+  });
+  for (const n of [...handEl.children]) if (!desired.includes(n)) n.remove();
+  if (!handEl.querySelector('.tile.dragging')) {
+    let cursor = handEl.firstChild;
+    for (const n of desired) {
+      if (n === cursor) { cursor = cursor.nextSibling; continue; }
+      handEl.insertBefore(n, cursor);
+    }
+  }
+}
+
+function patchHandTile(el, id, isLastDraw) {
+  el.classList.toggle('selected', selectedTile === id);
+  el.classList.toggle('last-draw', !!isLastDraw);
+}
+
+function handCardEl(t, sess, isLastDraw) {
+  const tile = renderTile(t, { lastDraw: isLastDraw });
+  tile.dataset.tid = String(t.id);
+  tile.style.cursor = 'pointer';
+  if (selectedTile === t.id) tile.classList.add('selected');
+  attachHandDrag(tile, t.id, sess);
+  return tile;
+}
+
+// Drag a hand tile to rearrange it. Slot centres are snapshotted once at drag
+// start so the thresholds never move under the pointer; the other tiles slide
+// aside by transform only (no DOM churn) to preview the landing gap, and the
+// order is committed once on release. A tap (no drag) selects/discards.
+function attachHandDrag(tile, tileId, sess) {
   tile.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
-    if (handDrag) return;
-    e.preventDefault();
-    const r = tile.getBoundingClientRect();
-    const drag = { id: t.id, el: tile, startX: e.clientX, grabX: e.clientX - r.left, moved: false };
-    handDrag = drag;
+    const hand = $('#hand');
+    const startX = e.clientX;
+    let dragging = false;
+    let slots = null;
 
-    const onMove = (ev) => {
-      if (handDrag !== drag) return;
-      if (!drag.moved && Math.abs(ev.clientX - drag.startX) > 5) {
-        drag.moved = true;
+    const snapshot = () => {
+      const children = [...hand.children];
+      const rects = children.map((n) => n.getBoundingClientRect());
+      slots = {
+        children,
+        centers: rects.map((r) => r.left + r.width / 2),
+        myIndex: children.indexOf(tile),
+        step: children.length > 1 ? Math.abs(rects[1].left - rects[0].left) : rects[0].width,
+      };
+    };
+    const targetIndex = (x) => {
+      let t = 0;
+      slots.children.forEach((n, i) => { if (n !== tile && slots.centers[i] < x) t++; });
+      return t;
+    };
+    const preview = (x) => {
+      const F = targetIndex(x), D = slots.myIndex;
+      slots.children.forEach((n, i) => {
+        if (n === tile) return;
+        let dx = 0;
+        if (F > D && i > D && i <= F) dx = -slots.step;
+        else if (F < D && i >= F && i < D) dx = slots.step;
+        n.style.transform = dx ? `translateX(${dx}px)` : '';
+      });
+    };
+    const move = (ev) => {
+      const dx = ev.clientX - startX;
+      if (!dragging && Math.abs(dx) > 8) {
+        dragging = true;
         tile.classList.add('dragging');
+        snapshot();
       }
-      if (drag.moved) dragPreview(tile, ev.clientX);
+      if (dragging) {
+        tile.style.transform = `translate(${dx}px, -10px) scale(1.04)`;
+        preview(ev.clientX);
+      }
     };
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
-      const moved = drag.moved;
-      handDrag = null;
+    const done = (ev) => {
+      tile.removeEventListener('pointermove', move);
+      tile.removeEventListener('pointerup', done);
+      tile.removeEventListener('pointercancel', done);
+      if (!dragging) {
+        if (lastView && lastView.phase === 'discard' && lastView.turn === lastView.mySeat) handleTileClick(tileId, sess);
+        return;
+      }
       tile.classList.remove('dragging');
+      const idx = targetIndex(ev.clientX);
+      for (const n of slots.children) n.style.transform = '';
       tile.style.transform = '';
-      if (moved) {
-        handOrder = [...$('#hand').children].map((n) => Number(n.dataset.tid));
-      } else if (isMyTurn) {
-        handleTileClick(t, sess);
-      }
+      const rest = handOrder.filter((id) => id !== tileId);
+      rest.splice(idx, 0, tileId);
+      handOrder = rest;
+      if (lastView) renderGame(lastView, sess);
     };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
-  });
-}
 
-// Reinsert the dragged tile where the pointer is, animating the other tiles
-// (FLIP) so they glide aside to preview the result; the dragged tile tracks
-// the cursor.
-function dragPreview(tile, clientX) {
-  const handEl = $('#hand');
-  const sibs = [...handEl.children].filter((n) => n !== tile);
-  let ref = null;
-  for (const s of sibs) {
-    const r = s.getBoundingClientRect();
-    if (clientX < r.left + r.width / 2) { ref = s; break; }
-  }
-  const willChange = ref ? (tile.nextSibling !== ref) : (handEl.lastChild !== tile);
-  if (willChange) {
-    // FLIP without rAF: record positions, reorder, apply the inverse transform,
-    // force one reflow, then transition to zero so siblings glide across.
-    const before = sibs.map((s) => [s, s.getBoundingClientRect().left]);
-    if (ref) handEl.insertBefore(tile, ref); else handEl.appendChild(tile);
-    let any = false;
-    for (const [s, x0] of before) {
-      const dx = x0 - s.getBoundingClientRect().left;
-      if (!dx) continue;
-      any = true;
-      s.style.transition = 'none';
-      s.style.transform = `translateX(${dx}px)`;
-    }
-    if (any) {
-      void handEl.offsetWidth; // flush the "from" transforms in one reflow
-      for (const [s] of before) { s.style.transition = 'transform .15s ease'; s.style.transform = ''; }
-    }
-  }
-  tile.style.transform = '';
-  const natLeft = tile.getBoundingClientRect().left;
-  tile.style.transform = `translate(${Math.round(clientX - handDrag.grabX - natLeft)}px, -8px)`;
+    try { tile.setPointerCapture(e.pointerId); } catch {}
+    tile.addEventListener('pointermove', move);
+    tile.addEventListener('pointerup', done);
+    tile.addEventListener('pointercancel', done);
+  });
 }
 
 function renderActions(view, sess) {
@@ -1168,8 +1191,7 @@ $('#name-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('
 $('#btn-add-bot').addEventListener('click', () => session?.addBot());
 $('#btn-start').addEventListener('click', () => session?.start());
 $('#btn-size').addEventListener('click', (e) => { e.stopPropagation(); $('#size-popover').classList.toggle('hidden'); });
-$('#sz-hand').addEventListener('input', (e) => setHandSize(parseFloat(e.target.value)));
-$('#sz-other').addEventListener('input', (e) => setOtherSize(parseFloat(e.target.value)));
+for (const k of SZ_KEYS) $(`#sz-${k}`).addEventListener('input', (e) => setSize(k, parseFloat(e.target.value)));
 $('#size-popover').addEventListener('click', (e) => e.stopPropagation());
 document.addEventListener('click', () => $('#size-popover').classList.add('hidden'));
 applySizes();
