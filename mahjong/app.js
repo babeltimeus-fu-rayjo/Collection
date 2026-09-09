@@ -125,8 +125,9 @@ function avatarEl(name, seat, bot = false) {
 // top-right corner (digit for suits, letter for winds).
 
 const MNUM = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
-// rows of pip counts per number — symmetric arrangements like the classic tiles
-const PIP_LAYOUT = { 1: [1], 2: [1, 1], 3: [1, 1, 1], 4: [2, 2], 5: [2, 1, 2], 6: [2, 2, 2], 7: [3, 1, 3], 8: [3, 2, 3], 9: [3, 3, 3] };
+// rows of pip counts per number — the classic dot / bamboo arrangements
+const PIN_LAYOUT = { 1: [1], 2: [1, 1], 3: [1, 1, 1], 4: [2, 2], 5: [2, 1, 2], 6: [2, 2, 2], 7: [3, 2, 2], 8: [2, 2, 2, 2], 9: [3, 3, 3] };
+const SOU_LAYOUT = { 1: [1], 2: [2], 3: [1, 2], 4: [2, 2], 5: [2, 1, 2], 6: [3, 3], 7: [1, 3, 3], 8: [4, 4], 9: [3, 3, 3] };
 const WIND_CHAR = { E: '東', S: '南', W: '西', N: '北' };
 const DRAGON_CHAR = { R: '中', G: '發', W: '白' };
 const FLOWER_CHAR = ['', '梅', '蘭', '菊', '竹', '春', '夏', '秋', '冬'];
@@ -141,7 +142,8 @@ function buildFace(t) {
   if (t.kind === 'p' || t.kind === 's') {
     const f = el('div', `face ${t.kind === 'p' ? 'pin' : 'sou'}${t.v === 1 ? ' one' : ''}`);
     const grid = el('div', 'pip-grid');
-    for (const count of (PIP_LAYOUT[t.v] || [t.v])) {
+    const layout = (t.kind === 'p' ? PIN_LAYOUT : SOU_LAYOUT)[t.v] || [t.v];
+    for (const count of layout) {
       const row = el('div', 'pip-row');
       for (let i = 0; i < count; i++) row.append(el('span', t.kind === 'p' ? 'pip' : 'bamboo'));
       grid.append(row);
