@@ -125,9 +125,35 @@ function avatarEl(name, seat, bot = false) {
 // top-right corner (digit for suits, letter for winds).
 
 const MNUM = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
-// rows of pip counts per number — the classic dot / bamboo arrangements
-const PIN_LAYOUT = { 1: [1], 2: [1, 1], 3: [1, 1, 1], 4: [2, 2], 5: [2, 1, 2], 6: [2, 2, 2], 7: [3, 2, 2], 8: [2, 2, 2, 2], 9: [3, 3, 3] };
-const SOU_LAYOUT = { 1: [1], 2: [2], 3: [1, 2], 4: [2, 2], 5: [2, 1, 2], 6: [3, 3], 7: [1, 3, 3], 8: [4, 4], 9: [3, 3, 3] };
+// Per-number pip placement (traditional arrangements), positioned absolutely so
+// they can slant / cluster / fan and never touch. Coords are % of the content
+// box; a pip may carry its own size override as a 3rd element.
+const PIN_POS = {
+  1: [[50, 50]],
+  2: [[50, 27], [50, 73]],
+  3: [[26, 22], [50, 50], [74, 78]],
+  4: [[30, 28], [70, 28], [30, 72], [70, 72]],
+  5: [[30, 27], [70, 27], [50, 50], [30, 73], [70, 73]],
+  6: [[31, 20], [69, 20], [31, 50], [69, 50], [31, 80], [69, 80]],
+  7: [[22, 14], [50, 26], [78, 38], [33, 62], [67, 62], [33, 86], [67, 86]],
+  8: [[32, 13], [68, 13], [32, 37], [68, 37], [32, 63], [68, 63], [32, 87], [68, 87]],
+  9: [[16, 18], [50, 18], [84, 18], [16, 50], [50, 50], [84, 50], [16, 82], [50, 82], [84, 82]],
+};
+// 1 is the big bullseye; every other pin uses one uniform dot size
+const PIN_SZ = { 1: .58, 2: .2, 3: .2, 4: .2, 5: .2, 6: .2, 7: .2, 8: .2, 9: .2 };
+// bamboo: [x, y, rotation] — 8 is the classic M / upside-down-M fan
+const SOU_POS = {
+  1: [[50, 50, 0]],
+  2: [[50, 28, 0], [50, 72, 0]],
+  3: [[50, 24, 0], [32, 73, 0], [68, 73, 0]],
+  4: [[33, 28, 0], [67, 28, 0], [33, 72, 0], [67, 72, 0]],
+  5: [[50, 50, 0], [28, 32, 0], [72, 32, 0], [28, 68, 0], [72, 68, 0]],
+  6: [[24, 30, 0], [50, 30, 0], [76, 30, 0], [24, 70, 0], [50, 70, 0], [76, 70, 0]],
+  7: [[50, 14, 0], [27, 48, 0], [50, 48, 0], [73, 48, 0], [27, 82, 0], [50, 82, 0], [73, 82, 0]],
+  8: [[12, 28, 0], [37, 28, 30], [63, 28, -30], [88, 28, 0], [12, 72, 0], [37, 72, -30], [63, 72, 30], [88, 72, 0]],
+  9: [[24, 17, 0], [50, 17, 0], [76, 17, 0], [24, 50, 0], [50, 50, 0], [76, 50, 0], [24, 83, 0], [50, 83, 0], [76, 83, 0]],
+};
+const SOU_SZ = { 1: .6, 2: .3, 3: .3, 4: .3, 5: .28, 6: .28, 7: .26, 8: .36, 9: .24 };
 const WIND_CHAR = { E: '東', S: '南', W: '西', N: '北' };
 const DRAGON_CHAR = { R: '中', G: '發', W: '白' };
 const FLOWER_CHAR = ['', '梅', '蘭', '菊', '竹', '春', '夏', '秋', '冬'];
@@ -141,14 +167,26 @@ function buildFace(t) {
   }
   if (t.kind === 'p' || t.kind === 's') {
     const f = el('div', `face ${t.kind === 'p' ? 'pin' : 'sou'}${t.v === 1 ? ' one' : ''}`);
-    const grid = el('div', 'pip-grid');
-    const layout = (t.kind === 'p' ? PIN_LAYOUT : SOU_LAYOUT)[t.v] || [t.v];
-    for (const count of layout) {
-      const row = el('div', 'pip-row');
-      for (let i = 0; i < count; i++) row.append(el('span', t.kind === 'p' ? 'pip' : 'bamboo'));
-      grid.append(row);
+    const box = el('div', 'pip-abs');
+    if (t.kind === 'p') {
+      for (const p of (PIN_POS[t.v] || [[50, 50]])) {
+        const d = p[2] || PIN_SZ[t.v] || .2;
+        const s = el('span', 'pip');
+        s.style.cssText = `left:${p[0]}%;top:${p[1]}%;width:${d}em;height:${d}em`;
+        box.append(s);
+      }
+    } else {
+      for (const p of (SOU_POS[t.v] || [[50, 50, 0]])) {
+        const hh = SOU_SZ[t.v] || .3, w = hh * (t.v === 8 ? 0.27 : 0.38), lw = hh * 0.32, lh = hh * 0.48;
+        const s = el('span', 'bamboo');
+        s.style.cssText = `left:${p[0]}%;top:${p[1]}%;width:${w}em;height:${hh}em;transform:translate(-50%,-50%) rotate(${p[2] || 0}deg)`;
+        const lf = el('i', 'leaf');
+        lf.style.cssText = `width:${lw}em;height:${lh}em;transform:translateX(-46%) rotate(22deg)`;
+        s.append(lf);
+        box.append(s);
+      }
     }
-    f.append(grid);
+    f.append(box);
     return f;
   }
   if (t.kind === 'wind') { const f = el('div', 'face wind'); f.append(el('span', 'honor', WIND_CHAR[t.v] || t.v)); return f; }
@@ -162,6 +200,7 @@ function buildFace(t) {
 function cornerIndex(t) {
   if (t.kind === 'm' || t.kind === 'p' || t.kind === 's') return String(t.v);
   if (t.kind === 'wind') return t.v; // E S W N
+  if (t.kind === 'flower') return String(((t.v - 1) % 4) + 1); // 1-4 plants, 1-4 seasons
   return '';
 }
 
@@ -196,7 +235,12 @@ function renderTile(t, opts = {}) {
   const d = el('div', cls.join(' '));
   d.append(buildFace(t));
   const idx = cornerIndex(t);
-  if (idx) d.append(el('span', 'tile-idx', idx));
+  if (idx) {
+    const span = el('span', 'tile-idx', idx);
+    // plants (flowers 1-4) number on the left, seasons (5-8) on the right
+    if (t.kind === 'flower' && t.v <= 4) span.classList.add('left');
+    d.append(span);
+  }
   if (opts.onClick) { d.style.cursor = 'pointer'; d.addEventListener('click', opts.onClick); }
   return d;
 }
@@ -283,6 +327,7 @@ function addChatMsg(m, self) {
 
 const chatBubbles = new Map();
 let bubbleId = 0;
+const MAX_BUBBLES = 4; // per seat; a new one pushes the oldest out (~3.5 shown)
 
 function paintChatBubbles() {
   let layer = document.querySelector('#bubble-layer');
@@ -295,20 +340,29 @@ function paintChatBubbles() {
     seen.add(key);
     let stack = layer.querySelector(`.bubble-stack[data-seat="${key}"]`);
     if (!stack) { stack = el('div', 'bubble-stack'); stack.dataset.seat = key; layer.append(stack); }
+    // newest nearest the seat: render newest-first so CSS column-reverse drops it
+    // to the bottom; older ones stack upward and clip once the cap is reached
     const kept = new Set();
-    for (const b of arr) {
+    for (const b of arr.slice().reverse()) {
       const bid = String(b.id);
       kept.add(bid);
       let bub = stack.querySelector(`.chat-bubble[data-id="${bid}"]`);
-      if (!bub) { bub = el('div', 'chat-bubble', b.text); bub.dataset.id = bid; stack.append(bub); }
+      if (!bub) { bub = el('div', 'chat-bubble', b.text); bub.dataset.id = bid; }
       bub.classList.toggle('say', !!b.say);
+      stack.append(bub); // re-append keeps DOM order newest → oldest
     }
     for (const n of stack.querySelectorAll('.chat-bubble')) { if (!kept.has(n.dataset.id)) n.remove(); }
+    // anchor the stack's bottom just above the seat; it grows upward, capped at
+    // ~3.5 bubbles and never allowed under the top bar
     const r = host.getBoundingClientRect();
+    const bottomEdge = r.top - 8;
+    const unit = 26;                       // ~ one bubble incl. gap
+    const avail = bottomEdge - 46;         // 46 ≈ bottom of the top bar
+    const maxH = Math.max(unit, Math.min(3.5 * unit, avail));
     stack.style.left = `${Math.round(r.left + r.width / 2)}px`;
-    // always above the seat, but floored so it never slides under the topbar
-    const minTop = 46 + stack.offsetHeight + 10;
-    stack.style.top = `${Math.round(Math.max(r.top, minTop))}px`;
+    stack.style.top = 'auto';
+    stack.style.bottom = `${Math.round(window.innerHeight - bottomEdge)}px`;
+    stack.style.maxHeight = `${Math.round(maxH)}px`;
   }
   for (const n of layer.querySelectorAll('.bubble-stack')) { if (!seen.has(n.dataset.seat)) n.remove(); }
 }
@@ -320,6 +374,7 @@ function showChatBubble(m) {
   const trunc = cfg.raw('bubbleTrunc');
   const text = m.text.length > trunc ? m.text.slice(0, trunc) + '…' : m.text;
   arr.push({ id, text, say: !!m.say });
+  while (arr.length > MAX_BUBBLES) arr.shift(); // newest pushes oldest out
   chatBubbles.set(m.seat, arr);
   paintChatBubbles();
   const ms = m.say ? cfg('bubbleSay') : cfg('bubbleChat');

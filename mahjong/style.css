@@ -77,9 +77,12 @@ body {
 /* Opponents sit around the table (top / left / right, me at the bottom) but
    every hand faces the viewer, upright, so it's easy to read. Each seat
    stacks: name, concealed hand, tiles played (flowers + sets), discards. */
-/* Anchored to the top (just below the topbar); any slack sits at the bottom. */
+/* Anchored to the top (just below the topbar); any slack sits at the bottom.
+   --bubble-reserve is the strip kept above the top seat so its speech bubbles
+   clear the seat and never slide under the top bar (raise it to show more). */
 #table {
-  flex: 0 0 auto; display: grid; gap: 6px; padding: 8px 8px 0; position: relative;
+  --bubble-reserve: 108px;
+  flex: 0 0 auto; display: grid; gap: 6px; padding: var(--bubble-reserve) 8px 0; position: relative;
   grid-template-columns: minmax(210px, 1fr) minmax(150px, 1fr) minmax(210px, 1fr);
   grid-template-rows: auto auto;
 }
@@ -139,27 +142,28 @@ body {
 /* hand-drawn tile face (sized in em, relative to the tile) — no frame, so
    nothing sits behind the corner index */
 .face { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
-.face.man { flex-direction: column; gap: .02em; color: #17439b; }
-.face.man .mnum { font-size: .46em; font-weight: 800; line-height: 1; }
-.face.man .msuit { font-size: .34em; font-weight: 800; line-height: 1; }
+/* man: small blue numeral above a larger red 萬 */
+.face.man { flex-direction: column; gap: .01em; color: #17439b; }
+.face.man .mnum { font-size: .36em; font-weight: 800; line-height: 1; }
+.face.man .msuit { font-size: .46em; font-weight: 800; line-height: 1; color: #b0202a; }
 .face .honor { font-size: .66em; font-weight: 800; line-height: 1; }
 .face.wind .honor { color: #27324a; }
 .face.dragon-R .honor { color: #c62828; }
 .face.dragon-G .honor { color: #1a7d31; }
 .face.dragon-W .honor { color: #2560c8; }
-.face.flower .honor { color: #b5651d; font-size: .48em; }
-/* pin dots (red) & sou bamboo (green) in symmetric rows; inset a little so the
-   pips never crowd the corner index */
-.face.pin, .face.sou { padding: 9% 7%; }
-.pip-grid { display: flex; flex-direction: column; gap: .1em; align-items: center; justify-content: center; }
-.pip-row { display: flex; gap: .1em; align-items: center; justify-content: center; }
+.face.flower .honor { color: #b5651d; font-size: .5em; }
+/* pips / bamboo placed absolutely inside a padded content box so each number
+   gets its traditional (slanted / clustered / fanned) layout with gaps — the
+   per-tile coordinates & sizes live in app.js (PIN_POS / SOU_POS) */
+.pip-abs { position: absolute; inset: 6% 6%; }
 /* pin: two-tone concentric-ring dots (blue outer, cream, red centre) */
-.pip { width: .2em; height: .2em; border-radius: 50%; background: radial-gradient(circle, #2560c8 0 34%, #fdf9ee 36% 52%, #b0202a 54%); }
-.face.pin.one .pip { width: .44em; height: .44em; background: radial-gradient(circle, #b0202a 0 22%, #fdf9ee 24% 40%, #2560c8 42% 58%, #fdf9ee 60% 72%, #b0202a 74%); }
+.pip { position: absolute; transform: translate(-50%, -50%); border-radius: 50%;
+       background: radial-gradient(circle, #2560c8 0 34%, #fdf9ee 36% 52%, #b0202a 54%); }
+.face.pin.one .pip { background: radial-gradient(circle, #b0202a 0 22%, #fdf9ee 24% 40%, #2560c8 42% 58%, #fdf9ee 60% 72%, #b0202a 74%); }
 /* sou: green bamboo stalks with a little leaf */
-.bamboo { width: .15em; height: .34em; border-radius: .3em .3em .07em .07em; background: linear-gradient(#5ad089, #12742f); position: relative; }
-.bamboo::after { content: ''; position: absolute; left: 50%; top: -.05em; width: .06em; height: .1em; transform: translateX(-50%) rotate(20deg); background: #2a9d52; border-radius: 50% 50% 50% 0; }
-.face.sou.one .bamboo { width: .2em; height: .58em; }
+.bamboo { position: absolute; border-radius: .3em .3em .07em .07em; background: linear-gradient(#5ad089, #12742f); }
+.bamboo .leaf { position: absolute; left: 50%; top: -.02em; background: #2a9d52; border-radius: 50% 50% 50% 0; }
+.face.sou.one .bamboo { border-radius: .3em .3em .07em .07em; }
 
 /* small English index, top-right — no background, just tinted text */
 .tile-idx {
@@ -172,6 +176,8 @@ body {
 .tile.pin .tile-idx { color: #b0202a; }
 .tile.sou .tile-idx { color: #1a7d31; }
 .tile.wind .tile-idx { color: #2b2b2b; }
+.tile.flower .tile-idx { color: #b5651d; }
+.tile-idx.left { left: calc(2 * var(--u)); right: auto; }
 
 .tile.facedown { background: linear-gradient(160deg, #2f7a4a, #1d5230); color: transparent; box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 1px 2px rgba(0,0,0,.3); }
 .tile.facedown::after { content: ''; position: absolute; inset: calc(3 * var(--u)); border: 1px solid rgba(255,255,255,.14); border-radius: 2px; }
@@ -286,7 +292,9 @@ body {
 
 /* ================================================================ bubble layer */
 #bubble-layer { position: fixed; inset: 0; pointer-events: none; z-index: 60; }
-#bubble-layer .bubble-stack { position: absolute; display: flex; flex-direction: column; gap: 4px; transform: translate(-50%, calc(-100% - 10px)); }
+/* newest bubble sits at the bottom (nearest the seat); the stack grows upward,
+   is capped (max-height set in JS) and clips its oldest at the top */
+#bubble-layer .bubble-stack { position: absolute; display: flex; flex-direction: column-reverse; align-items: center; gap: 4px; overflow: hidden; transform: translateX(-50%); }
 #bubble-layer .chat-bubble {
   position: relative; background: #f5f0e0; color: #1a1a1a; padding: 4px 10px;
   border-radius: 10px; font-size: 12px; max-width: 200px; white-space: pre-wrap;
@@ -294,12 +302,12 @@ body {
 }
 #bubble-layer .chat-bubble.say { background: rgba(26,74,50,.96); color: #e8d5a3; }
 #bubble-layer .chat-bubble::after { display: none; }
-#bubble-layer .chat-bubble:last-child::after {
+#bubble-layer .chat-bubble:first-child::after {
   display: block; content: ''; position: absolute;
   left: 50%; bottom: -12px; transform: translateX(-50%);
   border: 6px solid transparent; border-top-color: #f5f0e0;
 }
-#bubble-layer .chat-bubble.say:last-child::after { border-top-color: rgba(26,74,50,.96); }
+#bubble-layer .chat-bubble.say:first-child::after { border-top-color: rgba(26,74,50,.96); }
 @keyframes bubbleIn { from { opacity: 0; transform: translateY(6px); } }
 
 /* ================================================================ responsive */
