@@ -77,15 +77,14 @@ body {
 /* Opponents sit around the table (top / left / right, me at the bottom) but
    every hand faces the viewer, upright, so it's easy to read. Each seat
    stacks: name, concealed hand, tiles played (flowers + sets), discards. */
-/* The table fills the space between the topbar and the hand, with opponents
-   packed at the top. It keeps a fixed outer height, so opponents' discards and
-   my own tiles grow into the table's slack instead of pushing the hand around —
-   the player UI only moves when tiles are resized. */
+/* The table sits just above the hand (small gap), with the empty buffer up top
+   under the topbar. margin-top:auto pushes the table + my zone + hand to the
+   bottom, so growth (discards, melds) expands upward into the buffer and the
+   hand stays put — it only moves when tiles are resized. */
 #table {
-  flex: 1; display: grid; gap: 6px; padding: 8px 8px 0; position: relative;
+  flex: 0 0 auto; margin-top: auto; display: grid; gap: 6px; padding: 8px 8px 0; position: relative;
   grid-template-columns: minmax(210px, 1fr) minmax(150px, 1fr) minmax(210px, 1fr);
   grid-template-rows: auto auto;
-  align-content: start; min-height: 0;
 }
 
 /* ---- opponent seats */
@@ -118,10 +117,8 @@ body {
 /* ---- my zone (bottom edge): discards (toward centre), played, then name */
 #my-zone { padding: 4px 12px 2px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
 #my-zone .seat-info { justify-content: center; }
-/* reserve room for a couple of rows so my discards/melds growing doesn't push
-   the hand around during play (only a resize changes the reserved size) */
-#my-discards { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; align-content: flex-start; max-width: 380px; min-height: calc(68px * var(--ts-base) * var(--ts-disc)); }
-#my-played { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; align-content: flex-start; min-height: calc(36px * var(--ts-base) * var(--ts-played)); }
+#my-discards { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; max-width: 380px; }
+#my-played { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
 
 /* ================================================================ tiles */
 /* Four size knobs, set live by the Size sliders: --ts-hand (my hand),
@@ -142,17 +139,28 @@ body {
 }
 .tile.small { width: calc(25 * var(--u)); height: calc(33 * var(--u)); font-size: calc(33 * var(--u)); }
 
-/* coloured Unicode tile face — tinted by suit (man blue, pin red, sou green).
-   Sized to fill the tile without clipping; the glyph carries its own fine frame. */
-.art-glyph { font-size: 1.42em; line-height: 1; }
-.tile.man     .art-glyph { color: #17439b; }
-.tile.pin     .art-glyph { color: #b0202a; }
-.tile.sou     .art-glyph { color: #1a7d31; }
-.tile.wind    .art-glyph { color: #2b2b2b; }
-.tile.dragon-R .art-glyph { color: #c62828; }
-.tile.dragon-G .art-glyph { color: #1a7d31; }
-.tile.dragon-W .art-glyph { color: #5a5a5a; }
-.tile.flower  .art-glyph { color: #b5651d; }
+/* hand-drawn tile face (sized in em, relative to the tile) — no frame, so
+   nothing sits behind the corner index */
+.face { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.face.man { flex-direction: column; line-height: .8; color: #17439b; }
+.face.man .mnum { font-size: .6em; font-weight: 800; }
+.face.man .msuit { font-size: .3em; font-weight: 700; opacity: .9; margin-top: .04em; }
+.face .honor { font-size: .66em; font-weight: 800; line-height: 1; }
+.face.wind .honor { color: #27324a; }
+.face.dragon-R .honor { color: #c62828; }
+.face.dragon-G .honor { color: #1a7d31; }
+.face.dragon-W .honor { color: #2560c8; }
+.face.flower .honor { color: #b5651d; font-size: .48em; }
+/* pin dots (red) & sou bamboo (green) in symmetric rows; inset a little so the
+   pips never crowd the corner index */
+.face.pin, .face.sou { padding: 9% 7%; }
+.pip-grid { display: flex; flex-direction: column; gap: .1em; align-items: center; justify-content: center; }
+.pip-row { display: flex; gap: .1em; align-items: center; justify-content: center; }
+.pip { width: .2em; height: .2em; border-radius: 50%; background: radial-gradient(circle at 36% 30%, #e2707a 0 22%, #b0202a 72%); box-shadow: inset 0 0 0 .02em rgba(0,0,0,.22); }
+.face.pin.one .pip { width: .42em; height: .42em; background: radial-gradient(circle at 40% 34%, #fff 0 12%, #d8404e 22%, #8f1620 78%); }
+.bamboo { width: .13em; height: .34em; border-radius: .06em; background: linear-gradient(#41c471, #137730); position: relative; }
+.bamboo::after { content: ''; position: absolute; left: 0; right: 0; top: 44%; height: .035em; background: rgba(0,0,0,.28); }
+.face.sou.one .bamboo { width: .18em; height: .62em; }
 
 /* small English index, top-right — no background, just tinted text */
 .tile-idx {
@@ -293,15 +301,6 @@ body {
   border: 6px solid transparent; border-top-color: #f5f0e0;
 }
 #bubble-layer .chat-bubble.say:last-child::after { border-top-color: rgba(26,74,50,.96); }
-/* stacks that render below their seat (top player) point the tail upward */
-#bubble-layer .bubble-stack.below { transform: translate(-50%, 0); }
-#bubble-layer .bubble-stack.below .chat-bubble:last-child::after { display: none; }
-#bubble-layer .bubble-stack.below .chat-bubble:first-child::after {
-  display: block; content: ''; position: absolute;
-  left: 50%; top: -12px; transform: translateX(-50%);
-  border: 6px solid transparent; border-bottom-color: #f5f0e0;
-}
-#bubble-layer .bubble-stack.below .chat-bubble.say:first-child::after { border-bottom-color: rgba(26,74,50,.96); }
 @keyframes bubbleIn { from { opacity: 0; transform: translateY(6px); } }
 
 /* ================================================================ responsive */
