@@ -128,9 +128,12 @@ function addLog(G, text) {
   if (G.log.length > 300) G.log.shift();
 }
 
-function say(G, seat, text, wait = 0) {
+// kind: null = plain speech bubble; 'claim' = a big call overlay (Pon/Chi/Kan/
+// Ron) on the seat; 'discard' = the discarded tile flies out of the seat (tile
+// carries {kind,v,key} for the client to draw)
+function say(G, seat, text, kind = null, tile = null) {
   G.chatSeq += 1;
-  G.chatter.push({ n: G.chatSeq, seat, text, wait });
+  G.chatter.push({ n: G.chatSeq, seat, text, kind, tile });
   if (G.chatter.length > 30) G.chatter.shift();
 }
 
@@ -487,7 +490,7 @@ function doDiscard(G, p, move) {
   G.kanThisTurn = false;
 
   addLog(G, `${p.name} discards ${tileName(tile)}.`);
-  say(G, p.seat, `${tileName(tile)}.`);
+  say(G, p.seat, `${tileName(tile)}.`, 'discard', { kind: tile.kind, v: tile.v, key: tile.key });
 
   // check if anyone can claim
   enterClaimPhase(G);
@@ -559,7 +562,7 @@ function doKan(G, p, move) {
       p.hand = p.hand.filter((t) => !tiles.some((x) => x.id === t.id));
       p.melds.push({ type: 'kan', tiles, open: false });
       addLog(G, `${p.name} declares a closed kan of ${tileName(tiles[0])}.`);
-      say(G, p.seat, 'Kan!');
+      say(G, p.seat, 'Kan!', 'claim');
       // JP: new dora indicator
       if (G.variant === 'jp' && G.dora.length < 5) {
         G.dora.push(G.deadWall[4 + (G.dora.length) * 2]);
@@ -582,7 +585,7 @@ function doKan(G, p, move) {
       meld.type = 'kan';
       meld.tiles.push(tile);
       addLog(G, `${p.name} upgrades a pon to kan with ${tileName(tile)}.`);
-      say(G, p.seat, 'Kan!');
+      say(G, p.seat, 'Kan!', 'claim');
       if (G.variant === 'jp' && G.dora.length < 5) {
         G.dora.push(G.deadWall[4 + (G.dora.length) * 2]);
         G.uraDora.push(G.deadWall[5 + (G.uraDora.length) * 2]);
@@ -688,7 +691,7 @@ function resolveClaims(G) {
     p.hand = p.hand.filter((h) => !tiles.slice(0, 3).some((x) => x.id === h.id));
     p.melds.push({ type: 'kan', tiles, open: true, from: G.lastDiscardSeat });
     addLog(G, `${p.name} calls Kan on ${tileName(tile)}!`);
-    say(G, p.seat, 'Kan!');
+    say(G, p.seat, 'Kan!', 'claim');
     if (G.variant === 'jp' && G.dora.length < 5) {
       G.dora.push(G.deadWall[4 + (G.dora.length) * 2]);
       G.uraDora.push(G.deadWall[5 + (G.uraDora.length) * 2]);
@@ -706,7 +709,7 @@ function resolveClaims(G) {
     p.hand = p.hand.filter((h) => !tiles.some((x) => x.id === h.id));
     p.melds.push({ type: 'pon', tiles: [...tiles, tile], open: true, from: G.lastDiscardSeat });
     addLog(G, `${p.name} calls Pon on ${tileName(tile)}!`);
-    say(G, p.seat, 'Pon!');
+    say(G, p.seat, 'Pon!', 'claim');
     G.turn = p.seat;
     G.phase = 'discard';
     G.lastDraw = null;
@@ -720,7 +723,7 @@ function resolveClaims(G) {
     const meldTiles = [...combo, tile].sort(tileSort);
     p.melds.push({ type: 'chi', tiles: meldTiles, open: true, from: G.lastDiscardSeat });
     addLog(G, `${p.name} calls Chi: ${meldTiles.map(tileName).join(', ')}!`);
-    say(G, p.seat, 'Chi!');
+    say(G, p.seat, 'Chi!', 'claim');
     G.turn = p.seat;
     G.phase = 'discard';
     G.lastDraw = null;
@@ -811,7 +814,7 @@ function resolveWin(G, winnerSeat, loserSeat, isTsumo) {
   } else {
     const loser = playerBySeat(G, loserSeat);
     addLog(G, `${winner.name} wins by Ron from ${loser.name} — ${scoring.summary}!`);
-    say(G, winnerSeat, 'Ron! 🀄');
+    say(G, winnerSeat, 'Ron!', 'claim');
     loser.score -= scoring.points;
     winner.score += scoring.points;
   }

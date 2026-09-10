@@ -400,6 +400,50 @@ function clearChatBubbles() {
   paintChatBubbles();
 }
 
+// -------- claim calls & flying discards ------------------------------------
+function seatHost(seat) {
+  return document.querySelector(`.seat[data-seat="${seat}"]`) || (seat === lastView?.mySeat ? $('#my-zone') : null);
+}
+function fxLayer() {
+  let layer = document.querySelector('#fx-layer');
+  if (!layer) { layer = el('div', ''); layer.id = 'fx-layer'; document.body.append(layer); }
+  return layer;
+}
+
+// big PON/CHI/KAN/RON call, centred over the claiming player's quadrant
+function showCall(seat, text) {
+  const host = seatHost(seat);
+  if (!host || !host.offsetParent) return;
+  const word = String(text).replace(/[^a-z]/gi, '').toLowerCase();
+  const r = host.getBoundingClientRect();
+  const call = el('div', `call-fx call-${word}`, word.toUpperCase());
+  call.style.left = `${Math.round(r.left + r.width / 2)}px`;
+  call.style.top = `${Math.round(r.top + r.height / 2)}px`;
+  fxLayer().append(call);
+  setTimeout(() => call.remove(), 1500);
+}
+
+// the discarded tile flies out of the discarder's quadrant toward the centre,
+// making it obvious who threw it
+function flyDiscard(seat, tile) {
+  const host = seatHost(seat);
+  if (!host || !host.offsetParent || !tile) return;
+  const table = $('#table') || document.body;
+  const hr = host.getBoundingClientRect();
+  const tr = table.getBoundingClientRect();
+  const startX = hr.left + hr.width / 2, startY = hr.top + hr.height / 2;
+  const destX = tr.left + tr.width / 2, destY = tr.top + tr.height / 2;
+  const fly = el('div', 'fly-tile');
+  fly.append(renderTile(tile));
+  fly.style.left = `${Math.round(startX)}px`;
+  fly.style.top = `${Math.round(startY)}px`;
+  fxLayer().append(fly);
+  void fly.offsetWidth; // reflow so the transition runs
+  fly.style.transform = `translate(-50%,-50%) translate(${Math.round(destX - startX)}px, ${Math.round(destY - startY)}px) scale(1.05)`;
+  fly.style.opacity = '0.12';
+  setTimeout(() => fly.remove(), 620);
+}
+
 // ---------------------------------------------------------------- rejoin
 
 function saveRejoin(code, token) { try { sessionStorage.setItem(`mjg-rejoin-${code}`, token); } catch {} }
@@ -872,12 +916,15 @@ function renderGame(view, sess) {
   // feed
   renderFeed(view);
 
-  // speech bubbles
+  // announcements: claims pop a big call over the seat, discards fly the tile
+  // out of the seat, everything else is a normal speech bubble
   if (view.chatter) {
     for (const c of view.chatter) {
       if (c.n > chatSeenN) {
         chatSeenN = c.n;
-        showChatBubble({ seat: c.seat, text: c.text, say: true });
+        if (c.kind === 'claim') showCall(c.seat, c.text);
+        else if (c.kind === 'discard') flyDiscard(c.seat, c.tile);
+        else showChatBubble({ seat: c.seat, text: c.text, say: true });
       }
     }
   }
