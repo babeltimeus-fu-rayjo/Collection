@@ -29,6 +29,7 @@ import {
   botChoose,
 } from './game.js';
 import { initSettings } from '../common/settings.js';
+import '../common/feedtoggle.js';
 import '../common/version.js';
 
 // The ⚙ drawer (bottom-left): live-tunable pacing for testing. Defaults
