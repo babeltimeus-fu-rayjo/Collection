@@ -771,10 +771,10 @@ function renderGame(view, sess) {
   $('#wind-chip').textContent = `${view.roundWind}${view.handNum}`;
   $('#wall-chip').textContent = `${view.wallCount} left`;
 
-  // 2x2 seat mapping (me = bottom-left): TL = left/prev (+3), TR = across (+2),
-  // BR = right/next (+1) — counter-clockwise BL -> BR -> TR -> TL
-  const seatOrder = [(my + 3) % 4, (my + 2) % 4, (my + 1) % 4];
-  const seatEls = ['.seat-tl', '.seat-tr', '.seat-br'];
+  // 2x2 seat mapping (me = bottom-right): TL = across (+2), TR = right/next (+1),
+  // BL = left/prev (+3) — counter-clockwise BR -> TR -> TL -> BL
+  const seatOrder = [(my + 2) % 4, (my + 1) % 4, (my + 3) % 4];
+  const seatEls = ['.seat-tl', '.seat-tr', '.seat-bl'];
 
   for (let i = 0; i < 3; i++) {
     const s = seatOrder[i];
