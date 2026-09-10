@@ -35,6 +35,7 @@ import '../common/version.js';
 const cfg = initSettings('mjg', [
   { key: 'botDelay', label: 'Bot thinking delay', def: [1200, 800], section: 'Host pacing', host: true },
   { key: 'claimTimeout', label: 'Claim timeout (0 = off)', def: 0, section: 'Host pacing', host: true, hint: 'Auto-pass a player who hasn\'t responded to a claim after this long. 0 waits indefinitely (the default).' },
+  { key: 'postFlyDelay', label: 'Pause after discard fly', def: 0, section: 'Host pacing', host: true, hint: 'Extra pause after a discarded tile finishes flying before the next bot acts. Bots always wait for the fly itself; this adds on top.' },
   { key: 'talkScale', label: 'Speech-line waits ×', def: 1, min: 0, max: 4, step: 0.1, unit: '×', ms: false, section: 'Table talk' },
   { key: 'talkHoldPad', label: 'Turn hold after last line', def: 1200, section: 'Table talk' },
   { key: 'bubbleSay', label: 'Game bubbles linger', def: 4000, section: 'Bubbles & banners' },
@@ -42,6 +43,10 @@ const cfg = initSettings('mjg', [
   { key: 'bubbleTrunc', label: 'Bubble text cap', def: 84, min: 12, max: 400, step: 4, unit: 'ch', ms: false, section: 'Bubbles & banners' },
   { key: 'flashMs', label: 'Banner duration', def: 1800, section: 'Bubbles & banners' },
 ]);
+
+// how long a discarded tile spends flying out of its quadrant; bots wait at
+// least this long after a discard (see scheduleBots) so the fly always lands
+const FLY_MS = 600;
 
 // ---------------------------------------------------------------- networking
 
@@ -441,7 +446,7 @@ function flyDiscard(seat, tile) {
   void fly.offsetWidth; // reflow so the transition runs
   fly.style.transform = `translate(-50%,-50%) translate(${Math.round(destX - startX)}px, ${Math.round(destY - startY)}px) scale(1.05)`;
   fly.style.opacity = '0.12';
-  setTimeout(() => fly.remove(), 620);
+  setTimeout(() => fly.remove(), FLY_MS);
 }
 
 // ---------------------------------------------------------------- rejoin
@@ -624,6 +629,9 @@ class HostSession {
       else { try { this.conns.get(seat)?.send({ t: 'err', error: res.error }); } catch {} }
       return;
     }
+    // hold the next bot action until the discard has finished flying (+ the
+    // configurable pause), so nothing happens on top of the animation
+    if (move.kind === 'discard') this.botNotBefore = Date.now() + FLY_MS + cfg('postFlyDelay');
     this.broadcast();
   }
 
@@ -638,7 +646,9 @@ class HostSession {
   scheduleBots() {
     clearTimeout(this.botTimer);
     if (!this.G || this.G.phase === 'over' || this.G.phase === 'handEnd') return;
-    const delay = cfg.range('botDelay');
+    // never act before a just-discarded tile has finished flying
+    const flyWait = Math.max(0, (this.botNotBefore || 0) - Date.now());
+    const delay = Math.max(cfg.range('botDelay'), flyWait);
     this.botTimer = setTimeout(() => this.tickBots(), delay);
   }
 
