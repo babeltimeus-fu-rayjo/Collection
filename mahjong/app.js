@@ -1270,7 +1270,7 @@ $('#name-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('
 $('#btn-add-bot').addEventListener('click', () => session?.addBot());
 $('#btn-start').addEventListener('click', () => session?.start());
 $('#btn-size').addEventListener('click', (e) => { e.stopPropagation(); $('#size-popover').classList.toggle('hidden'); });
-for (const k of SZ_KEYS) $(`#sz-${k}`).addEventListener('input', (e) => setSize(k, parseFloat(e.target.value)));
+for (const k of SZ_KEYS) { const el = $(`#sz-${k}`); if (el) el.addEventListener('input', (e) => setSize(k, parseFloat(e.target.value))); }
 $('#size-popover').addEventListener('click', (e) => e.stopPropagation());
 document.addEventListener('click', () => $('#size-popover').classList.add('hidden'));
 applySizes();
