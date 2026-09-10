@@ -326,8 +326,9 @@ export function turnSeat(G) {
 export function canDiscard(G, seat) {
   if (G.phase !== 'discard' || G.turn !== seat) return false;
   const p = playerBySeat(G, seat);
-  // must have one more tile than normal (just drew)
-  return p.hand.length === handSize(G.variant) + 1;
+  // must have one more tile than normal (just drew / claimed) — each meld holds
+  // 3 tiles outside the concealed hand, so account for those
+  return p.hand.length === handSize(G.variant) + 1 - 3 * p.melds.length;
 }
 
 function canChi(G, seat) {
@@ -419,7 +420,9 @@ function canRon(G, seat) {
 function canTsumo(G, seat) {
   if (G.phase !== 'discard' || G.turn !== seat) return false;
   const p = playerBySeat(G, seat);
-  if (p.hand.length !== handSize(G.variant) + 1) return false;
+  // concealed hand shrinks by 3 for every meld — a melded player still has the
+  // one extra (just-drawn) tile, so compare against that adjusted size
+  if (p.hand.length !== handSize(G.variant) + 1 - 3 * p.melds.length) return false;
   return isWinningHand(p.hand, G.variant, p.melds);
 }
 

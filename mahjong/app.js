@@ -340,16 +340,20 @@ function paintChatBubbles() {
     seen.add(key);
     let stack = layer.querySelector(`.bubble-stack[data-seat="${key}"]`);
     if (!stack) { stack = el('div', 'bubble-stack'); stack.dataset.seat = key; layer.append(stack); }
-    // newest nearest the seat: render newest-first so CSS column-reverse drops it
-    // to the bottom; older ones stack upward and clip once the cap is reached
+    // Append-only in chronological order (oldest → newest). Existing bubbles are
+    // never moved or recreated, so they don't re-run the entrance animation
+    // (no blink). CSS (column + justify-end) keeps the newest at the bottom by
+    // the seat and clips the oldest at the top once the cap is reached.
     const kept = new Set();
-    for (const b of arr.slice().reverse()) {
+    for (const b of arr) {
       const bid = String(b.id);
       kept.add(bid);
-      let bub = stack.querySelector(`.chat-bubble[data-id="${bid}"]`);
-      if (!bub) { bub = el('div', 'chat-bubble', b.text); bub.dataset.id = bid; }
-      bub.classList.toggle('say', !!b.say);
-      stack.append(bub); // re-append keeps DOM order newest → oldest
+      if (!stack.querySelector(`.chat-bubble[data-id="${bid}"]`)) {
+        const bub = el('div', 'chat-bubble', b.text);
+        bub.dataset.id = bid;
+        if (b.say) bub.classList.add('say');
+        stack.append(bub);
+      }
     }
     for (const n of stack.querySelectorAll('.chat-bubble')) { if (!kept.has(n.dataset.id)) n.remove(); }
     // anchor the stack's bottom just above the seat; it grows upward, capped at
@@ -771,6 +775,7 @@ function renderGame(view, sess) {
     const p = view.players.find((q) => q.seat === s);
     const el_ = $(seatEls[i]);
     el_.dataset.seat = s;
+    el_.classList.toggle('active-turn', !!p && s === view.turn && view.phase !== 'over');
     el_.querySelector('.seat-name').textContent = p ? p.name : '';
     const wind = WINDS[(s - view.dealer + 4) % 4];
     const windEl = el_.querySelector('.seat-wind');
@@ -827,6 +832,7 @@ function renderGame(view, sess) {
 
   // my zone
   const me = view.players.find((q) => q.seat === my);
+  $('#my-zone').classList.toggle('active-turn', my === view.turn && view.phase !== 'over');
   $('#my-name').textContent = me ? me.name : '';
   const myWind = WINDS[(my - view.dealer + 4) % 4];
   const myWindEl = $('#my-wind');

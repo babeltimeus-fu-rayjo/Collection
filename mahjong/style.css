@@ -88,7 +88,13 @@ body {
 }
 
 /* ---- opponent seats */
-.seat { display: flex; flex-direction: column; align-items: center; gap: 4px; overflow: visible; padding: 4px 2px; min-width: 0; min-height: 0; }
+.seat { display: flex; flex-direction: column; align-items: center; gap: 4px; overflow: visible; padding: 4px 2px; min-width: 0; min-height: 0; border-radius: 8px; transition: box-shadow .15s, background .15s; }
+/* whose turn it is — a soft gold glow around the active seat */
+.seat.active-turn, #my-zone.active-turn {
+  box-shadow: 0 0 0 2px rgba(232,213,163,.9), 0 0 16px 3px rgba(232,213,163,.4);
+  background: rgba(232,213,163,.07);
+}
+#my-zone { border-radius: 8px; transition: box-shadow .15s, background .15s; }
 .seat-inner { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; }
 
 .seat-info { display: flex; align-items: center; gap: 6px; font-size: 12px; flex-wrap: wrap; justify-content: center; }
@@ -106,7 +112,20 @@ body {
 
 .seat-hand { display: flex; gap: 1px; flex-wrap: wrap; justify-content: center; }
 .seat-played { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
-.seat-discards { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; opacity: .96; }
+/* discards live in a dedicated, recessed 3×8 tray so they read as a pile,
+   clearly separate from the played sets above them */
+.seat-discards, #my-discards {
+  /* pond size is capped at 1× (--tsd) so 8 columns always fit a seat, even when
+     the discard slider is turned up — the slider can still shrink the pond */
+  --tsd: min(var(--ts-disc), 1);
+  display: grid;
+  grid-template-columns: repeat(8, calc(25px * var(--ts-base) * var(--tsd)));
+  grid-auto-rows: calc(33px * var(--ts-base) * var(--tsd));
+  justify-content: center; align-content: start; gap: 2px; padding: 3px;
+  min-height: calc(33px * var(--ts-base) * var(--tsd) * 3 + 10px);
+  border-radius: 5px; background: rgba(0,0,0,.13);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
+}
 
 /* ---- center */
 #center { grid-column: 2; grid-row: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-width: 0; }
@@ -117,7 +136,6 @@ body {
 /* ---- my zone (bottom edge): discards (toward centre), played, then name */
 #my-zone { padding: 4px 12px 2px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
 #my-zone .seat-info { justify-content: center; }
-#my-discards { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; max-width: 380px; }
 #my-played { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
 
 /* ================================================================ tiles */
@@ -165,19 +183,21 @@ body {
 .bamboo .leaf { position: absolute; left: 50%; top: -.02em; background: #2a9d52; border-radius: 50% 50% 50% 0; }
 .face.sou.one .bamboo { border-radius: .3em .3em .07em .07em; }
 
-/* small English index, top-right — no background, just tinted text */
+/* small English index, top-right — sized in em (relative to the tile's own
+   font-size, which equals its height) so the number keeps the SAME proportion
+   on every tile, hand or discard, big or small */
 .tile-idx {
-  position: absolute; top: calc(1 * var(--u)); right: calc(2 * var(--u)); z-index: 1;
-  font-size: calc(12 * var(--u)); font-weight: 800; line-height: 1;
+  position: absolute; top: .05em; right: .08em; z-index: 1;
+  font-size: .23em; font-weight: 800; line-height: 1;
   color: rgba(20,20,20,.75);
-  text-shadow: 0 0 calc(2 * var(--u)) #fdf9ee, 0 0 calc(1.5 * var(--u)) #fdf9ee;
+  text-shadow: 0 0 .06em #fdf9ee, 0 0 .04em #fdf9ee;
 }
 .tile.man .tile-idx { color: #17439b; }
 .tile.pin .tile-idx { color: #b0202a; }
 .tile.sou .tile-idx { color: #1a7d31; }
 .tile.wind .tile-idx { color: #2b2b2b; }
 .tile.flower .tile-idx { color: #b5651d; }
-.tile-idx.left { left: calc(2 * var(--u)); right: auto; }
+.tile-idx.left { left: .08em; right: auto; }
 
 .tile.facedown { background: linear-gradient(160deg, #2f7a4a, #1d5230); color: transparent; box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 1px 2px rgba(0,0,0,.3); }
 .tile.facedown::after { content: ''; position: absolute; inset: calc(3 * var(--u)); border: 1px solid rgba(255,255,255,.14); border-radius: 2px; }
@@ -207,7 +227,8 @@ body {
 .seat-hand .tile { --u: calc(1px * var(--ts-base) * var(--ts-ohand)); width: calc(15 * var(--u)); height: calc(20 * var(--u)); }
 
 /* discards — sized by --ts-disc */
-.seat-discards .tile, #my-discards .tile, #last-discard .tile { --u: calc(1px * var(--ts-base) * var(--ts-disc)); }
+.seat-discards .tile, #my-discards .tile { --u: calc(1px * var(--ts-base) * min(var(--ts-disc), 1)); }
+#last-discard .tile { --u: calc(1px * var(--ts-base) * var(--ts-disc)); }
 
 /* ================================================================ action bar */
 #action-bar {
@@ -293,8 +314,10 @@ body {
 /* ================================================================ bubble layer */
 #bubble-layer { position: fixed; inset: 0; pointer-events: none; z-index: 60; }
 /* newest bubble sits at the bottom (nearest the seat); the stack grows upward,
-   is capped (max-height set in JS) and clips its oldest at the top */
-#bubble-layer .bubble-stack { position: absolute; display: flex; flex-direction: column-reverse; align-items: center; gap: 4px; overflow: hidden; transform: translateX(-50%); }
+   is capped (max-height set in JS) and clips its oldest at the top. DOM order is
+   chronological & append-only (no re-animation/blink); justify-content:flex-end
+   pins the newest to the bottom and pushes the oldest off the top when full */
+#bubble-layer .bubble-stack { position: absolute; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; overflow: hidden; transform: translateX(-50%); }
 #bubble-layer .chat-bubble {
   position: relative; background: #f5f0e0; color: #1a1a1a; padding: 4px 10px;
   border-radius: 10px; font-size: 12px; max-width: 200px; white-space: pre-wrap;
@@ -302,12 +325,12 @@ body {
 }
 #bubble-layer .chat-bubble.say { background: rgba(26,74,50,.96); color: #e8d5a3; }
 #bubble-layer .chat-bubble::after { display: none; }
-#bubble-layer .chat-bubble:first-child::after {
+#bubble-layer .chat-bubble:last-child::after {
   display: block; content: ''; position: absolute;
   left: 50%; bottom: -12px; transform: translateX(-50%);
   border: 6px solid transparent; border-top-color: #f5f0e0;
 }
-#bubble-layer .chat-bubble.say:first-child::after { border-top-color: rgba(26,74,50,.96); }
+#bubble-layer .chat-bubble.say:last-child::after { border-top-color: rgba(26,74,50,.96); }
 @keyframes bubbleIn { from { opacity: 0; transform: translateY(6px); } }
 
 /* ================================================================ responsive */
