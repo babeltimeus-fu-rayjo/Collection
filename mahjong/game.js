@@ -490,7 +490,8 @@ function doDiscard(G, p, move) {
   G.kanThisTurn = false;
 
   addLog(G, `${p.name} discards ${tileName(tile)}.`);
-  say(G, p.seat, `${tileName(tile)}.`, 'discard', { kind: tile.kind, v: tile.v, key: tile.key });
+  // no bubble/announcement — the tile itself sits in the centre (rendered from
+  // G.lastDiscard) until it's claimed or the next player draws
 
   // check if anyone can claim
   enterClaimPhase(G);
@@ -681,6 +682,7 @@ function resolveClaims(G) {
   if (winner.response.type === 'ron') {
     p.hand.push(tile);
     p.hand.sort(tileSort);
+    G.lastDiscard = null; // taken off the table
     resolveWin(G, p.seat, G.lastDiscardSeat, false);
     return;
   }
@@ -690,6 +692,7 @@ function resolveClaims(G) {
     tiles.push(tile);
     p.hand = p.hand.filter((h) => !tiles.slice(0, 3).some((x) => x.id === h.id));
     p.melds.push({ type: 'kan', tiles, open: true, from: G.lastDiscardSeat });
+    G.lastDiscard = null; // taken off the table into the meld
     addLog(G, `${p.name} calls Kan on ${tileName(tile)}!`);
     say(G, p.seat, 'Kan!', 'claim');
     if (G.variant === 'jp' && G.dora.length < 5) {
@@ -733,7 +736,10 @@ function resolveClaims(G) {
 }
 
 function advanceTurn(G) {
-  G.lastDiscard = null;
+  // keep G.lastDiscard set: the just-discarded tile stays resting in the centre
+  // (shown there, skipped from the tray) until the next player discards — then
+  // it settles into that player's discard pile. It's cleared only on a claim
+  // (pon/chi/kan/ron) or a new hand.
   const next = nextSeat(G.turn);
   G.turn = next;
 

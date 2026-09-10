@@ -428,25 +428,21 @@ function showCall(seat, text) {
   setTimeout(() => call.remove(), 1500);
 }
 
-// the discarded tile flies out of the discarder's quadrant toward the centre,
-// making it obvious who threw it
-function flyDiscard(seat, tile) {
-  const host = seatHost(seat);
-  if (!host || !host.offsetParent || !tile) return;
-  const table = $('#table') || document.body;
+// animate the centre discard tile flying in from the discarder's quadrant, so
+// it's obvious who threw it; it then rests in the centre (rendered from
+// view.lastDiscard) until it's claimed or the next player draws
+function flyTileIn(tile, container, fromSeat) {
+  const host = seatHost(fromSeat);
+  if (!host || !host.offsetParent) return;
   const hr = host.getBoundingClientRect();
-  const tr = table.getBoundingClientRect();
-  const startX = hr.left + hr.width / 2, startY = hr.top + hr.height / 2;
-  const destX = tr.left + tr.width / 2, destY = tr.top + tr.height / 2;
-  const fly = el('div', 'fly-tile');
-  fly.append(renderTile(tile));
-  fly.style.left = `${Math.round(startX)}px`;
-  fly.style.top = `${Math.round(startY)}px`;
-  fxLayer().append(fly);
-  void fly.offsetWidth; // reflow so the transition runs
-  fly.style.transform = `translate(-50%,-50%) translate(${Math.round(destX - startX)}px, ${Math.round(destY - startY)}px) scale(1.05)`;
-  fly.style.opacity = '0.12';
-  setTimeout(() => fly.remove(), FLY_MS);
+  const cr = container.getBoundingClientRect();
+  const dx = Math.round((hr.left + hr.width / 2) - (cr.left + cr.width / 2));
+  const dy = Math.round((hr.top + hr.height / 2) - (cr.top + cr.height / 2));
+  tile.style.transition = 'none';
+  tile.style.transform = `translate(${dx}px, ${dy}px) scale(.72)`;
+  void tile.offsetWidth; // reflow so the transition runs
+  tile.style.transition = `transform ${FLY_MS}ms ease-out`;
+  tile.style.transform = 'translate(0,0) scale(1)';
 }
 
 // ---------------------------------------------------------------- rejoin
@@ -463,6 +459,7 @@ let pendingMove = false;
 let selectedTile = null;
 let handOrder = [];   // tile-id display order for my hand (drag to rearrange)
 let lastHandSeen = -1; // reset handOrder on a new hand (tile ids are reused each deal)
+let shownDiscardId = null; // the tile currently resting in the centre (fly it in only once)
 
 class HostSession {
   constructor(peer, code, name) {
@@ -864,6 +861,7 @@ function renderGame(view, sess) {
     discEl.replaceChildren();
     if (p) {
       for (const t of p.discards) {
+        if (view.lastDiscard && t.id === view.lastDiscard.id) continue; // resting in the centre
         discEl.append(renderTile(t, { small: true, riichi: t.riichi }));
       }
     }
@@ -882,13 +880,18 @@ function renderGame(view, sess) {
   if (view.riichiSticks > 0) sticksEl.textContent = `${view.riichiSticks} riichi`;
   if (view.honba > 0) sticksEl.textContent += ` ${view.honba} honba`;
 
-  // last discard in center
+  // the just-discarded tile rests in the centre until it's claimed or the next
+  // player draws (view.lastDiscard is cleared on both); fly it in only once
   const ldEl = $('#last-discard');
-  ldEl.replaceChildren();
-  if (view.lastDiscard && view.phase === 'claim') {
-    ldEl.append(renderTile(view.lastDiscard, { highlight: true }));
-    const from = view.players.find((q) => q.seat === view.lastDiscardSeat);
-    if (from) ldEl.append(el('div', '', `from ${from.name}`));
+  const ldId = view.lastDiscard ? view.lastDiscard.id : null;
+  if (ldId !== shownDiscardId) {
+    shownDiscardId = ldId;
+    ldEl.replaceChildren();
+    if (view.lastDiscard) {
+      const tile = renderTile(view.lastDiscard, { highlight: true });
+      ldEl.append(tile);
+      flyTileIn(tile, ldEl, view.lastDiscardSeat);
+    }
   }
 
   // my zone
@@ -905,7 +908,10 @@ function renderGame(view, sess) {
   const myDisc = $('#my-discards');
   myDisc.replaceChildren();
   if (me) {
-    for (const t of me.discards) myDisc.append(renderTile(t, { small: true, riichi: t.riichi }));
+    for (const t of me.discards) {
+      if (view.lastDiscard && t.id === view.lastDiscard.id) continue; // resting in the centre
+      myDisc.append(renderTile(t, { small: true, riichi: t.riichi }));
+    }
   }
 
   // my played: flowers first, then melds (sets)
@@ -926,14 +932,14 @@ function renderGame(view, sess) {
   // feed
   renderFeed(view);
 
-  // announcements: claims pop a big call over the seat, discards fly the tile
-  // out of the seat, everything else is a normal speech bubble
+  // announcements: claims pop a big call over the seat; everything else is a
+  // normal speech bubble (discards aren't announced — the tile rests in the
+  // centre instead)
   if (view.chatter) {
     for (const c of view.chatter) {
       if (c.n > chatSeenN) {
         chatSeenN = c.n;
         if (c.kind === 'claim') showCall(c.seat, c.text);
-        else if (c.kind === 'discard') flyDiscard(c.seat, c.tile);
         else showChatBubble({ seat: c.seat, text: c.text, say: true });
       }
     }
