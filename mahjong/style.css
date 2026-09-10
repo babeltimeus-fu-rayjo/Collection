@@ -75,26 +75,24 @@ body {
 #size-popover input[type="range"] { flex: 1; accent-color: #4db87a; }
 #size-popover span { width: 40px; text-align: right; color: #8ab89a; font-variant-numeric: tabular-nums; }
 
-/* Opponents sit around the table (top / left / right, me at the bottom) but
-   every hand faces the viewer, upright, so it's easy to read. Each seat
-   stacks: name, concealed hand, tiles played (flowers + sets), discards. */
-/* Anchored to the top (just below the topbar); any slack sits at the bottom.
-   --bubble-reserve is the strip kept above the top seat so its speech bubbles
-   clear the seat and never slide under the top bar (raise it to show more). */
+/* 2x2 square table: one equal quadrant per player, me at the bottom-left, turn
+   order counter-clockwise (BL -> BR -> TR -> TL). Equal quadrants keep every
+   player's discard tray the same size. --bubble-reserve is the strip kept above
+   the top row so those players' speech bubbles clear the top bar. */
 #table {
   --bubble-reserve: 64px;
-  flex: 0 0 auto; display: grid; gap: 6px; padding: var(--bubble-reserve) 8px 0; position: relative;
-  grid-template-columns: minmax(210px, 1fr) minmax(150px, 1fr) minmax(210px, 1fr);
+  flex: 0 0 auto; display: grid; gap: 8px 10px; padding: var(--bubble-reserve) 8px 0; position: relative;
+  grid-template-columns: 1fr 1fr;
   grid-template-rows: auto auto;
 }
 
-/* ---- opponent seats */
-.seat { display: flex; flex-direction: column; align-items: center; gap: 4px; overflow: visible; padding: 4px 2px; min-width: 0; min-height: 0; }
-/* whose turn it is — highlight the player's NAME (same size on every seat,
-   unlike outlining the seat box, which is full-width for the top player) */
-.seat.active-turn .seat-name, #my-zone.active-turn #my-name {
-  background: #e8d5a3; color: #123524; border-radius: 999px; padding: 1px 9px;
-  box-shadow: 0 0 9px 1px rgba(232,213,163,.5);
+/* ---- player quadrants */
+.seat { display: flex; flex-direction: column; align-items: center; gap: 4px; overflow: visible; padding: 4px 4px; min-width: 0; min-height: 0; border-radius: 10px; transition: box-shadow .15s, background .15s; }
+/* whose turn it is — a gold glow around the active quadrant. Every quadrant is
+   the same size in the 2x2, so no player's halo is bigger than another's. */
+.seat.active-turn, #my-zone.active-turn {
+  box-shadow: 0 0 0 2px rgba(232,213,163,.9), 0 0 14px 2px rgba(232,213,163,.45);
+  background: rgba(232,213,163,.08);
 }
 .seat-inner { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; }
 
@@ -104,12 +102,14 @@ body {
 .seat-wind.dealer { background: #b85a2a; }
 .seat-score { color: #8ab89a; font-size: 11px; }
 
-.seat-top   { grid-column: 1 / -1; grid-row: 1; }
-/* top-aligned so left & right are level with each other and don't shift
-   vertically as discards accumulate */
-.seat-left  { grid-column: 1; grid-row: 2; align-self: start; }
-.seat-right { grid-column: 3; grid-row: 2; align-self: start; }
-#center     { align-self: start; }
+.seat-tl { grid-column: 1; grid-row: 1; align-self: start; }
+.seat-tr { grid-column: 2; grid-row: 1; align-self: start; }
+.seat-bl { grid-column: 1; grid-row: 2; align-self: start; }
+.seat-br { grid-column: 2; grid-row: 2; align-self: start; }
+/* mirror the bottom row vertically so its discards sit toward the centre of the
+   table (name ends up on the outer/bottom edge), matching the top row */
+.seat-bl, .seat-br { flex-direction: column-reverse; }
+.seat-bl .seat-inner, .seat-br .seat-inner { flex-direction: column-reverse; }
 
 .seat-hand { display: flex; gap: 1px; flex-wrap: wrap; justify-content: center; }
 .seat-played { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
@@ -130,14 +130,19 @@ body {
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
 }
 
-/* ---- center */
-#center { grid-column: 2; grid-row: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-width: 0; }
-#center-info { display: flex; gap: 12px; align-items: center; font-size: 13px; color: #8ab89a; flex-wrap: wrap; justify-content: center; }
-#round-wind-display { font-size: 16px; font-weight: 700; color: #e8d5a3; }
-#last-discard { min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+/* ---- center overlay (floats where the four quadrants meet) */
+#center {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  pointer-events: none; z-index: 6; text-align: center;
+}
+#center-info { display: flex; gap: 10px; align-items: center; font-size: 12px; color: #8ab89a; flex-wrap: wrap; justify-content: center; }
+#round-wind-display { font-size: 15px; font-weight: 700; color: #e8d5a3; }
+#last-discard { display: flex; align-items: center; justify-content: center; gap: 6px; }
+#last-discard:not(:empty) { background: rgba(10,26,18,.85); border-radius: 8px; padding: 4px 8px; box-shadow: 0 2px 10px rgba(0,0,0,.5); }
 
-/* ---- my zone (bottom edge): discards (toward centre), played, then name */
-#my-zone { padding: 4px 12px 2px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+/* ---- my zone is the bottom-left quadrant (a .seat); just tune spacing */
+#my-zone { gap: 3px; }
 #my-zone .seat-info { justify-content: center; }
 #my-played { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
 
@@ -341,10 +346,6 @@ body {
   /* device factor shrinks every tile so the table fits a phone; the Size
      sliders still scale on top of this. */
   #screen-game { --ts-base: 0.66; }
-  #table {
-    grid-template-columns: minmax(132px, 1fr) minmax(84px, 0.7fr) minmax(132px, 1fr);
-    grid-template-rows: auto 1fr;
-    padding: 4px;
-  }
+  #table { gap: 5px 6px; padding: var(--bubble-reserve) 4px 0; }
   .seat-name { max-width: 78px; font-size: 11px; }
 }

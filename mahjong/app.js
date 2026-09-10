@@ -412,6 +412,7 @@ let lastView = null;
 let pendingMove = false;
 let selectedTile = null;
 let handOrder = [];   // tile-id display order for my hand (drag to rearrange)
+let lastHandSeen = -1; // reset handOrder on a new hand (tile ids are reused each deal)
 
 class HostSession {
   constructor(peer, code, name) {
@@ -761,14 +762,19 @@ function renderGame(view, sess) {
   lastView = view;
   const my = view.mySeat;
 
+  // a new hand reuses tile ids from the previous hand, so drop the old drag
+  // order — otherwise the fresh hand inherits last hand's arrangement (unsorted)
+  if (view.handNum !== lastHandSeen) { handOrder = []; lastHandSeen = view.handNum; }
+
   // topbar
   $('#room-chip').textContent = view.code;
   $('#wind-chip').textContent = `${view.roundWind}${view.handNum}`;
   $('#wall-chip').textContent = `${view.wallCount} left`;
 
-  // seat mapping: top = across, right = next, left = prev
-  const seatOrder = [(my + 2) % 4, (my + 1) % 4, (my + 3) % 4];
-  const seatEls = ['.seat-top', '.seat-right', '.seat-left'];
+  // 2x2 seat mapping (me = bottom-left): TL = left/prev (+3), TR = across (+2),
+  // BR = right/next (+1) — counter-clockwise BL -> BR -> TR -> TL
+  const seatOrder = [(my + 3) % 4, (my + 2) % 4, (my + 1) % 4];
+  const seatEls = ['.seat-tl', '.seat-tr', '.seat-br'];
 
   for (let i = 0; i < 3; i++) {
     const s = seatOrder[i];

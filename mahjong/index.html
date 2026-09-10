@@ -86,9 +86,11 @@
       </div>
     </div>
 
+    <!-- 2x2 table: three opponents fill three quadrants, I take the bottom-left;
+         turn order runs counter-clockwise BL -> BR -> TR -> TL -->
     <div id="table">
-      <!-- opponent across (seat+2) -->
-      <div class="seat seat-top" data-seat="">
+      <!-- top-left: opponent to my left (seat+3) -->
+      <div class="seat seat-tl" data-seat="">
         <div class="seat-info"><span class="seat-name"></span><span class="seat-wind"></span><span class="seat-score"></span></div>
         <div class="seat-inner">
           <div class="seat-hand"></div>
@@ -96,8 +98,8 @@
           <div class="seat-discards"></div>
         </div>
       </div>
-      <!-- opponent right (seat+1) -->
-      <div class="seat seat-right" data-seat="">
+      <!-- top-right: opponent across (seat+2) -->
+      <div class="seat seat-tr" data-seat="">
         <div class="seat-info"><span class="seat-name"></span><span class="seat-wind"></span><span class="seat-score"></span></div>
         <div class="seat-inner">
           <div class="seat-hand"></div>
@@ -105,8 +107,16 @@
           <div class="seat-discards"></div>
         </div>
       </div>
-      <!-- opponent left (seat+3) -->
-      <div class="seat seat-left" data-seat="">
+      <!-- bottom-left: me -->
+      <div id="my-zone" class="seat seat-bl">
+        <div class="seat-info"><span id="my-name"></span><span id="my-wind"></span><span id="my-score"></span></div>
+        <div class="seat-inner">
+          <div id="my-played"></div>
+          <div id="my-discards"></div>
+        </div>
+      </div>
+      <!-- bottom-right: opponent to my right (seat+1) -->
+      <div class="seat seat-br" data-seat="">
         <div class="seat-info"><span class="seat-name"></span><span class="seat-wind"></span><span class="seat-score"></span></div>
         <div class="seat-inner">
           <div class="seat-hand"></div>
@@ -114,7 +124,7 @@
           <div class="seat-discards"></div>
         </div>
       </div>
-      <!-- center area -->
+      <!-- center overlay: round / dora / the tile just discarded -->
       <div id="center">
         <div id="center-info">
           <span id="round-wind-display"></span>
@@ -123,13 +133,6 @@
         </div>
         <div id="last-discard"></div>
       </div>
-    </div>
-
-    <!-- my area — discards (toward centre), then played, then my hand -->
-    <div id="my-zone">
-      <div id="my-discards"></div>
-      <div id="my-played"></div>
-      <div class="seat-info"><span id="my-name"></span><span id="my-wind"></span><span id="my-score"></span></div>
     </div>
     <div id="hand"></div>
     <div id="action-bar"></div>
