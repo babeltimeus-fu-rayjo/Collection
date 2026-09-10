@@ -251,19 +251,23 @@ function renderMeld(meld) {
   return g;
 }
 
-// -------- tile size — one unified knob, saved per browser --------
+// -------- tile size — independent knobs per category, saved per browser --------
 const SZ_MIN = 0.6, SZ_MAX = 2.8;
-const SZ_KEYS = ['scale'];
+const SZ_KEYS = ['hand', 'ohand', 'played', 'disc'];
 function loadSize(key) {
   try { const v = parseFloat(localStorage.getItem(`mjg-ts-${key}`)); if (Number.isFinite(v)) return Math.min(SZ_MAX, Math.max(SZ_MIN, v)); } catch {}
   return 1;
 }
-// seed the unified scale from the old "my hand" slider on first run after the merge
-const sizes = { scale: (() => { try { if (localStorage.getItem('mjg-ts-scale') != null) return loadSize('scale'); } catch {} return loadSize('hand'); })() };
+const sizes = { hand: loadSize('hand'), ohand: loadSize('ohand'), played: loadSize('played'), disc: loadSize('disc') };
 
 function applySizes() {
   const g = $('#screen-game');
-  if (g) g.style.setProperty('--ts-scale', sizes.scale);
+  if (g) {
+    g.style.setProperty('--ts-hand', sizes.hand);
+    g.style.setProperty('--ts-ohand', sizes.ohand);
+    g.style.setProperty('--ts-played', sizes.played);
+    g.style.setProperty('--ts-disc', sizes.disc);
+  }
   for (const k of SZ_KEYS) {
     const inp = $(`#sz-${k}`); if (inp) inp.value = sizes[k];
     const lbl = $(`#sz-${k}-v`); if (lbl) lbl.textContent = `${Math.round(sizes[k] * 100)}%`;
