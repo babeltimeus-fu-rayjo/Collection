@@ -362,14 +362,14 @@ function relayout() {
   // padding, which is the turn halo's reserved room (see .seat in style.css).
   // The track is minmax(0, --seat-max) so it never depends on what's inside it —
   // measuring is exact and, unlike arithmetic on innerWidth, already accounts for
-  // the page's scrollbar. Fall back to the arithmetic (104px centre column,
-  // 2 x 12px gaps, 2 x 8px table padding) while the table is still hidden.
+  // the page's scrollbar. Fall back to the arithmetic (92px centre column,
+  // 2 x 8px gaps, 2 x 4px table padding) while the table is still hidden.
   const seatEl = $('.seat-tl');
   const seatCs = seatEl && getComputedStyle(seatEl);
-  const pad = seatCs ? (parseFloat(seatCs.paddingLeft) + parseFloat(seatCs.paddingRight)) || 0 : 20;
+  const pad = seatCs ? (parseFloat(seatCs.paddingLeft) + parseFloat(seatCs.paddingRight)) || 0 : 8;
   const measured = seatEl ? seatEl.clientWidth - pad : 0;
   const vw = document.body.clientWidth || window.innerWidth;
-  const seat = measured > 0 ? measured : (vw - 104 - 24 - 16) / 2 - pad;
+  const seat = measured > 0 ? measured : (vw - 92 - 16 - 8) / 2 - pad;
 
   const pondW = (cols) => cols * dw + (cols - 1) * TILE_GAP + 6;
   const pondH = (rows) => rows * 52 * base * sizes.disc + (rows - 1) * TILE_GAP + 6;
