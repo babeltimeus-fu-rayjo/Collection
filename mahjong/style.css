@@ -137,15 +137,37 @@ body {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
   text-align: center;
 }
-#center-info { display: flex; gap: 10px; align-items: center; font-size: 12px; color: #8ab89a; flex-wrap: wrap; justify-content: center; }
-/* round (prevailing wind + hand) and tiles left — moved out of the top bar so
-   they read as central table state */
-#round-wind-display { color: #e8d5a3; font-weight: 700; white-space: nowrap; }
-#round-wind-display:empty { display: none; }
-#wall-display { color: #cfe3d5; font-weight: 600; white-space: nowrap; }
-#last-discard { display: flex; align-items: center; justify-content: center; gap: 6px; }
-#last-discard .tile { --u: calc(1.3px * var(--ts-base)); }
-#last-discard:not(:empty) { background: rgba(10,26,18,.55); border-radius: 8px; padding: 5px; box-shadow: 0 2px 10px rgba(0,0,0,.4); }
+/* The centre stacks fixed-height slots so the round/wall/honba readouts, the
+   turn banner and the resting discard never shove one another around as they
+   appear, change width, or clear. */
+/* whose-turn banner: a quiet pill for others, a bold gold pulse for "Your turn".
+   Keeps its height even when empty so nothing below it jumps. */
+#turn-label { height: 24px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; padding: 0 14px; border-radius: 999px; white-space: nowrap; box-sizing: border-box; }
+#turn-label.other { color: #cfe3d5; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); }
+#turn-label.mine { color: #14261a; background: #e8d5a3; box-shadow: 0 0 12px 2px rgba(232,213,163,.5); animation: turnPulse 1.6s ease-in-out infinite; }
+@keyframes turnPulse {
+  0%, 100% { box-shadow: 0 0 9px 1px rgba(232,213,163,.4); }
+  50% { box-shadow: 0 0 18px 5px rgba(232,213,163,.75); }
+}
+@media (prefers-reduced-motion: reduce) { #turn-label.mine { animation: none; } }
+
+/* round / wall / honba stacked, each on its own centred line, so one changing
+   width (or honba appearing) never nudges the others */
+#center-info { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 12px; color: #8ab89a; }
+#round-wind-display { color: #e8d5a3; font-weight: 700; white-space: nowrap; min-height: 1.15em; }
+#wall-display { color: #cfe3d5; font-weight: 600; white-space: nowrap; min-height: 1.15em; }
+#sticks-display { white-space: nowrap; min-height: 1.15em; } /* reserved even when empty */
+#dora-display { display: flex; gap: 4px; align-items: center; justify-content: center; }
+#dora-display:empty { display: none; }
+
+/* resting discard: reserve the tile's height so the slot never collapses */
+#last-discard { display: flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: calc(40px * var(--ts-base) * var(--ts-disc) + 12px); }
+#last-discard:not(:empty):not(.taking) { background: rgba(10,26,18,.55); border-radius: 8px; padding: 5px; box-shadow: 0 2px 10px rgba(0,0,0,.4); }
+/* a claimed tile lifts up and fades so a Pon/Chi/Kan/Ron is unmistakable */
+.tile.taken { animation: discardTaken .45s cubic-bezier(.4,0,.2,1) forwards; pointer-events: none; position: relative; z-index: 6; }
+@keyframes discardTaken { to { transform: translateY(-42px) scale(1.08); opacity: 0; } }
 
 /* ---- my zone is the bottom-left quadrant (a .seat); just tune spacing */
 #my-zone { gap: 3px; }
@@ -282,9 +304,26 @@ body {
 .rules li { margin-bottom: 8px; }
 .rules b { color: #e8d5a3; }
 .btn-row { display: flex; gap: 8px; margin-top: 12px; }
-#he-detail { font-size: 14px; line-height: 1.6; color: #b0c8a8; margin-bottom: 12px; }
-#he-scores { font-size: 13px; color: #8ab89a; }
-#he-scores div { padding: 2px 0; display: flex; justify-content: space-between; }
+/* hand-end breakdown: a label:value ledger of how the points were reached */
+#he-detail { font-size: 13px; line-height: 1.45; color: #b0c8a8; margin-bottom: 14px; }
+.he-row { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; }
+.he-row .he-label { color: #b0c8a8; }
+.he-row .he-val { color: #dfe6f2; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.he-yaku .he-label { color: #9fbf9f; }
+.he-row.he-total { border-top: 1px solid #2a6b45; margin-top: 4px; padding-top: 5px; font-weight: 600; }
+.he-row.he-total .he-label, .he-row.he-total .he-val { color: #e8d5a3; }
+.he-pay { border-top: 1px dashed #2a6b45; margin-top: 8px; padding-top: 6px; }
+.he-pay .he-val { color: #f0c674; }
+
+#he-scores { font-size: 13px; color: #8ab89a; border-top: 1px solid #2a6b45; padding-top: 8px; }
+.he-score-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: baseline; padding: 2px 0; }
+.he-score-row.he-score-head { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #5a8a6a; padding-bottom: 4px; }
+.he-pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #cfe3d5; }
+.he-score-head .he-pname { color: #5a8a6a; }
+.he-delta { text-align: right; min-width: 64px; font-variant-numeric: tabular-nums; color: #8ab89a; }
+.he-delta.up { color: #6fcf7f; }
+.he-delta.down { color: #e07a6a; }
+.he-ptotal { text-align: right; min-width: 60px; font-variant-numeric: tabular-nums; color: #cfe3d5; }
 #he-wait, #go-wait { font-size: 13px; color: #5a8a6a; margin-top: 8px; }
 #go-rank { list-style: none; counter-reset: rank; }
 #go-rank li { counter-increment: rank; padding: 6px 0; border-bottom: 1px solid #1a4a32; display: flex; justify-content: space-between; }

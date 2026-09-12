@@ -535,6 +535,12 @@ function doChi(G, p, move) {
     c.some((t) => t.id === move.tile1) && c.some((t) => t.id === move.tile2));
   if (!combo) return { ok: false, error: 'Invalid chi combination' };
 
+  // Chi is the lowest priority — it can't be taken while another player may still
+  // Pon, Kan or Ron this tile. They must pass first.
+  if (pendingRivalPriority(G, p.seat) > CLAIM_PRIORITY.chi) {
+    return { ok: false, error: 'Another player may Pon or Ron — wait for them to pass' };
+  }
+
   // register claim — resolved after all responses
   registerClaim(G, p.seat, 'chi', { tiles: combo });
   return { ok: true };
@@ -543,6 +549,10 @@ function doChi(G, p, move) {
 function doPon(G, p, move) {
   if (G.phase !== 'claim') return { ok: false, error: 'Not in claim phase' };
   if (!canPon(G, p.seat)) return { ok: false, error: 'Cannot pon' };
+  // only a possible Ron outranks a Pon — wait for a would-be winner to pass
+  if (pendingRivalPriority(G, p.seat) > CLAIM_PRIORITY.pon) {
+    return { ok: false, error: 'Another player may Ron — wait for them to pass' };
+  }
   registerClaim(G, p.seat, 'pon', {});
   return { ok: true };
 }
@@ -551,6 +561,10 @@ function doKan(G, p, move) {
   // open kan (on a discard)
   if (G.phase === 'claim') {
     if (!canOpenKan(G, p.seat)) return { ok: false, error: 'Cannot kan' };
+    // only a possible Ron outranks a Kan — wait for a would-be winner to pass
+    if (pendingRivalPriority(G, p.seat) > CLAIM_PRIORITY.kan) {
+      return { ok: false, error: 'Another player may Ron — wait for them to pass' };
+    }
     registerClaim(G, p.seat, 'kan', {});
     return { ok: true };
   }
@@ -647,13 +661,42 @@ function registerClaim(G, seat, type, data) {
   const entry = G.claimPhase.eligible.find((e) => e.seat === seat);
   if (!entry) return;
   entry.response = { type, ...data };
-  // check if all eligible players have responded
-  if (G.claimPhase.eligible.every((e) => e.response !== null)) {
-    resolveClaims(G);
-  }
+
+  const elig = G.claimPhase.eligible;
+  // everyone has answered — resolve now
+  if (elig.every((e) => e.response !== null)) { resolveClaims(G); return; }
+
+  // otherwise, resolve early if nothing still pending could beat what we already
+  // have: a Pon (priority 2) outranks a Chi (1), so a player sitting on a Chi
+  // shouldn't hold up a Pon that's already been declared. Only resolve when the
+  // best answer so far *strictly* beats every possible pending claim, so ties
+  // (e.g. two players who could Ron) still wait for all responses.
+  const prio = (t) => CLAIM_PRIORITY[t] || 0;
+  const bestSoFar = Math.max(0, ...elig
+    .filter((e) => e.response && e.response.type !== 'pass')
+    .map((e) => prio(e.response.type)));
+  const bestPending = Math.max(0, ...elig
+    .filter((e) => e.response === null)
+    .map((e) => Math.max(0, ...e.opts.map(prio))));
+  if (bestSoFar > bestPending) resolveClaims(G);
 }
 
 const CLAIM_PRIORITY = { ron: 4, kan: 3, pon: 2, chi: 1, pass: 0 };
+
+// the highest-priority claim still open to a *rival* (another eligible player who
+// hasn't passed). A lower claim must wait for these to decline — you can't Chi
+// while someone may Pon, nor Pon while someone may Ron. Ron sits at the top and
+// is never gated by this.
+function pendingRivalPriority(G, seat) {
+  if (!G.claimPhase) return 0;
+  let best = 0;
+  for (const e of G.claimPhase.eligible) {
+    if (e.seat === seat) continue;
+    if (e.response && e.response.type === 'pass') continue; // already declined
+    for (const o of e.opts) best = Math.max(best, CLAIM_PRIORITY[o] || 0);
+  }
+  return best;
+}
 
 function resolveClaims(G) {
   const cp = G.claimPhase;
@@ -772,10 +815,13 @@ function advanceTurn(G) {
 
 function resolveExhaustiveDraw(G) {
   addLog(G, 'The wall is exhausted — draw game.');
+  const before = {};
+  for (const p of G.players) before[p.seat] = p.score;
+  const tenpai = G.players.filter((p) => isTenpai(p.hand, G.variant, p.melds)).map((p) => p.seat);
   // JP: tenpai payments
   if (G.variant === 'jp') {
-    const tenpaiSeats = G.players.filter((p) => isTenpai(p.hand, G.variant, p.melds));
-    const notTenpai = G.players.filter((p) => !isTenpai(p.hand, G.variant, p.melds));
+    const tenpaiSeats = G.players.filter((p) => tenpai.includes(p.seat));
+    const notTenpai = G.players.filter((p) => !tenpai.includes(p.seat));
     if (tenpaiSeats.length > 0 && tenpaiSeats.length < 4) {
       const pool = 3000;
       const pay = Math.floor(pool / notTenpai.length);
@@ -785,7 +831,9 @@ function resolveExhaustiveDraw(G) {
       addLog(G, `Tenpai: ${tenpaiSeats.map((p) => p.name).join(', ')}. Non-tenpai pay ${pay} each.`);
     }
   }
-  G.handResult = { type: 'draw', exhaustive: true };
+  const delta = {};
+  for (const p of G.players) delta[p.seat] = p.score - before[p.seat];
+  G.handResult = { type: 'draw', exhaustive: true, tenpai, delta };
   setFx(G, { kind: 'handEnd', result: 'draw' });
   // dealer stays if tenpai (JP) or always for HK/TW draw
   const dealerTenpai = isTenpai(playerBySeat(G, G.dealer).hand, G.variant, playerBySeat(G, G.dealer).melds);
@@ -800,8 +848,12 @@ function resolveExhaustiveDraw(G) {
 
 function resolveWin(G, winnerSeat, loserSeat, isTsumo) {
   const winner = playerBySeat(G, winnerSeat);
+  // snapshot every score so the hand-end breakdown can show the exact net change
+  const before = {};
+  for (const p of G.players) before[p.seat] = p.score;
   const scoring = scoreHand(G, winnerSeat, loserSeat, isTsumo);
 
+  let payments;
   if (isTsumo) {
     addLog(G, `${winner.name} declares Tsumo — ${scoring.summary}!`);
     say(G, winnerSeat, 'Tsumo! 🀄');
@@ -817,20 +869,30 @@ function resolveWin(G, winnerSeat, loserSeat, isTsumo) {
       p.score -= pay;
       winner.score += pay;
     }
+    payments = G.variant === 'jp'
+      ? { mode: 'tsumo', dealer: each.dealer, nonDealer: each.nonDealer }
+      : { mode: 'tsumo', each };
   } else {
     const loser = playerBySeat(G, loserSeat);
     addLog(G, `${winner.name} wins by Ron from ${loser.name} — ${scoring.summary}!`);
     say(G, winnerSeat, 'Ron!', 'claim');
     loser.score -= scoring.points;
     winner.score += scoring.points;
+    payments = { mode: 'ron', from: loserSeat, amount: scoring.points };
   }
 
-  // JP: collect riichi sticks and honba
+  // JP: collect riichi sticks and honba on top of the hand value
+  let bonus = null;
   if (G.variant === 'jp') {
-    winner.score += G.riichiSticks * 1000;
-    winner.score += G.honba * 300;
+    const riichi = G.riichiSticks * 1000;
+    const honba = G.honba * 300;
+    winner.score += riichi + honba;
+    if (riichi || honba) bonus = { riichi, honba };
     G.riichiSticks = 0;
   }
+
+  const delta = {};
+  for (const p of G.players) delta[p.seat] = p.score - before[p.seat];
 
   G.handResult = {
     type: 'win',
@@ -838,6 +900,9 @@ function resolveWin(G, winnerSeat, loserSeat, isTsumo) {
     loser: loserSeat,
     tsumo: isTsumo,
     scoring,
+    payments,
+    bonus,
+    delta,
   };
   setFx(G, { kind: 'handEnd', result: 'win', seat: winnerSeat });
 
@@ -1596,10 +1661,13 @@ export function viewFor(G, seat, code) {
   if (G.phase === 'claim' && G.claimPhase) {
     const entry = G.claimPhase.eligible.find((e) => e.seat === seat);
     if (entry && !entry.response) {
+      // options a higher-priority rival is still sitting on are shown but locked
+      const rival = pendingRivalPriority(G, seat);
       claimOpts = {
         tile: G.claimPhase.tile,
         options: entry.opts,
         chiCombos: entry.opts.includes('chi') ? chiCombos(p.hand, G.lastDiscard) : [],
+        blockedOpts: entry.opts.filter((o) => (CLAIM_PRIORITY[o] || 0) < rival),
       };
     }
   }

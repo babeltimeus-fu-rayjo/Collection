@@ -445,6 +445,17 @@ function flyTileIn(tile, container, fromSeat) {
   tile.style.transform = 'translate(0,0) scale(1)';
 }
 
+// the resting centre tile was claimed — float it upward while it fades, then drop
+// it from the DOM, so a Pon/Chi/Kan/Ron reads as "the tile was taken"
+function floatDiscardUp(container) {
+  const node = container.firstChild;
+  if (!node) { container.replaceChildren(); return; }
+  container.classList.add('taking');   // hide the resting-box background during the lift
+  node.style.transition = 'none';
+  node.classList.add('taken');
+  setTimeout(() => { container.replaceChildren(); container.classList.remove('taking'); }, 480);
+}
+
 // ---------------------------------------------------------------- rejoin
 
 function saveRejoin(code, token) { try { sessionStorage.setItem(`mjg-rejoin-${code}`, token); } catch {} }
@@ -869,6 +880,22 @@ function renderGame(view, sess) {
   const roundName = { E: 'East', S: 'South', W: 'West', N: 'North' }[view.roundWind] || view.roundWind;
   $('#round-wind-display').textContent = `${roundName} ${view.handNum}`;
   $('#wall-display').textContent = `${view.wallCount} left`;
+
+  // whose turn it is — shown prominently in the centre; "Your turn" for me
+  const turnLabel = $('#turn-label');
+  if ((view.phase === 'discard' || view.phase === 'draw') && view.turn != null) {
+    if (view.turn === my) {
+      turnLabel.textContent = 'Your turn';
+      turnLabel.className = 'mine';
+    } else {
+      const who = view.players.find((q) => q.seat === view.turn);
+      turnLabel.textContent = `${who?.name || '?'}'s turn`;
+      turnLabel.className = 'other';
+    }
+  } else {
+    turnLabel.textContent = '';
+    turnLabel.className = '';
+  }
   const doraEl = $('#dora-display');
   doraEl.replaceChildren();
   if (view.dora && view.dora.length > 0) {
@@ -885,13 +912,21 @@ function renderGame(view, sess) {
   const ldEl = $('#last-discard');
   const ldId = view.lastDiscard ? view.lastDiscard.id : null;
   if (ldId !== shownDiscardId) {
-    shownDiscardId = ldId;
-    ldEl.replaceChildren();
-    if (view.lastDiscard) {
-      const tile = renderTile(view.lastDiscard, { highlight: true });
-      ldEl.append(tile);
-      flyTileIn(tile, ldEl, view.lastDiscardSeat);
+    const hadTile = shownDiscardId != null && ldEl.firstChild;
+    if (ldId == null && hadTile) {
+      // the resting tile was claimed/taken (Pon/Chi/Kan/Ron) — float it up as it
+      // vanishes so it's obvious the tile left the table for a call
+      floatDiscardUp(ldEl);
+    } else {
+      ldEl.replaceChildren();
+      ldEl.classList.remove('taking');
+      if (view.lastDiscard) {
+        const tile = renderTile(view.lastDiscard, { highlight: true });
+        ldEl.append(tile);
+        flyTileIn(tile, ldEl, view.lastDiscardSeat);
+      }
     }
+    shownDiscardId = ldId;
   }
 
   // my zone
@@ -1117,6 +1152,7 @@ function renderActions(view, sess) {
   // claim phase buttons
   if (view.claimOpts) {
     const opts = view.claimOpts;
+    const blocked = new Set(opts.blockedOpts || []);
     if (opts.options.includes('ron')) {
       const b = el('button', 'btn ron', 'Ron');
       b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; sess.localMove({ kind: 'ron' }); } });
@@ -1124,19 +1160,22 @@ function renderActions(view, sess) {
     }
     if (opts.options.includes('kan')) {
       const b = el('button', 'btn kan-btn', 'Kan');
-      b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; sess.localMove({ kind: 'kan' }); } });
+      if (blocked.has('kan')) { b.disabled = true; b.title = 'A player may still Ron — wait for them to pass'; }
+      else b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; sess.localMove({ kind: 'kan' }); } });
       bar.append(b);
     }
     if (opts.options.includes('pon')) {
       const b = el('button', 'btn pon-btn', 'Pon');
-      b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; sess.localMove({ kind: 'pon' }); } });
+      if (blocked.has('pon')) { b.disabled = true; b.title = 'A player may still Ron — wait for them to pass'; }
+      else b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; sess.localMove({ kind: 'pon' }); } });
       bar.append(b);
     }
     if (opts.options.includes('chi')) {
       for (const combo of opts.chiCombos) {
         const label = `Chi ${combo.map((t) => shortTag(t)).join('+')}`;
         const b = el('button', 'btn chi-btn', label);
-        b.addEventListener('click', () => {
+        if (blocked.has('chi')) { b.disabled = true; b.title = 'A player may Pon or Ron — wait for them to pass'; }
+        else b.addEventListener('click', () => {
           if (!pendingMove) { pendingMove = true; sess.localMove({ kind: 'chi', tile1: combo[0].id, tile2: combo[1].id }); }
         });
         bar.append(b);
@@ -1145,6 +1184,11 @@ function renderActions(view, sess) {
     const pass = el('button', 'btn secondary', 'Pass');
     pass.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; sess.localMove({ kind: 'pass' }); } });
     bar.append(pass);
+    if (blocked.size) {
+      const hint = el('span', '', 'Higher-priority calls pending…');
+      hint.style.cssText = 'font-size:12px;color:#c9a94e;align-self:center;';
+      bar.append(hint);
+    }
     return;
   }
 
@@ -1191,11 +1235,7 @@ function renderActions(view, sess) {
     }
   }
 
-  // waiting hint
-  if (view.phase === 'discard' && view.turn !== my) {
-    const who = view.players.find((q) => q.seat === view.turn);
-    bar.append(el('span', '', `${who?.name || '?'}'s turn…`));
-  }
+  // (whose turn it is now shows in the centre — see #turn-label in renderGame)
 }
 
 function renderFeed(view) {
@@ -1207,6 +1247,14 @@ function renderFeed(view) {
   feed.scrollTop = feed.scrollHeight;
 }
 
+// one label:value line in the hand-end breakdown
+function heRow(label, value, cls) {
+  const row = el('div', 'he-row' + (cls ? ' ' + cls : ''));
+  row.append(el('span', 'he-label', label));
+  if (value != null && value !== '') row.append(el('span', 'he-val', value));
+  return row;
+}
+
 function showHandEnd(view, sess) {
   const m = $('#handend');
   m.classList.remove('hidden');
@@ -1214,29 +1262,72 @@ function showHandEnd(view, sess) {
   const title = $('#he-title');
   const detail = $('#he-detail');
   const scores = $('#he-scores');
+  const nameOf = (seat) => view.players.find((q) => q.seat === seat)?.name || `Seat ${seat}`;
+  // scoring unit differs by ruleset: Riichi counts han, Taiwanese tai, HK faan
+  const unit = view.variant === 'jp' ? 'han' : view.variant === 'tw' ? 'tai' : 'faan';
+
+  detail.replaceChildren();
 
   if (hr.type === 'win') {
     const winner = view.players.find((q) => q.seat === hr.winner);
     title.textContent = hr.tsumo ? `${winner?.name} — Tsumo!` : `${winner?.name} — Ron!`;
-    let detailHtml = '';
-    if (hr.scoring && hr.scoring.yaku) {
-      for (const y of hr.scoring.yaku) {
-        detailHtml += `<div>${y.name}: ${y.han || y.val || ''}</div>`;
+    const sc = hr.scoring || {};
+
+    // 1) every yaku / faan / tai with its individual value
+    const list = el('div', 'he-yaku');
+    const items = sc.yaku || [];
+    if (items.length) {
+      for (const y of items) {
+        const v = y.han != null ? y.han : y.val;
+        list.append(heRow(y.name, `${v} ${unit}`));
       }
+    } else {
+      list.append(heRow('No yaku', ''));
     }
-    detailHtml += `<div><b>${hr.scoring?.summary || ''}</b></div>`;
-    detail.innerHTML = detailHtml;
+    detail.append(list);
+
+    // 2) the total count (+ fu for Riichi), then the hand's base value
+    const totalStr = view.variant === 'jp'
+      ? `${sc.han || 0} han · ${sc.fu || 0} fu`
+      : `${sc.total || 0} ${unit}`;
+    detail.append(heRow('Total', totalStr, 'he-total'));
+    detail.append(heRow('Hand value', `${sc.points ?? 0} pts`, 'he-total'));
+
+    // 3) how that value is paid out
+    const pay = hr.payments;
+    const payWrap = el('div', 'he-pay');
+    if (pay?.mode === 'ron') {
+      payWrap.append(heRow(`Ron — ${nameOf(pay.from)} pays`, `${pay.amount}`));
+    } else if (pay?.mode === 'tsumo' && view.variant === 'jp') {
+      if (hr.winner === view.dealer) {
+        payWrap.append(heRow('Tsumo — each pays', `${pay.dealer}`));
+      } else {
+        payWrap.append(heRow('Tsumo — dealer pays', `${pay.dealer}`));
+        payWrap.append(heRow('Tsumo — others pay', `${pay.nonDealer} each`));
+      }
+    } else if (pay?.mode === 'tsumo') {
+      payWrap.append(heRow('Tsumo — each pays', `${pay.each}`));
+    }
+    if (hr.bonus?.riichi) payWrap.append(heRow('Riichi sticks', `+${hr.bonus.riichi}`));
+    if (hr.bonus?.honba) payWrap.append(heRow('Honba', `+${hr.bonus.honba}`));
+    if (payWrap.childElementCount) detail.append(payWrap);
   } else {
     title.textContent = 'Exhaustive draw';
-    detail.textContent = 'The wall ran out.';
+    detail.append(heRow('The wall ran out — no winner.', ''));
+    if (hr.tenpai) {
+      const names = hr.tenpai.length ? hr.tenpai.map(nameOf).join(', ') : 'nobody';
+      detail.append(heRow('Tenpai', names));
+    }
   }
 
+  // per-player score change: name | Δ this hand | new total
   scores.replaceChildren();
+  scores.append(heScoreRow('Player', 'This hand', 'Total', 'he-score-head'));
   for (const p of view.players) {
-    const row = el('div', '');
-    row.append(el('span', '', p.name));
-    row.append(el('span', '', `${p.score}`));
-    scores.append(row);
+    const d = hr.delta ? hr.delta[p.seat] || 0 : 0;
+    const nm = p.name + (hr.type === 'win' && p.seat === hr.winner ? ' 🏆' : '');
+    const dStr = d > 0 ? `+${d}` : `${d}`;
+    scores.append(heScoreRow(nm, dStr, `${p.score}`, d > 0 ? 'up' : d < 0 ? 'down' : ''));
   }
 
   const btn = $('#btn-next-hand');
@@ -1249,6 +1340,15 @@ function showHandEnd(view, sess) {
     btn.classList.add('hidden');
     wait.classList.remove('hidden');
   }
+}
+
+// one row of the score table (name / delta / running total)
+function heScoreRow(name, delta, total, deltaCls) {
+  const row = el('div', 'he-score-row' + (deltaCls === 'he-score-head' ? ' he-score-head' : ''));
+  row.append(el('span', 'he-pname', name));
+  row.append(el('span', 'he-delta' + (deltaCls && deltaCls !== 'he-score-head' ? ' ' + deltaCls : ''), delta));
+  row.append(el('span', 'he-ptotal', total));
+  return row;
 }
 
 function showGameOver(view, sess) {
@@ -1348,7 +1448,9 @@ for (const b of document.querySelectorAll('.btn-leave')) b.addEventListener('cli
 for (const b of document.querySelectorAll('.btn-rules')) b.addEventListener('click', () => $('#modal-rules').classList.remove('hidden'));
 $('#btn-rules-close').addEventListener('click', () => $('#modal-rules').classList.add('hidden'));
 $('#modal-rules').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
-$('#handend').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
+// NB: the hand-end modal is deliberately NOT dismissible by a backdrop click — it
+// holds the host's "Deal next hand" button, and nothing re-opens it during the
+// handEnd phase, so dismissing it used to strand the whole table.
 $('#chat-toggle').addEventListener('click', () => {
   if ($('#chat-panel').classList.contains('hidden')) openChatPanel();
   else $('#chat-panel').classList.add('hidden');
