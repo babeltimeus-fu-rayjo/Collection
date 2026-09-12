@@ -14,8 +14,10 @@
     if (!feed || document.getElementById('feed-toggle')) return;
 
     const key = 'feedhide:' + location.pathname.replace(/[^/]*$/, '');
-    let hidden = false;
-    try { hidden = localStorage.getItem(key) === '1'; } catch {}
+    // a game can opt its log into being hidden by default with
+    // <div id="feed" data-default="hidden">; a stored choice always wins.
+    let hidden = feed.dataset.default === 'hidden';
+    try { const v = localStorage.getItem(key); if (v === '0' || v === '1') hidden = v === '1'; } catch {}
 
     const style = document.createElement('style');
     style.id = 'feed-toggle-style';
@@ -43,7 +45,8 @@
     }
     btn.addEventListener('click', () => {
       hidden = !hidden;
-      try { hidden ? localStorage.setItem(key, '1') : localStorage.removeItem(key); } catch {}
+      // persist the explicit choice ('1'/'0') so it overrides the page default
+      try { localStorage.setItem(key, hidden ? '1' : '0'); } catch {}
       apply();
     });
     document.body.append(btn);

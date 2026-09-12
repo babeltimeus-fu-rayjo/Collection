@@ -55,8 +55,6 @@
   <section id="screen-game" class="screen hidden">
     <div class="topbar">
       <span id="room-chip">·····</span>
-      <span id="wind-chip">E1</span>
-      <span id="wall-chip">70</span>
       <span class="spacer"></span>
       <button id="btn-size" class="btn ghost" type="button" title="Change tile size">Size</button>
       <button class="btn ghost btn-rules" type="button">Rules</button>
@@ -130,6 +128,7 @@
       <div id="center">
         <div id="center-info">
           <span id="round-wind-display"></span>
+          <span id="wall-display"></span>
           <span id="dora-display"></span>
           <span id="sticks-display"></span>
         </div>
@@ -138,7 +137,7 @@
     </div>
     <div id="hand"></div>
     <div id="action-bar"></div>
-    <div id="feed"></div>
+    <div id="feed" data-default="hidden"></div>
   </section>
 
   <!-- RULES -->

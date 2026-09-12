@@ -820,8 +820,6 @@ function renderGame(view, sess) {
 
   // topbar
   $('#room-chip').textContent = view.code;
-  $('#wind-chip').textContent = `${view.roundWind}${view.handNum}`;
-  $('#wall-chip').textContent = `${view.wallCount} left`;
 
   // 2x2 seat mapping (me = bottom-right): TL = across (+2), TR = right/next (+1),
   // BL = left/prev (+3) — counter-clockwise BR -> TR -> TL -> BL
@@ -867,8 +865,10 @@ function renderGame(view, sess) {
     }
   }
 
-  // center info
-  $('#round-wind-display').textContent = `${view.roundWind} Round`;
+  // center info: round (prevailing wind + hand number) and tiles left in the wall
+  const roundName = { E: 'East', S: 'South', W: 'West', N: 'North' }[view.roundWind] || view.roundWind;
+  $('#round-wind-display').textContent = `${roundName} ${view.handNum}`;
+  $('#wall-display').textContent = `${view.wallCount} left`;
   const doraEl = $('#dora-display');
   doraEl.replaceChildren();
   if (view.dora && view.dora.length > 0) {
