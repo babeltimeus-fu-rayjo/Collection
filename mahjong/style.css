@@ -147,13 +147,9 @@ body {
 /* flowers & seasons share one row: 8 x 25px = exactly the column width */
 .played-row { display: flex; gap: 0; flex-wrap: nowrap; }
 
-/* below ~1020px there isn't room beside the pond — stack the sets above it */
-@media (max-width: 1020px) {
-  .seat-tl .seat-board, .seat-bl .seat-board,
-  .seat-tr .seat-board, #my-zone .seat-board { flex-direction: column; align-items: center; }
-  .seat-tl .seat-played, .seat-bl .seat-played,
-  .seat-tr .seat-played, #my-played { justify-content: center; }
-}
+/* No width breakpoint here on purpose: .seat-board wraps on its own, so the sets
+   stay beside the pond whenever they actually fit (which depends on the tile-size
+   sliders as much as the window) and only drop below it when they don't. */
 /* discards live in a dedicated, recessed 3×8 tray so they read as a pile,
    clearly separate from the played sets above them */
 .seat-discards, #my-discards {
