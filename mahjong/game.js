@@ -1551,17 +1551,23 @@ export function botChoose(G, seat) {
   if (G.phase === 'claim' && G.claimPhase) {
     const entry = G.claimPhase.eligible.find((e) => e.seat === seat);
     if (!entry || entry.response) return null;
+    // a claim can't be taken while a higher-priority rival is still deciding; in
+    // that case wait (return null) rather than attempt an illegal move that would
+    // be rejected and stall the bot loop
+    const rival = pendingRivalPriority(G, seat);
 
-    // always ron if possible
+    // always ron if possible (Ron is never gated)
     if (entry.opts.includes('ron') && canRon(G, seat)) {
       return { kind: 'ron' };
     }
     // pon if it helps (always pon for simplicity)
     if (entry.opts.includes('pon') && canPon(G, seat) && Math.random() < 0.4) {
+      if (rival > CLAIM_PRIORITY.pon) return null; // a possible Ron is pending — wait
       return { kind: 'pon' };
     }
     // chi sometimes
     if (entry.opts.includes('chi') && canChi(G, seat) && Math.random() < 0.3) {
+      if (rival > CLAIM_PRIORITY.chi) return null; // a possible Pon/Kan/Ron is pending — wait
       const combos = chiCombos(p.hand, G.lastDiscard);
       if (combos.length > 0) {
         return { kind: 'chi', tile1: combos[0][0].id, tile2: combos[0][1].id };

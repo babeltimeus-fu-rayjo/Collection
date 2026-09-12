@@ -619,17 +619,18 @@ class HostSession {
   }
 
   move(seat, move) {
-    if (!this.G) return;
+    if (!this.G) return false;
     const res = applyMove(this.G, seat, move);
     if (!res.ok) {
       if (seat === 0) { pendingMove = false; toast(res.error); if (lastView) renderGame(lastView, this); }
       else { try { this.conns.get(seat)?.send({ t: 'err', error: res.error }); } catch {} }
-      return;
+      return false;
     }
     // hold the next bot action until the discard has finished flying (+ the
     // configurable pause), so nothing happens on top of the animation
     if (move.kind === 'discard') this.botNotBefore = Date.now() + FLY_MS + cfg('postFlyDelay');
     this.broadcast();
+    return true;
   }
 
   localMove(move) { this.move(0, move); }
@@ -654,13 +655,16 @@ class HostSession {
     for (const p of this.G.players) {
       if (!p.bot && !p.botFor) continue;
       const move = botChoose(this.G, p.seat);
-      if (move) { this.move(p.seat, move); return; }
+      if (!move) continue;                 // this bot is waiting (e.g. a gated claim)
+      // a successful move re-broadcasts (which reschedules the bots); a rejected
+      // one must NOT strand the loop, so fall through and keep the timer alive
+      if (this.move(p.seat, move)) return;
     }
-    // if claim phase and all bots have responded, check non-bots
-    if (this.G.phase === 'claim' && this.G.claimPhase) {
-      const cp = this.G.claimPhase;
-      const allDone = cp.eligible.every((e) => e.response !== null);
-      if (!allDone) this.scheduleBots(); // re-check soon
+    // no bot advanced this tick — if a claim is still open, check again shortly so
+    // a still-pending (or just-un-gated) player gets another chance to respond
+    if (this.G.phase === 'claim' && this.G.claimPhase
+        && !this.G.claimPhase.eligible.every((e) => e.response !== null)) {
+      this.scheduleBots();
     }
   }
 
