@@ -86,7 +86,11 @@ body {
      generous FIXED width (room for a few melds without clipping) while the centre
      stays a fixed width — nothing resizes as content changes */
   align-self: stretch; justify-content: center;
-  grid-template-columns: minmax(0, 320px) 116px minmax(0, 320px);
+  /* Side columns grow with the window up to 440px. The widest a played area can
+     ever get is 5 kans + 8 flowers ≈ 743px, which no sane table width fits on one
+     line (it would need a ~1640px table), so 440px is sized to hold that maximum
+     in exactly TWO wrapped rows — the reserved height — with nothing cut off. */
+  grid-template-columns: minmax(0, 440px) 116px minmax(0, 440px);
   grid-template-rows: auto auto;
 }
 

@@ -1250,7 +1250,8 @@ function renderCheatsheet() {
   const body = $('#cheat-body');
   if (!body) return;
   const active = (lastView && lastView.variant) || (session && session.selectedVariant) || null;
-  const guides = [...SCORING_GUIDE].sort((a, b) => (b.key === active) - (a.key === active));
+  const guide = Array.isArray(SCORING_GUIDE) ? SCORING_GUIDE : [];
+  const guides = [...guide].sort((a, b) => (b.key === active) - (a.key === active));
   body.replaceChildren();
   for (const g of guides) {
     const sec = el('div', 'cheat-sec');
@@ -1480,9 +1481,16 @@ for (const b of document.querySelectorAll('.btn-leave')) b.addEventListener('cli
 for (const b of document.querySelectorAll('.btn-rules')) b.addEventListener('click', () => $('#modal-rules').classList.remove('hidden'));
 $('#btn-rules-close').addEventListener('click', () => $('#modal-rules').classList.add('hidden'));
 $('#modal-rules').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
-for (const b of document.querySelectorAll('.btn-cheat')) b.addEventListener('click', () => { renderCheatsheet(); $('#modal-cheat').classList.remove('hidden'); });
-$('#btn-cheat-close').addEventListener('click', () => $('#modal-cheat').classList.add('hidden'));
-$('#modal-cheat').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
+// open the cheatsheet even if rendering hiccups (e.g. a half-cached reload), so
+// the button always does something visible
+for (const b of document.querySelectorAll('.btn-cheat')) {
+  b.addEventListener('click', () => {
+    try { renderCheatsheet(); } catch (err) { console.error('cheatsheet render failed', err); }
+    $('#modal-cheat')?.classList.remove('hidden');
+  });
+}
+$('#btn-cheat-close')?.addEventListener('click', () => $('#modal-cheat').classList.add('hidden'));
+$('#modal-cheat')?.addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
 // NB: the hand-end modal is deliberately NOT dismissible by a backdrop click — it
 // holds the host's "Deal next hand" button, and nothing re-opens it during the
 // handEnd phase, so dismissing it used to strand the whole table.
