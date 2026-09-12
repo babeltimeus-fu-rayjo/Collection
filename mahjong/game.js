@@ -857,10 +857,12 @@ function resolveWin(G, winnerSeat, loserSeat, isTsumo) {
   if (isTsumo) {
     addLog(G, `${winner.name} declares Tsumo — ${scoring.summary}!`);
     say(G, winnerSeat, 'Tsumo! 🀄');
-    // all others pay
+    // All others pay. Riichi splits the hand value between them (dealer pays more);
+    // Hong Kong and Taiwanese both have each player pay the hand IN FULL on a
+    // self-draw, which is what makes tsumo worth three times a win on a discard.
     const each = G.variant === 'jp'
       ? jpTsumoPayments(scoring.points, winnerSeat === G.dealer)
-      : Math.ceil(scoring.points / 3);
+      : scoring.points;
     for (const p of G.players) {
       if (p.seat === winnerSeat) continue;
       const pay = G.variant === 'jp'
@@ -1676,10 +1678,17 @@ function botPickDiscard(G, p) {
   const hand = p.hand;
   if (hand.length === 0) return null;
 
+  // Copies sitting in our own melds count too: a tile matching a meld is pair or
+  // kan material, and without this a chi strands the spare copy (claiming 3m with
+  // 1m2m leaves a lone 3m with no neighbours left in hand), so the bot would chi
+  // a tile and then immediately discard the identical one.
+  const meldKeys = p.melds.flatMap((m) => m.tiles.map((t) => t.key));
+
   // score each tile by "usefulness"
   const scored = hand.map((t) => {
     let score = 0;
-    const same = hand.filter((h) => h.key === t.key).length;
+    const same = hand.filter((h) => h.key === t.key).length
+      + meldKeys.filter((k) => k === t.key).length;
     score += same * 10; // pairs/triplets are valuable
     if (isNumber(t)) {
       // connected tiles are valuable

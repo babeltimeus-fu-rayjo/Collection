@@ -31,9 +31,10 @@ async function init() {
   const el = document.createElement('div');
   el.id = 'ver';
   el.textContent = stamp;
-  // sit to the left of the chat button (bottom-right, ~40px) so it isn't hidden
+  // sit clear of the chat button (bottom-right: 40px wide, inset 24px to clear the
+  // scrollbar) so neither covers the other
   el.style.cssText =
-    'position:fixed;right:60px;bottom:16px;font:10px/1 "SF Mono",Menlo,Consolas,monospace;' +
+    'position:fixed;right:76px;bottom:16px;font:10px/1 "SF Mono",Menlo,Consolas,monospace;' +
     'color:rgba(255,255,255,.3);z-index:1;pointer-events:none;user-select:none;';
   document.body.append(el);
 }

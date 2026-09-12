@@ -125,7 +125,10 @@ body {
   min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; }
 /* Played sets sit on the OUTER edge beside the pond — two sets to a row — so the
    discard tray keeps its full width and the quadrant stays short. */
-.seat-board { display: flex; gap: 4px; align-items: flex-start; justify-content: center; max-width: 100%; }
+/* wraps rather than squeezing: if the sets and the pond can't share a line (big
+   tile sizes, narrow window) the sets drop to their own line and the pond keeps
+   its full size */
+.seat-board { display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-start; justify-content: center; max-width: 100%; }
 .seat-tl .seat-board, .seat-bl .seat-board { flex-direction: row; }          /* sets to the left  */
 .seat-tr .seat-board, #my-zone .seat-board { flex-direction: row-reverse; }  /* sets to the right */
 
@@ -162,9 +165,11 @@ body {
   grid-template-columns: repeat(8, calc(25px * var(--ts-base) * var(--tsd)));
   grid-auto-rows: calc(33px * var(--ts-base) * var(--tsd));
   align-content: start; gap: 2px; padding: 3px;
-  /* fixed 3-row tray: a long pond scrolls inside instead of growing the quadrant */
-  max-width: 100%; overflow: auto;
-  height: calc(33px * var(--ts-base) * var(--tsd) * 3 + 10px);
+  /* Fixed 4-row pond. It never shrinks — if it can't sit beside the played sets
+     the sets wrap to their own line instead, so the pond is never squeezed or
+     clipped at any tile size. */
+  flex: 0 0 auto; overflow: auto;
+  height: calc(33px * var(--ts-base) * var(--tsd) * 4 + 12px);
   border-radius: 5px; background: rgba(0,0,0,.13);
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
 }
@@ -328,14 +333,21 @@ body {
 .btn.kan-btn:hover { background: #9c6a3a; }
 
 /* ================================================================ feed (history log) */
-/* an in-flow panel at the bottom of the column (scrolls with the page); hidden by
-   default in Mahjong — toggle it with the 📜 button (common/feedtoggle.js) */
+/* a floating popup anchored above the 📜 button, styled like the settings drawer;
+   hidden by default — toggle it with 📜 (common/feedtoggle.js) */
 #feed {
-  max-height: 80px; overflow-y: auto; padding: 4px 12px; font-size: 12px; color: #5a8a6a;
-  border-top: 1px solid #1a4a32; flex-shrink: 0;
+  position: fixed; left: 12px; bottom: 58px; z-index: 90;
+  width: 300px; max-width: calc(100vw - 24px); max-height: 42vh; overflow-y: auto;
+  padding: 10px 12px; font-size: 12px; line-height: 1.45; color: #b0c8a8;
+  background: #0d3320; border: 1px solid #2a6b45; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.5);
+}
+#feed::before {
+  content: 'Game log'; display: block; margin-bottom: 6px; padding-bottom: 5px;
+  border-bottom: 1px solid #1a4a32; color: #e8d5a3; font-weight: 700; font-size: 11px;
+  text-transform: uppercase; letter-spacing: .05em;
 }
 #feed div { padding: 1px 0; }
-#feed:empty { display: none; }
 
 /* ================================================================ modals */
 .modal { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.65); padding: 16px; overflow-y: auto; }
