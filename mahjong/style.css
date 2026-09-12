@@ -84,7 +84,7 @@ body {
   /* headroom for the top players' speech bubbles, which stack upward from the
      seat; one bubble's worth is enough to keep them off the top bar */
   --bubble-reserve: 40px;
-  flex: 0 0 auto; display: grid; gap: 8px 12px; padding: var(--bubble-reserve) 8px 0; position: relative;
+  flex: 0 0 auto; display: grid; gap: 12px; padding: var(--bubble-reserve) 8px 0; position: relative;
   /* stretch across the width and centre the tracks, so the side columns get a
      generous FIXED width (room for a few melds without clipping) while the centre
      stays a fixed width — nothing resizes as content changes */
@@ -94,7 +94,9 @@ body {
      whichever is wider. A fixed cap would mean raising the Played/Discards
      sliders could never fit side by side however wide the screen. At 100% this
      works out to the same 440px as before. */
-  --seat-max: calc((320px * var(--ts-played) + 240px * var(--ts-disc)) * var(--ts-base) + 36px);
+  /* 48px of fixed furniture: 8px of gaps inside the sets box, 16px inside the
+     pond, 4px between them and 2 x 10px of seat padding (the turn halo's room) */
+  --seat-max: calc((320px * var(--ts-played) + 240px * var(--ts-disc)) * var(--ts-base) + 48px);
   /* --seat-max caps the side columns at the SIDE-BY-SIDE board width. Below that
      the track is simply the space available, which is what the stacked shapes
      spread into. */
@@ -103,7 +105,13 @@ body {
 }
 
 /* ---- player quadrants */
-.seat { display: flex; flex-direction: column; align-items: center; gap: 4px; overflow: visible; padding: 4px 4px; min-width: 0; min-height: 0; border-radius: 10px; transition: box-shadow .15s, background .15s; }
+/* The 10px padding is the turn halo's room. A box-shadow paints outside the box
+   without occupying any, so the glow used to bleed ~9px into the neighbouring
+   quadrant and, at the narrowest side-by-side window, off the edge of the page.
+   Reserving it here also means the layout stops trying to sit side by side while
+   the quadrants are jammed together: relayout() measures the track less this
+   padding, so the extra air is space the sets have to earn. */
+.seat { display: flex; flex-direction: column; align-items: center; gap: 4px; overflow: visible; padding: 10px; min-width: 0; min-height: 0; border-radius: 10px; transition: box-shadow .15s, background .15s; }
 /* whose turn it is — a gold glow around the active quadrant. Every quadrant is
    the same size in the 2x2, so no player's halo is bigger than another's. */
 .seat.active-turn, #my-zone.active-turn {
