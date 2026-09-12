@@ -65,7 +65,8 @@ body {
 
 /* tile-size popover (opened by the Size button) */
 #size-popover {
-  position: absolute; top: 44px; right: 8px; z-index: 80;
+  /* inset enough to clear the page scrollbar (macOS overlay bars sit over content) */
+  position: absolute; top: 44px; right: 24px; z-index: 80;
   background: #0d3320; border: 1px solid #2a6b45; border-radius: 10px;
   padding: 10px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.5);
   display: flex; flex-direction: column; gap: 8px; min-width: 220px;
@@ -86,10 +87,16 @@ body {
      generous FIXED width (room for a few melds without clipping) while the centre
      stays a fixed width — nothing resizes as content changes */
   align-self: stretch; justify-content: center;
-  /* Side columns grow with the window up to 440px — room for the sets (200px)
-     beside the full-width discard tray (220px). The centre is trimmed to 104px
-     (still fits the "Your turn" pill) to buy those columns the width they need. */
-  grid-template-columns: minmax(0, 440px) 104px minmax(0, 440px);
+  /* Side columns grow with the window up to whatever THIS player's tile sizes
+     actually need: the sets column beside the pond, or a full concealed hand,
+     whichever is wider. A fixed cap would mean raising the Played/Discards
+     sliders could never fit side by side however wide the screen. At 100% this
+     works out to the same 440px as before. */
+  --seat-max: max(
+    calc((200px * var(--ts-played) + 200px * var(--ts-disc)) * var(--ts-base) + 40px),
+    calc(250px * var(--ts-base) * var(--ts-ohand) + 16px)
+  );
+  grid-template-columns: minmax(0, var(--seat-max)) 104px minmax(0, var(--seat-max));
   grid-template-rows: auto auto;
 }
 
