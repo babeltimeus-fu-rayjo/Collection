@@ -279,11 +279,14 @@ const SZ_KEYS = ['hand', 'ohand', 'played', 'disc'];
 // and the melds/pond a little larger than life, opponents' face-down tiles smaller
 // since they carry no information. These render pixel-for-pixel like the old
 // 130/80/150/150 did before the categories shared a scale.
-const SZ_DEFAULT = { hand: 1.3, ohand: 0.3, played: 0.9, disc: 0.95 };
+const SZ_DEFAULT = { hand: 1.3, ohand: 0.3, played: 0.9, disc: 0.9 };
 // Old saved sizes were multiples of each category's own tile (hand 40x52,
 // discards 25x33, melds 24x32, opponents' hands 15x20). Convert them once so a
 // returning player's table looks exactly as they left it.
-const SZ_MIGRATE = { hand: 1, ohand: 15 / 40, played: 24 / 40, disc: 25 / 40 };
+// Discards use the MELD ratio, not their own 25/40: the old discard and meld
+// tiles were within 4% of each other, and landing both on the same number is
+// the whole point of a shared scale.
+const SZ_MIGRATE = { hand: 1, ohand: 15 / 40, played: 24 / 40, disc: 24 / 40 };
 const clampSize = (v) => Math.min(SZ_MAX, Math.max(SZ_MIN, v));
 function loadSize(key) {
   try {
@@ -312,9 +315,105 @@ function applySizes() {
     const inp = $(`#sz-${k}`); if (inp) inp.value = sizes[k];
     const lbl = $(`#sz-${k}-v`); if (lbl) lbl.textContent = `${Math.round(sizes[k] * 100)}%`;
   }
+  relayout();
 }
 
 function setSize(k, v) { sizes[k] = v; try { localStorage.setItem(`mjg-ts2-${k}`, String(v)); } catch {} applySizes(); }
+
+// -------- seat shape: chosen from the WINDOW, never from the tiles on it -----
+// A quadrant is the pond plus the played sets. Wide enough and they sit side by
+// side, which wants a deep 6-wide pond and a narrow 2-meld sets column. Once
+// they have to stack, that shape is wrong: it leaves the quadrant tall and
+// half the column empty. So when stacked we spread instead — the pond goes
+// 12x2 or 8x3, the sets take three or four melds to a row — and the quadrant
+// gets much shorter.
+//
+// Everything below depends only on the window width, the size knobs and the
+// ruleset. It deliberately does NOT look at how many tiles anyone has played,
+// so the table re-shapes when you resize the window and at no other time.
+const TILE_W = 40, TILE_GAP = 2, MELD_TILES = 4, POND_TILES = 24, FLOWER_TILES = 8;
+const POND_SHAPES = [12, 8, 6];     // columns, widest first
+const MELDS_PER_ROW = [5, 4, 3, 2]; // widest first
+
+// Greedy pack of the worst case (flowers block, then every meld) into a row
+// `widthTiles` wide — the same order flex lays them out in, so the reserved
+// height always covers the fullest a seat can get.
+function packedRows(widthTiles, maxMelds, hasFlowers) {
+  const items = hasFlowers ? [FLOWER_TILES] : [];
+  for (let i = 0; i < maxMelds; i++) items.push(MELD_TILES);
+  let rows = 1, used = 0;
+  for (const it of items) {
+    if (used && used + it > widthTiles) { rows++; used = it; } else { used += it; }
+  }
+  return rows;
+}
+
+let layoutVariant = 'tw';
+function relayout() {
+  const g = $('#screen-game');
+  if (!g) return;
+  const maxMelds = layoutVariant === 'tw' ? 5 : 4;
+  const hasFlowers = layoutVariant !== 'jp';
+  const base = parseFloat(getComputedStyle(g).getPropertyValue('--ts-base')) || 1;
+  const pw = TILE_W * base * sizes.played;  // one played tile, in px
+  const dw = TILE_W * base * sizes.disc;    // one discard tile, in px
+
+  // Width a single quadrant actually gets. The grid track is minmax(0,
+  // --seat-max), so it never depends on what's inside it — measuring it is exact
+  // and, unlike arithmetic on innerWidth, already accounts for the page's
+  // scrollbar. Fall back to the arithmetic (104px centre column, 2 x 12px gaps,
+  // 2 x 8px table padding) while the table is still hidden.
+  const seatEl = $('.seat-tl');
+  const measured = seatEl ? seatEl.clientWidth - 8 : 0;
+  const vw = document.body.clientWidth || window.innerWidth;
+  const seat = measured > 0 ? measured : (vw - 104 - 24 - 16) / 2 - 8;
+
+  const pondW = (cols) => cols * dw + (cols - 1) * TILE_GAP + 6;
+  const pondH = (rows) => rows * 52 * base * sizes.disc + (rows - 1) * TILE_GAP + 6;
+  const setsW = (melds) => melds * MELD_TILES * pw + (5 * melds - 2);
+  const setsTiles = (melds) => melds * MELD_TILES;
+  const flowersW = FLOWER_TILES * pw + (FLOWER_TILES - 1);
+
+  // Beside a 4-deep pond the sets get four rows for free, so use them: take the
+  // NARROWEST column that still stacks up inside the pond's depth. Riichi has
+  // four melds and no flowers, so one meld a row is enough and the quadrant ends
+  // up half as wide; Hong Kong and Taiwanese need eight tiles for the flower row
+  // whatever happens.
+  const POND_DEPTH = 4;
+  const minMelds = hasFlowers ? 2 : 1;
+  let narrow = maxMelds;
+  for (let m = minMelds; m <= maxMelds; m++) {
+    if (packedRows(setsTiles(m), maxMelds, hasFlowers) <= POND_DEPTH) { narrow = m; break; }
+  }
+
+  let pondCols = 6, melds = narrow, floor = pondH(POND_DEPTH);
+  if (pondW(6) + 4 + Math.max(setsW(narrow), hasFlowers ? flowersW : 0) > seat) {
+    // stacked: no pond to sit beside any more, so spread wide and stay shallow
+    pondCols = POND_SHAPES.find((c) => pondW(c) <= seat) ?? 6;
+    melds = MELDS_PER_ROW.find((m) => setsW(m) <= seat) ?? 2;
+    floor = 0;
+  }
+
+  const set = (k, v) => { if (g.style.getPropertyValue(k) !== String(v)) g.style.setProperty(k, v); };
+  set('--pond-cols', pondCols);
+  set('--pond-rows', Math.ceil(POND_TILES / pondCols));
+  set('--played-cols', setsTiles(melds));
+  set('--played-gaps', 5 * melds - 2);
+  set('--played-rows', packedRows(setsTiles(melds), maxMelds, hasFlowers));
+  // Side by side, the sets box is floored to the pond's height. The rows pack to
+  // its top (align-content: flex-start) and the box's bottom is pinned to the
+  // pond's, so the first set always starts level with the first discard however
+  // few rows a ruleset can produce. The extra height is empty and invisible.
+  set('--sets-floor', `${Math.round(floor * 100) / 100}px`);
+}
+
+let relayoutPending = false;
+function scheduleRelayout() {
+  if (relayoutPending) return;
+  relayoutPending = true;
+  requestAnimationFrame(() => { relayoutPending = false; relayout(); });
+}
+window.addEventListener('resize', scheduleRelayout);
 
 // ---------------------------------------------------------------- chat
 
@@ -905,11 +1004,12 @@ function renderGame(view, sess) {
     }
   }
 
-  // reserve exactly the played rows this ruleset can produce — melds pack two per
-  // row, plus a row for flowers/seasons where they exist — so nothing ever clips
-  const maxMelds = view.variant === 'tw' ? 5 : 4;
-  const rows = Math.ceil(maxMelds / 2) + (view.variant === 'jp' ? 0 : 1);
-  $('#screen-game').style.setProperty('--played-rows', rows);
+  // The seat's shape depends on the ruleset (how many melds and whether there
+  // are flowers) but never on what has actually been played — relayout only
+  // rewrites a property when the value really changed, so a discard or a meld
+  // never nudges the layout.
+  if (view.variant !== layoutVariant) { layoutVariant = view.variant; }
+  relayout();
 
   // center info: round (prevailing wind + hand number) and tiles left in the wall
   const roundName = { E: 'East', S: 'South', W: 'West', N: 'North' }[view.roundWind] || view.roundWind;

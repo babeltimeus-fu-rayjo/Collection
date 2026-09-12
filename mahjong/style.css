@@ -95,6 +95,9 @@ body {
      sliders could never fit side by side however wide the screen. At 100% this
      works out to the same 440px as before. */
   --seat-max: calc((320px * var(--ts-played) + 240px * var(--ts-disc)) * var(--ts-base) + 36px);
+  /* --seat-max caps the side columns at the SIDE-BY-SIDE board width. Below that
+     the track is simply the space available, which is what the stacked shapes
+     spread into. */
   grid-template-columns: minmax(0, var(--seat-max)) 104px minmax(0, var(--seat-max));
   grid-template-rows: auto auto;
 }
@@ -130,7 +133,8 @@ body {
    the pond and share its centre line. The column is exactly the pond's width, so
    the hand's face-down tiles compress to match rather than widening the quadrant. */
 .seat-pond { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 0 0 auto;
-  width: calc(240px * var(--ts-base) * var(--ts-disc) + 16px); }
+  width: calc(var(--pond-cols) * 40px * var(--ts-base) * var(--ts-disc)
+            + (var(--pond-cols) - 1) * 2px + 6px); }
 .seat-hand { display: flex; gap: 1px; flex-wrap: nowrap; justify-content: center; align-items: center;
   height: calc(52px * var(--ts-base) * var(--ts-ohand) + 4px);
   width: 100%; min-width: 0; overflow: hidden; }
@@ -157,9 +161,13 @@ body {
    still reserving the ruleset's maximum so the quadrant never resizes. */
 .seat-played, #my-played {
   display: flex; flex-wrap: wrap; gap: 2px; align-content: flex-start; flex: 0 0 auto;
-  width: calc(320px * var(--ts-base) * var(--ts-played) + 8px);
-  height: calc(var(--played-rows, 4) * 52px * var(--ts-base) * var(--ts-played)
-             + (var(--played-rows, 4) - 1) * 2px);
+  width: calc(var(--played-cols) * 40px * var(--ts-base) * var(--ts-played)
+            + var(--played-gaps) * 1px);
+  /* exactly the rows it reserves — or, beside the pond, at least as tall as the
+     pond is, so that bottom-pinning the box puts its TOP edge on the pond's top
+     edge and the sets start level with the first discard (see --sets-floor) */
+  height: max(calc(var(--played-rows) * 52px * var(--ts-base) * var(--ts-played)
+                 + (var(--played-rows) - 1) * 2px), var(--sets-floor, 0px));
   overflow: hidden;
 }
 /* sets hug the pond and grow outward */
@@ -182,17 +190,19 @@ body {
      instead of overflowing — so the table layout never breaks */
   --tsd: var(--ts-disc);
   display: grid;
-  /* 6 wide x 4 deep = 24 slots — more than a player can discard in a hand (the
-     wall only allows ~19 draws each) and 54px narrower than the old 8-wide pond,
-     which is what lets the sets sit beside it on far more screens */
-  grid-template-columns: repeat(6, calc(40px * var(--ts-base) * var(--tsd)));
+  /* 24 slots either way — more than a player can discard in a hand (the wall
+     only allows ~19 draws each). 6 wide x 4 deep keeps the pond narrow enough to
+     sit beside the sets; once the two have to stack, --pond-cols goes to 8 or 12
+     and the tray gets correspondingly shallower. */
+  grid-template-columns: repeat(var(--pond-cols), calc(40px * var(--ts-base) * var(--tsd)));
   grid-auto-rows: calc(52px * var(--ts-base) * var(--tsd));
   align-content: start; gap: 2px; padding: 3px;
-  /* Fixed 4-row pond. It never shrinks — if it can't sit beside the played sets
-     the sets wrap to their own line instead, so the pond is never squeezed or
-     clipped at any tile size. */
+  /* The pond never shrinks to fit: if it can't sit beside the played sets they
+     wrap to their own line, and the pond reshapes to a wider, shallower tray. So
+     it is never squeezed or clipped at any tile size. */
   flex: 0 0 auto; overflow: auto;
-  height: calc(52px * var(--ts-base) * var(--tsd) * 4 + 12px);
+  height: calc(var(--pond-rows) * 52px * var(--ts-base) * var(--tsd)
+             + (var(--pond-rows) - 1) * 2px + 6px);
   border-radius: 5px; background: rgba(0,0,0,.13);
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
 }
@@ -261,6 +271,11 @@ body {
    percentage means the SAME physical tile wherever it is spent: 90% played and
    95% discards are directly comparable, and flowers match the melds beside them. */
 #screen-game { --ts-base: 1; --ts-hand: 1; --ts-ohand: 1; --ts-played: 1; --ts-disc: 1; }
+/* Seat shape, rewritten by relayout() in app.js whenever the WINDOW changes (see
+   there). These are the side-by-side defaults: a deep 6-wide pond and a sets
+   column two melds across. Stacked, they widen to 8 or 12 pond columns and three
+   or four melds a row so the quadrant gets shorter instead of taller. */
+#screen-game { --pond-cols: 6; --pond-rows: 4; --played-cols: 8; --played-gaps: 8; --played-rows: 4; --sets-floor: 0px; }
 
 .tile {
   --u: calc(1px * var(--ts-base) * var(--ts-disc));
@@ -337,7 +352,9 @@ body {
 .seat-played .tile, #my-played .tile, .meld .tile { --u: calc(1px * var(--ts-base) * var(--ts-played)); }
 .meld { display: flex; gap: 1px; }
 /* opponents' concealed (face-down) hands — sized by --ts-ohand */
-.seat-hand .tile { --u: calc(1px * var(--ts-base) * var(--ts-ohand)); }
+/* face-down tiles carry no information, so when a long concealed hand is wider
+   than the pond column they squeeze together rather than being cropped off */
+.seat-hand .tile { --u: calc(1px * var(--ts-base) * var(--ts-ohand)); min-width: 0; flex-shrink: 1; }
 
 /* discards — sized by --ts-disc; over-wide ponds scroll (see .seat-discards) */
 .seat-discards .tile, #my-discards .tile { --u: calc(1px * var(--ts-base) * var(--ts-disc)); }
