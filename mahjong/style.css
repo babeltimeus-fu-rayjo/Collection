@@ -86,11 +86,10 @@ body {
      generous FIXED width (room for a few melds without clipping) while the centre
      stays a fixed width — nothing resizes as content changes */
   align-self: stretch; justify-content: center;
-  /* Side columns grow with the window up to 440px. The widest a played area can
-     ever get is 5 kans + 8 flowers ≈ 743px, which no sane table width fits on one
-     line (it would need a ~1640px table), so 440px is sized to hold that maximum
-     in exactly TWO wrapped rows — the reserved height — with nothing cut off. */
-  grid-template-columns: minmax(0, 440px) 116px minmax(0, 440px);
+  /* Side columns grow with the window up to 330px — enough for the widest thing a
+     quadrant holds (a 16-tile concealed hand ≈ 255px, the 3x8 discard tray 220px,
+     a flower row 207px) without squeezing the tray. */
+  grid-template-columns: minmax(0, 330px) 116px minmax(0, 330px);
   grid-template-rows: auto auto;
 }
 
@@ -124,30 +123,19 @@ body {
 .seat-hand { display: flex; gap: 1px; flex-wrap: nowrap; justify-content: safe center; align-items: center;
   height: calc(20px * var(--ts-base) * var(--ts-ohand) + 4px);
   min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; }
-/* The board row: played sets sit on the OUTER edge, the discard pond inboard, so
-   the melds use the space beside the pond instead of stacking above it. */
-.seat-board { display: flex; gap: 8px; align-items: flex-start; justify-content: center; max-width: 100%; }
-.seat-tl .seat-board, .seat-bl .seat-board { flex-direction: row; }          /* played to the left  */
-.seat-tr .seat-board, #my-zone .seat-board { flex-direction: row-reverse; }  /* played to the right */
+/* Played sets sit above the pond so the discard tray always gets the quadrant's
+   full width and is never squeezed or clipped. */
+.seat-board { display: flex; flex-direction: column; align-items: center; gap: 4px; max-width: 100%; }
 
-/* One set per row, stacked vertically; flowers/seasons get their own row. The
-   height is reserved for the ruleset's maximum (--played-rows), so every meld is
-   always fully visible — never wrapped, clipped or scrolled — and never shifts. */
+/* Two sets per row, wrapping; flowers/seasons take their own row (they're wider
+   than a pair of melds, so they break the line naturally). The height is reserved
+   for the ruleset's maximum (--played-rows), so every set is always fully visible
+   — never clipped or scrolled — and the quadrant never changes size. */
 .seat-played, #my-played {
-  display: flex; flex-direction: column; gap: 2px; flex: 0 0 auto;
-  width: calc(210px * var(--ts-base) * var(--ts-played));
-  height: calc(var(--played-rows, 6) * (33px * var(--ts-base) * var(--ts-played) + 2px));
+  display: flex; flex-wrap: wrap; gap: 2px 4px; align-content: flex-start; justify-content: center;
+  width: calc(210px * var(--ts-base) * var(--ts-played)); max-width: 100%;
+  height: calc(var(--played-rows, 4) * (33px * var(--ts-base) * var(--ts-played) + 2px));
   overflow: hidden;
-}
-/* sets hug the pond and grow outward, so a lone flower isn't marooned at the edge */
-.seat-tl .seat-played, .seat-bl .seat-played { align-items: flex-end; }
-.seat-tr .seat-played, #my-played { align-items: flex-start; }
-/* below ~1000px there isn't room for sets beside the pond — stack them above it */
-@media (max-width: 1000px) {
-  .seat-tl .seat-board, .seat-bl .seat-board,
-  .seat-tr .seat-board, #my-zone .seat-board { flex-direction: column; align-items: center; }
-  .seat-tl .seat-played, .seat-bl .seat-played,
-  .seat-tr .seat-played, #my-played { align-items: center; width: 100%; }
 }
 /* flowers & seasons share a single row */
 .played-row { display: flex; gap: 1px; flex-wrap: nowrap; }

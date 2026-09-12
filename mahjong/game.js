@@ -1441,14 +1441,13 @@ function scoreTW(G, winnerSeat, loserSeat, isTsumo) {
   if (p.flowers.length > 0) tai.push({ name: `${p.flowers.length} flower(s)`, val: p.flowers.length });
 
   const total = Math.max(1, tai.reduce((s, t) => s + t.val, 0));
-  // Taiwanese scoring: a base (底) doubled once per tai (台), capped at 10 tai.
-  // base/mult/capped are reported so the hand-end screen can show the arithmetic.
-  const base = 200;        // 底
-  const taiCap = 10;
-  const capped = Math.min(total, taiCap);
-  const mult = Math.pow(2, capped);
-  const points = base * mult;
-  return { tai, total, points, base, mult, capped, taiCap, summary: `${total} tai (${points} pts)`, yaku: tai };
+  // Taiwanese scoring: a flat base (底) plus a fixed amount per tai (台). Additive
+  // so every scoring element is worth a stated number of points and the lines on
+  // the hand-end screen add up to the total.
+  const base = 200;    // 底
+  const perTai = 200;  // 台
+  const points = base + total * perTai;
+  return { tai, total, points, base, perTai, summary: `${total} tai (${points} pts)`, yaku: tai };
 }
 
 // ---------------------------------------------------------------- scoring helpers

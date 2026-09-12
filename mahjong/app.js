@@ -878,10 +878,11 @@ function renderGame(view, sess) {
     }
   }
 
-  // reserve exactly the played rows this ruleset can produce — one per meld, plus
-  // a row for flowers/seasons where they exist — so nothing ever wraps or shifts
+  // reserve exactly the played rows this ruleset can produce — melds pack two per
+  // row, plus a row for flowers/seasons where they exist — so nothing ever clips
   const maxMelds = view.variant === 'tw' ? 5 : 4;
-  $('#screen-game').style.setProperty('--played-rows', maxMelds + (view.variant === 'jp' ? 0 : 1));
+  const rows = Math.ceil(maxMelds / 2) + (view.variant === 'jp' ? 0 : 1);
+  $('#screen-game').style.setProperty('--played-rows', rows);
 
   // center info: round (prevailing wind + hand number) and tiles left in the wall
   const roundName = { E: 'East', S: 'South', W: 'West', N: 'North' }[view.roundWind] || view.roundWind;
@@ -1297,36 +1298,29 @@ function showHandEnd(view, sess) {
     title.textContent = hr.tsumo ? `${winner?.name} — Tsumo!` : `${winner?.name} — Ron!`;
     const sc = hr.scoring || {};
 
-    // 1) every yaku / faan / tai with its value — and, where the ruleset doubles
-    //    per tai, what that line is worth as a multiplier (×2 per tai)
-    const doubles = sc.mult != null && sc.base != null;
+    // 1) every yaku / faan / tai with its value — and, where each unit is worth a
+    //    fixed number of points, what that line earned
+    const perUnit = sc.perTai;
     const list = el('div', 'he-yaku');
     const items = sc.yaku || [];
     if (items.length) {
       for (const y of items) {
         const v = y.han != null ? y.han : y.val;
-        list.append(heRow(y.name, doubles ? `${v} ${unit} · ×${Math.pow(2, v)}` : `${v} ${unit}`));
+        list.append(heRow(y.name, perUnit != null ? `${v} ${unit} (${v * perUnit} pts)` : `${v} ${unit}`));
       }
     } else {
       list.append(heRow('No yaku', ''));
     }
-    // spell out the two constants the score is built from
-    if (doubles) {
-      list.append(heRow('Base', `${sc.base} pts`));
-      list.append(heRow('Each tai', '×2'));
-    }
+    // the flat base every win scores, so the lines above add up to the total
+    if (sc.base != null && perUnit != null) list.append(heRow('Base', `${sc.base} pts`));
     detail.append(list);
 
-    // 2) the total count (+ fu for Riichi), then the hand's value with its working
-    let totalStr;
-    if (view.variant === 'jp') totalStr = `${sc.han || 0} han · ${sc.fu || 0} fu`;
-    else if (doubles && sc.capped < sc.total) totalStr = `${sc.total} ${unit} (capped at ${sc.taiCap})`;
-    else totalStr = `${sc.total || 0} ${unit}`;
+    // 2) the total count (+ fu for Riichi), then the hand's value
+    const totalStr = view.variant === 'jp'
+      ? `${sc.han || 0} han · ${sc.fu || 0} fu`
+      : `${sc.total || 0} ${unit}`;
     detail.append(heRow('Total', totalStr, 'he-total'));
-    const valueStr = doubles
-      ? `${sc.base} × ${sc.mult} = ${sc.points} pts`
-      : `${sc.points ?? 0} pts`;
-    detail.append(heRow('Hand value', valueStr, 'he-total'));
+    detail.append(heRow('Hand value', `${sc.points ?? 0} pts`, 'he-total'));
 
     // 3) how that value is paid out
     const pay = hr.payments;
