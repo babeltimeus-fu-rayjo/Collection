@@ -94,7 +94,7 @@ body {
      whichever is wider. A fixed cap would mean raising the Played/Discards
      sliders could never fit side by side however wide the screen. At 100% this
      works out to the same 440px as before. */
-  --seat-max: calc((216px * var(--ts-played) + 150px * var(--ts-disc)) * var(--ts-base) + 36px);
+  --seat-max: calc((340px * var(--ts-played) + 240px * var(--ts-disc)) * var(--ts-base) + 36px);
   grid-template-columns: minmax(0, var(--seat-max)) 104px minmax(0, var(--seat-max));
   grid-template-rows: auto auto;
 }
@@ -130,9 +130,9 @@ body {
    the pond and share its centre line. The column is exactly the pond's width, so
    the hand's face-down tiles compress to match rather than widening the quadrant. */
 .seat-pond { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 0 0 auto;
-  width: calc(150px * var(--ts-base) * var(--ts-disc) + 16px); }
+  width: calc(240px * var(--ts-base) * var(--ts-disc) + 16px); }
 .seat-hand { display: flex; gap: 1px; flex-wrap: nowrap; justify-content: center; align-items: center;
-  height: calc(20px * var(--ts-base) * var(--ts-ohand) + 4px);
+  height: calc(52px * var(--ts-base) * var(--ts-ohand) + 4px);
   width: 100%; min-width: 0; overflow: hidden; }
 /* Played sets sit on the OUTER edge beside the pond — two sets to a row — so the
    discard tray keeps its full width and the quadrant stays short. */
@@ -148,13 +148,13 @@ body {
 .seat-tl .seat-board, .seat-bl .seat-board { flex-direction: row-reverse; }  /* sets to the left  */
 .seat-tr .seat-board, #my-zone .seat-board { flex-direction: row; }          /* sets to the right */
 
-/* Exactly two melds fit per row (2 x 99px + 2px gap = 200px); flowers/seasons
-   fill a row of their own. The height is reserved for the ruleset's maximum
+/* Exactly two melds fit per row (2 x 163px + 2px gap = 328px); flowers/seasons
+   fill a row of their own (8 x 40px + 7 x 2px = 334px, which sets the width). The height is reserved for the ruleset's maximum
    (--played-rows), so every set stays visible and the quadrant never resizes. */
 .seat-played, #my-played {
   display: flex; flex-wrap: wrap; gap: 2px; align-content: flex-start; flex: 0 0 auto;
-  width: calc(216px * var(--ts-base) * var(--ts-played));
-  height: calc(var(--played-rows, 4) * (33px * var(--ts-base) * var(--ts-played) + 2px));
+  width: calc(340px * var(--ts-base) * var(--ts-played));
+  height: calc(var(--played-rows, 4) * (52px * var(--ts-base) * var(--ts-played) + 2px));
   overflow: hidden;
 }
 /* sets hug the pond and grow outward */
@@ -162,7 +162,7 @@ body {
 .seat-tr .seat-played, #my-played { justify-content: flex-start; }
 /* Flowers & seasons share one row. They're independent tiles, not a set, so they
    get the same 2px separation that sits between melds — the column below is sized
-   to fit all 8 of them at that spacing (8 x 25px + 7 x 2px = 214px). */
+   to fit all 8 of them at that spacing (8 x 40px + 7 x 2px = 334px). */
 .played-row { display: flex; gap: 2px; flex-wrap: nowrap; }
 
 /* No width breakpoint here on purpose: .seat-board wraps on its own, so the sets
@@ -179,14 +179,14 @@ body {
   /* 6 wide x 4 deep = 24 slots — more than a player can discard in a hand (the
      wall only allows ~19 draws each) and 54px narrower than the old 8-wide pond,
      which is what lets the sets sit beside it on far more screens */
-  grid-template-columns: repeat(6, calc(25px * var(--ts-base) * var(--tsd)));
-  grid-auto-rows: calc(33px * var(--ts-base) * var(--tsd));
+  grid-template-columns: repeat(6, calc(40px * var(--ts-base) * var(--tsd)));
+  grid-auto-rows: calc(52px * var(--ts-base) * var(--tsd));
   align-content: start; gap: 2px; padding: 3px;
   /* Fixed 4-row pond. It never shrinks — if it can't sit beside the played sets
      the sets wrap to their own line instead, so the pond is never squeezed or
      clipped at any tile size. */
   flex: 0 0 auto; overflow: auto;
-  height: calc(33px * var(--ts-base) * var(--tsd) * 4 + 12px);
+  height: calc(52px * var(--ts-base) * var(--tsd) * 4 + 12px);
   border-radius: 5px; background: rgba(0,0,0,.13);
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
 }
@@ -224,7 +224,7 @@ body {
 
 /* resting discard: reserve the tile's height so the slot never collapses */
 #last-discard { display: flex; align-items: center; justify-content: center; gap: 6px;
-  min-height: calc(40px * var(--ts-base) * var(--ts-disc) + 12px); }
+  min-height: calc(52px * var(--ts-base) * var(--ts-disc) + 12px); }
 #last-discard:not(:empty) { border-radius: 8px; padding: 5px; }
 /* the box only appears once the tile has landed — otherwise an empty shadowed
    panel sits at the centre for the whole flight */
@@ -250,19 +250,21 @@ body {
    --ts-ohand (opponents' concealed hands), --ts-played (flowers & melds) and
    --ts-disc (every discard). --ts-base is a device factor (smaller on phones).
    Each tile derives a unit --u from base × its knob; every dimension — the tile
-   and the face drawn inside it (in em, so it tracks the tile) — is a multiple. */
+   and the face drawn inside it (in em, so it tracks the tile) — is a multiple.
+   ONE canonical tile (40 x 52 units) is shared by every category, so a given
+   percentage means the SAME physical tile wherever it is spent: 90% played and
+   95% discards are directly comparable, and flowers match the melds beside them. */
 #screen-game { --ts-base: 1; --ts-hand: 1; --ts-ohand: 1; --ts-played: 1; --ts-disc: 1; }
 
 .tile {
   --u: calc(1px * var(--ts-base) * var(--ts-disc));
   display: inline-flex; align-items: center; justify-content: center; overflow: hidden;
-  width: calc(30 * var(--u)); height: calc(40 * var(--u)); font-size: calc(40 * var(--u));
+  width: calc(40 * var(--u)); height: calc(52 * var(--u)); font-size: calc(52 * var(--u));
   border-radius: calc(4 * var(--u));
   background: linear-gradient(165deg, #fdf9ee, #ece1c6);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.75), 0 1px 2px rgba(0,0,0,.3);
   color: #1a1a1a; flex-shrink: 0; position: relative; line-height: 1; text-align: center; cursor: default;
 }
-.tile.small { width: calc(25 * var(--u)); height: calc(33 * var(--u)); font-size: calc(33 * var(--u)); }
 
 /* hand-drawn tile face (sized in em, relative to the tile) — no frame, so
    nothing sits behind the corner index */
@@ -320,7 +322,6 @@ body {
 #hand .tile {
   --u: calc(1px * var(--ts-base) * var(--ts-hand));
   cursor: pointer; transition: transform .12s ease, box-shadow .1s;
-  width: calc(40 * var(--u)); height: calc(52 * var(--u)); font-size: calc(52 * var(--u));
 }
 #hand .tile:hover { transform: translateY(-4px); box-shadow: 0 4px 12px rgba(0,0,0,.3); }
 #hand .tile.selected { transform: translateY(-8px); box-shadow: 0 0 0 2px #e8d5a3, 0 6px 16px rgba(0,0,0,.4); }
@@ -329,9 +330,8 @@ body {
 /* played (flowers + melds) — sized by --ts-played */
 .seat-played .tile, #my-played .tile, .meld .tile { --u: calc(1px * var(--ts-base) * var(--ts-played)); }
 .meld { display: flex; gap: 1px; }
-.meld .tile { width: calc(24 * var(--u)); height: calc(32 * var(--u)); font-size: calc(32 * var(--u)); }
 /* opponents' concealed (face-down) hands — sized by --ts-ohand */
-.seat-hand .tile { --u: calc(1px * var(--ts-base) * var(--ts-ohand)); width: calc(15 * var(--u)); height: calc(20 * var(--u)); }
+.seat-hand .tile { --u: calc(1px * var(--ts-base) * var(--ts-ohand)); }
 
 /* discards — sized by --ts-disc; over-wide ponds scroll (see .seat-discards) */
 .seat-discards .tile, #my-discards .tile { --u: calc(1px * var(--ts-base) * var(--ts-disc)); }

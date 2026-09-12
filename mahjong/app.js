@@ -233,9 +233,8 @@ function tileSuitClass(t) {
 }
 
 function renderTile(t, opts = {}) {
-  if (!t) return el('div', `tile facedown${opts.small ? ' small' : ''}`);
+  if (!t) return el('div', 'tile facedown');
   const cls = ['tile', tileSuitClass(t)];
-  if (opts.small) cls.push('small');
   if (opts.highlight) cls.push('highlight');
   if (opts.lastDraw) cls.push('last-draw');
   if (opts.riichi) cls.push('riichi-mark');
@@ -254,7 +253,7 @@ function renderTile(t, opts = {}) {
 
 function renderMeld(meld) {
   const g = el('div', 'meld');
-  for (const t of meld.tiles) g.append(renderTile(t, { small: true }));
+  for (const t of meld.tiles) g.append(renderTile(t));
   return g;
 }
 
@@ -263,21 +262,40 @@ function renderMeld(meld) {
 function renderPlayed(container, p) {
   if (p.flowers && p.flowers.length) {
     const row = el('div', 'played-row');
-    for (const f of p.flowers) row.append(renderTile(f, { small: true }));
+    for (const f of p.flowers) row.append(renderTile(f));
     container.append(row);
   }
   for (const m of p.melds) container.append(renderMeld(m));
 }
 
 // -------- tile size — independent knobs per category, saved per browser --------
-const SZ_MIN = 0.6, SZ_MAX = 2.0;
+// All four knobs now scale the SAME canonical tile, so a percentage means one
+// physical size wherever it is spent — 90% played really is smaller than 95%
+// discards. The floor drops to 20% because opponents' face-down tiles, which
+// carry no information, sit far below the others on that shared scale.
+const SZ_MIN = 0.2, SZ_MAX = 2.0, SZ_STEP = 0.05;
 const SZ_KEYS = ['hand', 'ohand', 'played', 'disc'];
 // Starting sizes for a player who hasn't touched the Size sliders: your own hand
 // and the melds/pond a little larger than life, opponents' face-down tiles smaller
-// since they carry no information.
-const SZ_DEFAULT = { hand: 1.3, ohand: 0.8, played: 1.5, disc: 1.5 };
+// since they carry no information. These render pixel-for-pixel like the old
+// 130/80/150/150 did before the categories shared a scale.
+const SZ_DEFAULT = { hand: 1.3, ohand: 0.3, played: 0.9, disc: 0.95 };
+// Old saved sizes were multiples of each category's own tile (hand 40x52,
+// discards 25x33, melds 24x32, opponents' hands 15x20). Convert them once so a
+// returning player's table looks exactly as they left it.
+const SZ_MIGRATE = { hand: 1, ohand: 15 / 40, played: 24 / 40, disc: 25 / 40 };
+const clampSize = (v) => Math.min(SZ_MAX, Math.max(SZ_MIN, v));
 function loadSize(key) {
-  try { const v = parseFloat(localStorage.getItem(`mjg-ts-${key}`)); if (Number.isFinite(v)) return Math.min(SZ_MAX, Math.max(SZ_MIN, v)); } catch {}
+  try {
+    const v = parseFloat(localStorage.getItem(`mjg-ts2-${key}`));
+    if (Number.isFinite(v)) return clampSize(v);
+    const old = parseFloat(localStorage.getItem(`mjg-ts-${key}`));
+    if (Number.isFinite(old)) {
+      const conv = Math.round(clampSize(Math.round(old * SZ_MIGRATE[key] / SZ_STEP) * SZ_STEP) * 100) / 100;
+      try { localStorage.setItem(`mjg-ts2-${key}`, String(conv)); } catch {}
+      return conv;
+    }
+  } catch {}
   return SZ_DEFAULT[key] ?? 1;
 }
 const sizes = { hand: loadSize('hand'), ohand: loadSize('ohand'), played: loadSize('played'), disc: loadSize('disc') };
@@ -296,7 +314,7 @@ function applySizes() {
   }
 }
 
-function setSize(k, v) { sizes[k] = v; try { localStorage.setItem(`mjg-ts-${k}`, String(v)); } catch {} applySizes(); }
+function setSize(k, v) { sizes[k] = v; try { localStorage.setItem(`mjg-ts2-${k}`, String(v)); } catch {} applySizes(); }
 
 // ---------------------------------------------------------------- chat
 
@@ -868,7 +886,7 @@ function renderGame(view, sess) {
     const handFd = el_.querySelector('.seat-hand');
     if (handFd) {
       handFd.replaceChildren();
-      if (p) for (let k = 0; k < p.tileCount; k++) handFd.append(renderTile(null, { small: true }));
+      if (p) for (let k = 0; k < p.tileCount; k++) handFd.append(renderTile(null));
     }
 
     // played: flowers first, then melds (sets)
@@ -882,7 +900,7 @@ function renderGame(view, sess) {
     if (p) {
       for (const t of p.discards) {
         if (view.lastDiscard && t.id === view.lastDiscard.id) continue; // resting in the centre
-        discEl.append(renderTile(t, { small: true, riichi: t.riichi }));
+        discEl.append(renderTile(t, { riichi: t.riichi }));
       }
     }
   }
@@ -912,7 +930,7 @@ function renderGame(view, sess) {
   doraEl.replaceChildren();
   if (view.dora && view.dora.length > 0) {
     doraEl.append(el('span', '', 'Dora: '));
-    for (const d of view.dora) doraEl.append(renderTile(d, { small: true }));
+    for (const d of view.dora) doraEl.append(renderTile(d));
   }
   const sticksEl = $('#sticks-display');
   sticksEl.textContent = '';
@@ -950,7 +968,7 @@ function renderGame(view, sess) {
   if (me) {
     for (const t of me.discards) {
       if (view.lastDiscard && t.id === view.lastDiscard.id) continue; // resting in the centre
-      myDisc.append(renderTile(t, { small: true, riichi: t.riichi }));
+      myDisc.append(renderTile(t, { riichi: t.riichi }));
     }
   }
 
