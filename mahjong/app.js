@@ -408,6 +408,12 @@ function relayout() {
   // pond's, so the first set always starts level with the first discard however
   // few rows a ruleset can produce. The extra height is empty and invisible.
   set('--sets-floor', `${Math.round(floor * 100) / 100}px`);
+  // How far a concealed hand may reach past its pond. Side by side that is the
+  // whole board — the band above the sets column is empty, so the hand grows
+  // into it; stacked, it is the slack beside the centred pond.
+  const pw2 = pondW(pondCols);
+  const handMax = floor > 0 ? pw2 + 4 + setsW(melds) : pw2 + Math.max(0, (seat - pw2) / 2);
+  set('--hand-max', `${Math.round(handMax * 100) / 100}px`);
 }
 
 let relayoutPending = false;
@@ -596,6 +602,7 @@ function clearRejoin(code) { try { sessionStorage.removeItem(`mjg-rejoin-${code}
 
 let session = null;
 let lastView = null;
+let lastSess = null;
 let pendingMove = false;
 let selectedTile = null;
 let handOrder = [];   // tile-id display order for my hand (drag to rearrange)
@@ -957,6 +964,7 @@ let chatSeenN = 0;
 
 function renderGame(view, sess) {
   lastView = view;
+  lastSess = sess;
   const my = view.mySeat;
 
   // a new hand reuses tile ids from the previous hand, so drop the old drag
@@ -988,7 +996,9 @@ function renderGame(view, sess) {
     const handFd = el_.querySelector('.seat-hand');
     if (handFd) {
       handFd.replaceChildren();
-      if (p) for (let k = 0; k < p.tileCount; k++) handFd.append(renderTile(null));
+      // p.hand holds nulls while the hand is live and real tiles once it is
+      // over, so the same call renders face-down backs or the revealed hand
+      if (p) for (let k = 0; k < p.tileCount; k++) handFd.append(renderTile(p.hand[k] || null));
     }
 
     // played: flowers first, then melds (sets)
@@ -1114,11 +1124,27 @@ function renderGame(view, sess) {
     }
   }
 
-  // hand end modal
+  // Hand end: hold the score back so the revealed hands can be read, then show
+  // it. The panel can also be tucked away to study the board for longer.
   if (view.phase === 'handEnd' && view.handResult) {
-    showHandEnd(view, sess);
+    const key = `${view.roundWind}${view.handNum}.${view.honba}.${view.handResult.type}`;
+    if (key !== handEndKey) {
+      handEndKey = key;
+      handEndReady = false;
+      scoreHidden = false;
+      clearTimeout(handEndTimer);
+      handEndTimer = setTimeout(() => {
+        handEndReady = true;
+        if (lastView && lastView.phase === 'handEnd') paintHandEnd();
+      }, REVEAL_MS);
+    }
+    paintHandEnd();
   } else {
-    $('#handend').classList.add('hidden');
+    handEndKey = null;
+    handEndReady = false;
+    scoreHidden = false;
+    clearTimeout(handEndTimer);
+    hideHandEnd();
   }
 
   // game over
@@ -1411,6 +1437,42 @@ function renderCheatsheet() {
   }
 }
 
+// Everyone's hand is laid open the moment a hand ends; the score panel waits
+// this long before covering the table with it.
+const REVEAL_MS = 2600;
+let handEndKey = null, handEndReady = false, handEndTimer = null, scoreHidden = false;
+
+function hideHandEnd() {
+  $('#handend').classList.add('hidden');
+  $('#he-peek').classList.add('hidden');
+}
+
+// Decide what the hand-end state should look like right now: the bare board
+// while the hands are being read or while the player has tucked the panel away,
+// otherwise the score.
+function paintHandEnd() {
+  if (!lastView || lastView.phase !== 'handEnd' || !lastView.handResult) { hideHandEnd(); return; }
+  if (handEndReady && !scoreHidden) {
+    $('#he-peek').classList.add('hidden');
+    showHandEnd(lastView, lastSess);
+  } else {
+    $('#handend').classList.add('hidden');
+    $('#he-peek').classList.toggle('hidden', !scoreHidden);
+  }
+}
+
+// Tucked away, a click anywhere on the board brings the score back. Chrome that
+// exists to show you MORE of the game — the log, chat, the top bar — is exempt,
+// since dismissing the score to open the log only to have it reappear would be
+// self-defeating. Capture phase, so this runs before the hide button's own
+// handler sets the flag and can't immediately undo it.
+document.addEventListener('click', (e) => {
+  if (!scoreHidden) return;
+  if (e.target.closest && e.target.closest('#chat, #feed, .topbar, #size-popover, .modal')) return;
+  scoreHidden = false;
+  paintHandEnd();
+}, true);
+
 function showHandEnd(view, sess) {
   const m = $('#handend');
   m.classList.remove('hidden');
@@ -1490,9 +1552,12 @@ function showHandEnd(view, sess) {
     scores.append(heScoreRow(nm, dStr, `${p.score}`, d > 0 ? 'up' : d < 0 ? 'down' : ''));
   }
 
+  const hide = $('#btn-he-hide');
+  if (hide) hide.onclick = () => { scoreHidden = true; paintHandEnd(); };
+
   const btn = $('#btn-next-hand');
   const wait = $('#he-wait');
-  if (sess.isHost) {
+  if (sess && sess.isHost) {
     btn.classList.remove('hidden');
     wait.classList.add('hidden');
     btn.onclick = () => sess.localNext();

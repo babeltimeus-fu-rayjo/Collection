@@ -144,9 +144,17 @@ body {
 .seat-pond { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 0 0 auto;
   width: calc(var(--pond-cols) * 40px * var(--ts-base) * var(--ts-disc)
             + (var(--pond-cols) - 1) * 2px + 6px); }
-.seat-hand { display: flex; gap: 1px; flex-wrap: nowrap; justify-content: center; align-items: center;
+/* A concealed hand is as wide as its tiles, not as wide as the pond: capping it
+   at the pond meant raising Others' hands past ~30% just squeezed the tiles
+   instead of growing them. It is anchored to the quadrant's INNER edge and grows
+   OUTWARD, over the empty band sitting above the sets column, so the four hands
+   line up towards the middle of the table. --hand-max (set by relayout) stops it
+   at the quadrant's edge. */
+.seat-hand { display: flex; gap: 1px; flex-wrap: nowrap; align-items: center;
   height: calc(52px * var(--ts-base) * var(--ts-ohand) + 4px);
-  width: 100%; min-width: 0; overflow: hidden; }
+  width: max-content; max-width: var(--hand-max, 100%); overflow: hidden; }
+.seat-tl .seat-hand, .seat-bl .seat-hand { align-self: flex-end; justify-content: flex-end; }
+.seat-tr .seat-hand, #my-zone .seat-hand { align-self: flex-start; justify-content: flex-start; }
 /* Played sets sit on the OUTER edge beside the pond — two sets to a row — so the
    discard tray keeps its full width and the quadrant stays short. */
 /* wraps rather than squeezing: if the sets and the pond can't share a line (big
@@ -363,7 +371,7 @@ body {
 /* opponents' concealed (face-down) hands — sized by --ts-ohand */
 /* face-down tiles carry no information, so when a long concealed hand is wider
    than the pond column they squeeze together rather than being cropped off */
-.seat-hand .tile { --u: calc(1px * var(--ts-base) * var(--ts-ohand)); min-width: 0; flex-shrink: 1; }
+.seat-hand .tile { --u: calc(1px * var(--ts-base) * var(--ts-ohand)); flex-shrink: 0; }
 
 /* discards — sized by --ts-disc; over-wide ponds scroll (see .seat-discards) */
 .seat-discards .tile, #my-discards .tile { --u: calc(1px * var(--ts-base) * var(--ts-disc)); }
@@ -457,6 +465,15 @@ body {
 #go-rank li { counter-increment: rank; padding: 6px 0; border-bottom: 1px solid #1a4a32; display: flex; justify-content: space-between; }
 #go-rank li::before { content: counter(rank) ". "; color: #5a8a6a; margin-right: 6px; }
 .credit { font-size: 11px; color: #5a8a6a; margin-top: 12px; }
+
+/* the score panel can be tucked away to study the board; this says how to bring
+   it back, and never eats a click itself */
+#he-peek {
+  position: fixed; left: 50%; transform: translateX(-50%); top: 50px; z-index: 75;
+  background: rgba(10,26,18,.92); border: 1px solid #2a6b45; color: #e8d5a3;
+  padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  box-shadow: 0 4px 16px rgba(0,0,0,.5); pointer-events: none;
+}
 
 /* ================================================================ chat */
 /* sits clear of the page scrollbar (macOS overlay scrollbars float over content) */

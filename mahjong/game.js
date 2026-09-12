@@ -1721,6 +1721,8 @@ function botPickDiscard(G, p) {
 
 export function viewFor(G, seat, code) {
   const p = playerBySeat(G, seat);
+  // once the hand is over nothing is secret any more
+  const revealAll = G.phase === 'handEnd' || G.phase === 'over';
   const players = G.players.map((q) => {
     const isMe = q.seat === seat;
     return {
@@ -1728,7 +1730,9 @@ export function viewFor(G, seat, code) {
       name: q.name,
       bot: q.bot,
       connected: q.connected,
-      hand: isMe ? q.hand : q.hand.map(() => null), // hide others' tiles
+      // hidden while the hand is live; everyone's is laid open once it is over,
+      // so the table can be read before the score panel covers it
+      hand: (isMe || revealAll) ? q.hand : q.hand.map(() => null),
       melds: q.melds,
       discards: q.discards,
       flowers: q.flowers,
