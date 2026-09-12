@@ -139,7 +139,9 @@ body {
 /* wraps rather than squeezing: if the sets and the pond can't share a line (big
    tile sizes, narrow window) the sets drop to their own line and the pond keeps
    its full size */
-.seat-board { display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-start; justify-content: center; max-width: 100%; }
+/* bottom-aligned so the sets column lines up with the POND, not with the name
+   sitting above it — both have fixed heights, so their bottoms sit flush */
+.seat-board { display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-end; justify-content: center; max-width: 100%; }
 /* The pond group is first in the DOM so a wrap puts it on the TOP line and drops
    the sets beneath it; these reversals keep the sets on the quadrant's outer edge
    while they're side by side. */

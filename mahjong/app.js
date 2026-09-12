@@ -272,9 +272,13 @@ function renderPlayed(container, p) {
 // -------- tile size — independent knobs per category, saved per browser --------
 const SZ_MIN = 0.6, SZ_MAX = 2.0;
 const SZ_KEYS = ['hand', 'ohand', 'played', 'disc'];
+// Starting sizes for a player who hasn't touched the Size sliders: your own hand
+// and the melds/pond a little larger than life, opponents' face-down tiles smaller
+// since they carry no information.
+const SZ_DEFAULT = { hand: 1.3, ohand: 0.8, played: 1.5, disc: 1.5 };
 function loadSize(key) {
   try { const v = parseFloat(localStorage.getItem(`mjg-ts-${key}`)); if (Number.isFinite(v)) return Math.min(SZ_MAX, Math.max(SZ_MIN, v)); } catch {}
-  return 1;
+  return SZ_DEFAULT[key] ?? 1;
 }
 const sizes = { hand: loadSize('hand'), ohand: loadSize('ohand'), played: loadSize('played'), disc: loadSize('disc') };
 
