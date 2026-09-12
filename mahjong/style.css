@@ -93,7 +93,7 @@ body {
      sliders could never fit side by side however wide the screen. At 100% this
      works out to the same 440px as before. */
   --seat-max: max(
-    calc((200px * var(--ts-played) + 150px * var(--ts-disc)) * var(--ts-base) + 36px),
+    calc((216px * var(--ts-played) + 150px * var(--ts-disc)) * var(--ts-base) + 36px),
     calc(250px * var(--ts-base) * var(--ts-ohand) + 16px)
   );
   grid-template-columns: minmax(0, var(--seat-max)) 104px minmax(0, var(--seat-max));
@@ -144,15 +144,17 @@ body {
    (--played-rows), so every set stays visible and the quadrant never resizes. */
 .seat-played, #my-played {
   display: flex; flex-wrap: wrap; gap: 2px; align-content: flex-start; flex: 0 0 auto;
-  width: calc(200px * var(--ts-base) * var(--ts-played));
+  width: calc(216px * var(--ts-base) * var(--ts-played));
   height: calc(var(--played-rows, 4) * (33px * var(--ts-base) * var(--ts-played) + 2px));
   overflow: hidden;
 }
 /* sets hug the pond and grow outward */
 .seat-tl .seat-played, .seat-bl .seat-played { justify-content: flex-end; }
 .seat-tr .seat-played, #my-played { justify-content: flex-start; }
-/* flowers & seasons share one row: 8 x 25px = exactly the column width */
-.played-row { display: flex; gap: 0; flex-wrap: nowrap; }
+/* Flowers & seasons share one row. They're independent tiles, not a set, so they
+   get the same 2px separation that sits between melds — the column below is sized
+   to fit all 8 of them at that spacing (8 x 25px + 7 x 2px = 214px). */
+.played-row { display: flex; gap: 2px; flex-wrap: nowrap; }
 
 /* No width breakpoint here on purpose: .seat-board wraps on its own, so the sets
    stay beside the pond whenever they actually fit (which depends on the tile-size
@@ -214,7 +216,14 @@ body {
 /* resting discard: reserve the tile's height so the slot never collapses */
 #last-discard { display: flex; align-items: center; justify-content: center; gap: 6px;
   min-height: calc(40px * var(--ts-base) * var(--ts-disc) + 12px); }
-#last-discard:not(:empty) { background: rgba(10,26,18,.55); border-radius: 8px; padding: 5px; box-shadow: 0 2px 10px rgba(0,0,0,.4); }
+#last-discard:not(:empty) { border-radius: 8px; padding: 5px; }
+/* the box only appears once the tile has landed — otherwise an empty shadowed
+   panel sits at the centre for the whole flight */
+#last-discard:not(:empty):not(.flying) { background: rgba(10,26,18,.55); box-shadow: 0 2px 10px rgba(0,0,0,.4);
+  transition: background .18s ease, box-shadow .18s ease; }
+/* drop the box instantly when the flight starts (no fade-out), fade it back in
+   when the tile lands — the transition above only applies on the way in */
+#last-discard.flying { transition: none; }
 
 /* ---- my zone is the bottom-left quadrant (a .seat); just tune spacing */
 #my-zone { gap: 3px; }

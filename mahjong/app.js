@@ -450,6 +450,11 @@ function flyTileIn(tile, container, fromSeat) {
   const cr = container.getBoundingClientRect();
   const dx = Math.round((hr.left + hr.width / 2) - (cr.left + cr.width / 2));
   const dy = Math.round((hr.top + hr.height / 2) - (cr.top + cr.height / 2));
+  // hold back the resting box until the tile lands, otherwise an empty shadowed
+  // panel sits at the centre for the whole flight
+  container.classList.add('flying');
+  clearTimeout(container._flyTimer);
+  container._flyTimer = setTimeout(() => container.classList.remove('flying'), FLY_MS);
   tile.style.transition = 'none';
   tile.style.transform = `translate(${dx}px, ${dy}px) scale(.72)`;
   void tile.offsetWidth; // reflow so the transition runs
@@ -917,6 +922,7 @@ function renderGame(view, sess) {
   if (ldId !== shownDiscardId) {
     shownDiscardId = ldId;
     ldEl.replaceChildren();
+    ldEl.classList.remove('flying');
     if (view.lastDiscard) {
       const tile = renderTile(view.lastDiscard, { highlight: true });
       ldEl.append(tile);
