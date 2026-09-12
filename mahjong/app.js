@@ -445,17 +445,6 @@ function flyTileIn(tile, container, fromSeat) {
   tile.style.transform = 'translate(0,0) scale(1)';
 }
 
-// the resting centre tile was claimed — float it upward while it fades, then drop
-// it from the DOM, so a Pon/Chi/Kan/Ron reads as "the tile was taken"
-function floatDiscardUp(container) {
-  const node = container.firstChild;
-  if (!node) { container.replaceChildren(); return; }
-  container.classList.add('taking');   // hide the resting-box background during the lift
-  node.style.transition = 'none';
-  node.classList.add('taken');
-  setTimeout(() => { container.replaceChildren(); container.classList.remove('taking'); }, 480);
-}
-
 // ---------------------------------------------------------------- rejoin
 
 function saveRejoin(code, token) { try { sessionStorage.setItem(`mjg-rejoin-${code}`, token); } catch {} }
@@ -881,19 +870,14 @@ function renderGame(view, sess) {
   $('#round-wind-display').textContent = `${roundName} ${view.handNum}`;
   $('#wall-display').textContent = `${view.wallCount} left`;
 
-  // whose turn it is — shown prominently in the centre; "Your turn" for me
+  // whose turn it is: only ever announce MY turn in the centre. For opponents the
+  // gold halo around their quadrant is the cue, so no label is shown.
   const turnLabel = $('#turn-label');
-  if ((view.phase === 'discard' || view.phase === 'draw') && view.turn != null) {
-    if (view.turn === my) {
-      turnLabel.textContent = 'Your turn';
-      turnLabel.className = 'mine';
-    } else {
-      const who = view.players.find((q) => q.seat === view.turn);
-      turnLabel.textContent = `${who?.name || '?'}'s turn`;
-      turnLabel.className = 'other';
-    }
+  if (view.turn === my && (view.phase === 'discard' || view.phase === 'draw')) {
+    turnLabel.replaceChildren(el('span', 'tl-text', 'Your turn'));
+    turnLabel.className = 'mine';
   } else {
-    turnLabel.textContent = '';
+    turnLabel.replaceChildren();
     turnLabel.className = '';
   }
   const doraEl = $('#dora-display');
@@ -912,21 +896,13 @@ function renderGame(view, sess) {
   const ldEl = $('#last-discard');
   const ldId = view.lastDiscard ? view.lastDiscard.id : null;
   if (ldId !== shownDiscardId) {
-    const hadTile = shownDiscardId != null && ldEl.firstChild;
-    if (ldId == null && hadTile) {
-      // the resting tile was claimed/taken (Pon/Chi/Kan/Ron) — float it up as it
-      // vanishes so it's obvious the tile left the table for a call
-      floatDiscardUp(ldEl);
-    } else {
-      ldEl.replaceChildren();
-      ldEl.classList.remove('taking');
-      if (view.lastDiscard) {
-        const tile = renderTile(view.lastDiscard, { highlight: true });
-        ldEl.append(tile);
-        flyTileIn(tile, ldEl, view.lastDiscardSeat);
-      }
-    }
     shownDiscardId = ldId;
+    ldEl.replaceChildren();
+    if (view.lastDiscard) {
+      const tile = renderTile(view.lastDiscard, { highlight: true });
+      ldEl.append(tile);
+      flyTileIn(tile, ldEl, view.lastDiscardSeat);
+    }
   }
 
   // my zone

@@ -82,7 +82,9 @@ body {
 #table {
   --bubble-reserve: 64px;
   flex: 0 0 auto; display: grid; gap: 8px 12px; padding: var(--bubble-reserve) 8px 0; position: relative;
-  grid-template-columns: 1fr minmax(84px, auto) 1fr;
+  /* fixed-width centre so the turn banner (which can hold a long "<name>'s turn")
+     never widens it and shifts the side players; sides may shrink and scroll */
+  grid-template-columns: minmax(0, 1fr) 116px minmax(0, 1fr);
   grid-template-rows: auto auto;
 }
 
@@ -110,9 +112,14 @@ body {
    played sets, then discards — so the name always sits above the discards */
 
 /* reserve a row for the concealed hand and for played tiles so the quadrant
-   doesn't shift as tiles get melded / flowers drawn / the hand shrinks */
+   doesn't shift as tiles get melded / flowers drawn / the hand shrinks. The
+   played row is a FIXED one-row height that scrolls sideways when a player racks
+   up many melds/flowers, so it never grows and shoves the rest of the table. */
 .seat-hand { display: flex; gap: 1px; flex-wrap: wrap; justify-content: center; align-content: center; min-height: calc(20px * var(--ts-base) * var(--ts-ohand)); }
-.seat-played { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; align-content: center; min-height: calc(33px * var(--ts-base) * var(--ts-played)); }
+.seat-played { display: flex; gap: 4px; flex-wrap: nowrap; justify-content: safe center; align-items: center;
+  height: calc(33px * var(--ts-base) * var(--ts-played) + 6px); overflow-x: auto; overflow-y: hidden;
+  /* cap to the discard tray's width so a run of melds can't widen the quadrant */
+  min-width: 0; max-width: calc(200px * var(--ts-base) * var(--ts-disc) + 20px); }
 /* discards live in a dedicated, recessed 3×8 tray so they read as a pile,
    clearly separate from the played sets above them */
 .seat-discards, #my-discards {
@@ -142,9 +149,9 @@ body {
    appear, change width, or clear. */
 /* whose-turn banner: a quiet pill for others, a bold gold pulse for "Your turn".
    Keeps its height even when empty so nothing below it jumps. */
-#turn-label { height: 24px; display: inline-flex; align-items: center; justify-content: center;
-  font-size: 13px; font-weight: 700; padding: 0 14px; border-radius: 999px; white-space: nowrap; box-sizing: border-box; }
-#turn-label.other { color: #cfe3d5; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); }
+#turn-label { height: 24px; max-width: 100%; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; padding: 0 14px; border-radius: 999px; box-sizing: border-box; }
+#turn-label .tl-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #turn-label.mine { color: #14261a; background: #e8d5a3; box-shadow: 0 0 12px 2px rgba(232,213,163,.5); animation: turnPulse 1.6s ease-in-out infinite; }
 @keyframes turnPulse {
   0%, 100% { box-shadow: 0 0 9px 1px rgba(232,213,163,.4); }
@@ -164,15 +171,19 @@ body {
 /* resting discard: reserve the tile's height so the slot never collapses */
 #last-discard { display: flex; align-items: center; justify-content: center; gap: 6px;
   min-height: calc(40px * var(--ts-base) * var(--ts-disc) + 12px); }
-#last-discard:not(:empty):not(.taking) { background: rgba(10,26,18,.55); border-radius: 8px; padding: 5px; box-shadow: 0 2px 10px rgba(0,0,0,.4); }
-/* a claimed tile lifts up and fades so a Pon/Chi/Kan/Ron is unmistakable */
-.tile.taken { animation: discardTaken .45s cubic-bezier(.4,0,.2,1) forwards; pointer-events: none; position: relative; z-index: 6; }
-@keyframes discardTaken { to { transform: translateY(-42px) scale(1.08); opacity: 0; } }
+#last-discard:not(:empty) { background: rgba(10,26,18,.55); border-radius: 8px; padding: 5px; box-shadow: 0 2px 10px rgba(0,0,0,.4); }
 
 /* ---- my zone is the bottom-left quadrant (a .seat); just tune spacing */
 #my-zone { gap: 3px; }
 #my-zone .seat-info { justify-content: center; }
-#my-played { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; align-content: center; min-height: calc(33px * var(--ts-base) * var(--ts-played)); }
+#my-played { display: flex; gap: 6px; justify-content: safe center; flex-wrap: nowrap; align-items: center;
+  height: calc(33px * var(--ts-base) * var(--ts-played) + 6px); overflow-x: auto; overflow-y: hidden;
+  min-width: 0; max-width: calc(200px * var(--ts-base) * var(--ts-disc) + 20px); }
+/* played tiles keep their size and scroll sideways (never squish or wrap) */
+.seat-played > *, #my-played > * { flex-shrink: 0; }
+/* hide the scrollbars on the played rows — they stay a clean fixed height */
+.seat-played::-webkit-scrollbar, #my-played::-webkit-scrollbar { display: none; }
+.seat-played, #my-played { scrollbar-width: none; }
 
 /* ================================================================ tiles */
 /* Four size knobs, set live by the Size sliders: --ts-hand (my hand),
@@ -399,11 +410,12 @@ body {
 .call-kan { color: #ff9d6e; text-shadow: 0 2px 10px rgba(0,0,0,.75), 0 0 22px rgba(255,157,110,.7); }
 .call-ron { color: #ff7a7a; text-shadow: 0 2px 10px rgba(0,0,0,.75), 0 0 24px rgba(255,122,122,.8); }
 @keyframes callFx {
-  0%   { opacity: 0; transform: translate(-50%,-50%) scale(.3) rotate(-8deg); }
-  18%  { opacity: 1; transform: translate(-50%,-50%) scale(1.3) rotate(3deg); }
-  32%  { transform: translate(-50%,-50%) scale(1) rotate(0); }
-  75%  { opacity: 1; }
-  100% { opacity: 0; transform: translate(-50%,-50%) scale(1.05); }
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(.3) rotate(-8deg); }
+  18%  { opacity: 1; transform: translate(-50%, -50%) scale(1.3) rotate(3deg); }
+  32%  { transform: translate(-50%, -50%) scale(1) rotate(0); }
+  68%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  /* then float upward as it fades out, so the call reads clearly as it leaves */
+  100% { opacity: 0; transform: translate(-50%, calc(-50% - 52px)) scale(1.05); }
 }
 
 /* ================================================================ responsive */
