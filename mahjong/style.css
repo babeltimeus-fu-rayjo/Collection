@@ -94,7 +94,7 @@ body {
      whichever is wider. A fixed cap would mean raising the Played/Discards
      sliders could never fit side by side however wide the screen. At 100% this
      works out to the same 440px as before. */
-  --seat-max: calc((340px * var(--ts-played) + 240px * var(--ts-disc)) * var(--ts-base) + 36px);
+  --seat-max: calc((320px * var(--ts-played) + 240px * var(--ts-disc)) * var(--ts-base) + 36px);
   grid-template-columns: minmax(0, var(--seat-max)) 104px minmax(0, var(--seat-max));
   grid-template-rows: auto auto;
 }
@@ -148,13 +148,18 @@ body {
 .seat-tl .seat-board, .seat-bl .seat-board { flex-direction: row-reverse; }  /* sets to the left  */
 .seat-tr .seat-board, #my-zone .seat-board { flex-direction: row; }          /* sets to the right */
 
-/* Exactly two melds fit per row (2 x 163px + 2px gap = 328px, which sets the
-   width); flowers/seasons fill a row of their own (8 x 40px + 7 x 1px = 327px). The height is reserved for the ruleset's maximum
-   (--played-rows), so every set stays visible and the quadrant never resizes. */
+/* Exactly two melds fit per row, and eight flowers fill a row of their own —
+   both come to 8 tiles wide plus 8px of gaps (2 melds: 6 x 1px inside + 2px
+   between; flowers: 7 x 1px). Only the TILES take the size knob, so the gaps are
+   added outside the multiplication rather than being scaled along with them; the
+   height is likewise exactly --played-rows tile-heights plus the gaps between
+   them. That leaves no dead strip at the box's edges at any tile size, while
+   still reserving the ruleset's maximum so the quadrant never resizes. */
 .seat-played, #my-played {
   display: flex; flex-wrap: wrap; gap: 2px; align-content: flex-start; flex: 0 0 auto;
-  width: calc(340px * var(--ts-base) * var(--ts-played));
-  height: calc(var(--played-rows, 4) * (52px * var(--ts-base) * var(--ts-played) + 2px));
+  width: calc(320px * var(--ts-base) * var(--ts-played) + 8px);
+  height: calc(var(--played-rows, 4) * 52px * var(--ts-base) * var(--ts-played)
+             + (var(--played-rows, 4) - 1) * 2px);
   overflow: hidden;
 }
 /* sets hug the pond and grow outward */
