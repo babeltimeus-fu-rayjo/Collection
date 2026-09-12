@@ -258,10 +258,15 @@ function renderMeld(meld) {
   return g;
 }
 
-// fade the bottom edge of a played area when its melds/flowers run past the two
-// reserved rows, so it reads as scrollable instead of looking clipped
-function markOverflow(elm) {
-  if (elm) elm.classList.toggle('overflowing', elm.scrollHeight > elm.clientHeight + 2);
+// A player's face-up tiles, one set per row: flowers/seasons share the top row,
+// then each meld gets its own row beneath it.
+function renderPlayed(container, p) {
+  if (p.flowers && p.flowers.length) {
+    const row = el('div', 'played-row');
+    for (const f of p.flowers) row.append(renderTile(f, { small: true }));
+    container.append(row);
+  }
+  for (const m of p.melds) container.append(renderMeld(m));
 }
 
 // -------- tile size — independent knobs per category, saved per browser --------
@@ -860,11 +865,7 @@ function renderGame(view, sess) {
     // played: flowers first, then melds (sets)
     const playedEl = el_.querySelector('.seat-played');
     playedEl.replaceChildren();
-    if (p) {
-      for (const f of (p.flowers || [])) playedEl.append(renderTile(f, { small: true }));
-      for (const m of p.melds) playedEl.append(renderMeld(m));
-    }
-    markOverflow(playedEl);
+    if (p) renderPlayed(playedEl, p);
 
     // discards
     const discEl = el_.querySelector('.seat-discards');
@@ -876,6 +877,11 @@ function renderGame(view, sess) {
       }
     }
   }
+
+  // reserve exactly the played rows this ruleset can produce — one per meld, plus
+  // a row for flowers/seasons where they exist — so nothing ever wraps or shifts
+  const maxMelds = view.variant === 'tw' ? 5 : 4;
+  $('#screen-game').style.setProperty('--played-rows', maxMelds + (view.variant === 'jp' ? 0 : 1));
 
   // center info: round (prevailing wind + hand number) and tiles left in the wall
   const roundName = { E: 'East', S: 'South', W: 'West', N: 'North' }[view.roundWind] || view.roundWind;
@@ -940,11 +946,7 @@ function renderGame(view, sess) {
   // my played: flowers first, then melds (sets)
   const myPlayed = $('#my-played');
   myPlayed.replaceChildren();
-  if (me) {
-    for (const f of (me.flowers || [])) myPlayed.append(renderTile(f, { small: true }));
-    for (const m of me.melds) myPlayed.append(renderMeld(m));
-  }
-  markOverflow(myPlayed);
+  if (me) renderPlayed(myPlayed, me);
 
   // hand — reconciled by id so an in-progress drag isn't disrupted and the
   // tile count stays exact
