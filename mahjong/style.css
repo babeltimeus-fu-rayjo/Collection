@@ -93,7 +93,7 @@ body {
      sliders could never fit side by side however wide the screen. At 100% this
      works out to the same 440px as before. */
   --seat-max: max(
-    calc((200px * var(--ts-played) + 200px * var(--ts-disc)) * var(--ts-base) + 40px),
+    calc((200px * var(--ts-played) + 150px * var(--ts-disc)) * var(--ts-base) + 36px),
     calc(250px * var(--ts-base) * var(--ts-ohand) + 16px)
   );
   grid-template-columns: minmax(0, var(--seat-max)) 104px minmax(0, var(--seat-max));
@@ -165,7 +165,10 @@ body {
      instead of overflowing — so the table layout never breaks */
   --tsd: var(--ts-disc);
   display: grid;
-  grid-template-columns: repeat(8, calc(25px * var(--ts-base) * var(--tsd)));
+  /* 6 wide x 4 deep = 24 slots — more than a player can discard in a hand (the
+     wall only allows ~19 draws each) and 54px narrower than the old 8-wide pond,
+     which is what lets the sets sit beside it on far more screens */
+  grid-template-columns: repeat(6, calc(25px * var(--ts-base) * var(--tsd)));
   grid-auto-rows: calc(33px * var(--ts-base) * var(--tsd));
   align-content: start; gap: 2px; padding: 3px;
   /* Fixed 4-row pond. It never shrinks — if it can't sit beside the played sets
