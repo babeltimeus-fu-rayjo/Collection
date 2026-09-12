@@ -258,7 +258,7 @@ function renderMeld(meld) {
 }
 
 // -------- tile size — independent knobs per category, saved per browser --------
-const SZ_MIN = 0.6, SZ_MAX = 2.8;
+const SZ_MIN = 0.6, SZ_MAX = 2.0;
 const SZ_KEYS = ['hand', 'ohand', 'played', 'disc'];
 function loadSize(key) {
   try { const v = parseFloat(localStorage.getItem(`mjg-ts-${key}`)); if (Number.isFinite(v)) return Math.min(SZ_MAX, Math.max(SZ_MIN, v)); } catch {}

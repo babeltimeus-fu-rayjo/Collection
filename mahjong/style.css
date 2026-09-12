@@ -115,7 +115,10 @@ body {
    doesn't shift as tiles get melded / flowers drawn / the hand shrinks. The
    played row is a FIXED one-row height that scrolls sideways when a player racks
    up many melds/flowers, so it never grows and shoves the rest of the table. */
-.seat-hand { display: flex; gap: 1px; flex-wrap: wrap; justify-content: center; align-content: center; min-height: calc(20px * var(--ts-base) * var(--ts-ohand)); }
+.seat-hand { display: flex; gap: 1px; flex-wrap: nowrap; justify-content: safe center; align-items: center;
+  height: calc(20px * var(--ts-base) * var(--ts-ohand) + 4px);
+  min-width: 0; max-width: calc(200px * var(--ts-base) * var(--ts-disc) + 20px);
+  overflow-x: auto; overflow-y: hidden; }
 .seat-played { display: flex; gap: 4px; flex-wrap: nowrap; justify-content: safe center; align-items: center;
   height: calc(33px * var(--ts-base) * var(--ts-played) + 6px); overflow-x: auto; overflow-y: hidden;
   /* cap to the discard tray's width so a run of melds can't widen the quadrant */
@@ -131,8 +134,9 @@ body {
   grid-template-columns: repeat(8, calc(25px * var(--ts-base) * var(--tsd)));
   grid-auto-rows: calc(33px * var(--ts-base) * var(--tsd));
   align-content: start; gap: 2px; padding: 3px;
-  max-width: 100%; overflow-x: auto;
-  min-height: calc(33px * var(--ts-base) * var(--tsd) * 3 + 10px);
+  /* fixed 3-row tray: a long pond scrolls inside instead of growing the quadrant */
+  max-width: 100%; overflow: auto;
+  height: calc(33px * var(--ts-base) * var(--tsd) * 3 + 10px);
   border-radius: 5px; background: rgba(0,0,0,.13);
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
 }
@@ -179,11 +183,13 @@ body {
 #my-played { display: flex; gap: 6px; justify-content: safe center; flex-wrap: nowrap; align-items: center;
   height: calc(33px * var(--ts-base) * var(--ts-played) + 6px); overflow-x: auto; overflow-y: hidden;
   min-width: 0; max-width: calc(200px * var(--ts-base) * var(--ts-disc) + 20px); }
-/* played tiles keep their size and scroll sideways (never squish or wrap) */
-.seat-played > *, #my-played > * { flex-shrink: 0; }
-/* hide the scrollbars on the played rows — they stay a clean fixed height */
-.seat-played::-webkit-scrollbar, #my-played::-webkit-scrollbar { display: none; }
-.seat-played, #my-played { scrollbar-width: none; }
+/* played/hand tiles keep their size and scroll sideways (never squish or wrap) */
+.seat-played > *, #my-played > *, .seat-hand > * { flex-shrink: 0; }
+/* hide scrollbars on all the fixed-size seat trays so a scrollbar never eats
+   layout width/height — they still scroll by wheel/drag */
+.seat-hand, .seat-played, #my-played, .seat-discards, #my-discards { scrollbar-width: none; }
+.seat-hand::-webkit-scrollbar, .seat-played::-webkit-scrollbar, #my-played::-webkit-scrollbar,
+.seat-discards::-webkit-scrollbar, #my-discards::-webkit-scrollbar { display: none; }
 
 /* ================================================================ tiles */
 /* Four size knobs, set live by the Size sliders: --ts-hand (my hand),
