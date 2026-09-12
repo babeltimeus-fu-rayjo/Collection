@@ -257,6 +257,12 @@ function renderMeld(meld) {
   return g;
 }
 
+// fade the right edge of a played row when its melds/flowers overflow the column,
+// so it reads as scrollable instead of looking clipped
+function markOverflow(elm) {
+  if (elm) elm.classList.toggle('overflowing', elm.scrollWidth > elm.clientWidth + 2);
+}
+
 // -------- tile size — independent knobs per category, saved per browser --------
 const SZ_MIN = 0.6, SZ_MAX = 2.0;
 const SZ_KEYS = ['hand', 'ohand', 'played', 'disc'];
@@ -857,6 +863,7 @@ function renderGame(view, sess) {
       for (const f of (p.flowers || [])) playedEl.append(renderTile(f, { small: true }));
       for (const m of p.melds) playedEl.append(renderMeld(m));
     }
+    markOverflow(playedEl);
 
     // discards
     const discEl = el_.querySelector('.seat-discards');
@@ -936,6 +943,7 @@ function renderGame(view, sess) {
     for (const f of (me.flowers || [])) myPlayed.append(renderTile(f, { small: true }));
     for (const m of me.melds) myPlayed.append(renderMeld(m));
   }
+  markOverflow(myPlayed);
 
   // hand — reconciled by id so an in-progress drag isn't disrupted and the
   // tile count stays exact
