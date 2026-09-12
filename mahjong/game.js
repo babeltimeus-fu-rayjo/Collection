@@ -1377,9 +1377,12 @@ function scoreTW(G, winnerSeat, loserSeat, isTsumo) {
   if (p.flowers.length > 0) tai.push({ name: `${p.flowers.length} flower(s)`, val: p.flowers.length });
 
   const total = Math.max(1, tai.reduce((s, t) => s + t.val, 0));
-  const base = 200;
-  const points = base * Math.pow(2, Math.min(total, 10));
-  return { tai, total, points, summary: `${total} tai (${points} pts)`, yaku: tai };
+  // additive Taiwanese scoring: a flat base (底) plus a fixed amount per tai (台),
+  // so each tai is worth a clear, equal number of points and the total adds up
+  const base = 1000;   // 底
+  const perTai = 500;  // 台
+  const points = base + total * perTai;
+  return { tai, total, points, base, perTai, summary: `${total} tai — ${points} pts`, yaku: tai };
 }
 
 // ---------------------------------------------------------------- scoring helpers

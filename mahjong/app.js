@@ -1261,20 +1261,24 @@ function showHandEnd(view, sess) {
     title.textContent = hr.tsumo ? `${winner?.name} — Tsumo!` : `${winner?.name} — Ron!`;
     const sc = hr.scoring || {};
 
-    // 1) every yaku / faan / tai with its individual value
+    // 1) every yaku / faan / tai with its individual value (and, when scoring is
+    //    additive per tai, the points that tai contributes)
     const list = el('div', 'he-yaku');
     const items = sc.yaku || [];
     if (items.length) {
       for (const y of items) {
         const v = y.han != null ? y.han : y.val;
-        list.append(heRow(y.name, `${v} ${unit}`));
+        const valStr = sc.perTai != null ? `${v} ${unit} · +${v * sc.perTai}` : `${v} ${unit}`;
+        list.append(heRow(y.name, valStr));
       }
     } else {
       list.append(heRow('No yaku', ''));
     }
+    // the flat base (底) that every win scores, shown so the total adds up
+    if (sc.base != null && sc.perTai != null) list.append(heRow('Base', `+${sc.base}`));
     detail.append(list);
 
-    // 2) the total count (+ fu for Riichi), then the hand's base value
+    // 2) the total count (+ fu for Riichi), then the hand's total value
     const totalStr = view.variant === 'jp'
       ? `${sc.han || 0} han · ${sc.fu || 0} fu`
       : `${sc.total || 0} ${unit}`;
