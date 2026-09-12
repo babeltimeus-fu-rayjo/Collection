@@ -94,46 +94,54 @@
     <div id="table">
       <!-- top-left: opponent across (seat+2) -->
       <div class="seat seat-tl" data-seat="">
-        <div class="seat-info"><span class="seat-name"></span><span class="seat-wind"></span><span class="seat-score"></span></div>
         <div class="seat-inner">
-          <div class="seat-hand"></div>
           <div class="seat-board">
+            <div class="seat-pond">
+              <div class="seat-info"><span class="seat-name"></span><span class="seat-wind"></span><span class="seat-score"></span></div>
+              <div class="seat-hand"></div>
+              <div class="seat-discards"></div>
+            </div>
             <div class="seat-played"></div>
-            <div class="seat-discards"></div>
           </div>
         </div>
       </div>
       <!-- top-right: opponent to my right (seat+1) -->
       <div class="seat seat-tr" data-seat="">
-        <div class="seat-info"><span class="seat-name"></span><span class="seat-wind"></span><span class="seat-score"></span></div>
         <div class="seat-inner">
-          <div class="seat-hand"></div>
           <div class="seat-board">
+            <div class="seat-pond">
+              <div class="seat-info"><span class="seat-name"></span><span class="seat-wind"></span><span class="seat-score"></span></div>
+              <div class="seat-hand"></div>
+              <div class="seat-discards"></div>
+            </div>
             <div class="seat-played"></div>
-            <div class="seat-discards"></div>
           </div>
         </div>
       </div>
       <!-- bottom-left: opponent to my left (seat+3) -->
       <div class="seat seat-bl" data-seat="">
-        <div class="seat-info"><span class="seat-name"></span><span class="seat-wind"></span><span class="seat-score"></span></div>
         <div class="seat-inner">
-          <div class="seat-hand"></div>
           <div class="seat-board">
+            <div class="seat-pond">
+              <div class="seat-info"><span class="seat-name"></span><span class="seat-wind"></span><span class="seat-score"></span></div>
+              <div class="seat-hand"></div>
+              <div class="seat-discards"></div>
+            </div>
             <div class="seat-played"></div>
-            <div class="seat-discards"></div>
           </div>
         </div>
       </div>
       <!-- bottom-right: me (empty hand row keeps my quadrant the same shape as
            the opponents' — my actual hand is the big row below the table) -->
       <div id="my-zone" class="seat seat-br">
-        <div class="seat-info"><span id="my-name"></span><span id="my-wind"></span><span id="my-score"></span></div>
         <div class="seat-inner">
-          <div class="seat-hand"></div>
           <div class="seat-board">
+            <div class="seat-pond">
+              <div class="seat-info"><span id="my-name"></span><span id="my-wind"></span><span id="my-score"></span></div>
+              <div class="seat-hand"></div>
+              <div id="my-discards"></div>
+            </div>
             <div id="my-played"></div>
-            <div id="my-discards"></div>
           </div>
         </div>
       </div>

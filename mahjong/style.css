@@ -81,7 +81,9 @@ body {
    player's discard tray the same size. --bubble-reserve is the strip kept above
    the top row so those players' speech bubbles clear the top bar. */
 #table {
-  --bubble-reserve: 64px;
+  /* headroom for the top players' speech bubbles, which stack upward from the
+     seat; one bubble's worth is enough to keep them off the top bar */
+  --bubble-reserve: 40px;
   flex: 0 0 auto; display: grid; gap: 8px 12px; padding: var(--bubble-reserve) 8px 0; position: relative;
   /* stretch across the width and centre the tracks, so the side columns get a
      generous FIXED width (room for a few melds without clipping) while the centre
@@ -92,10 +94,7 @@ body {
      whichever is wider. A fixed cap would mean raising the Played/Discards
      sliders could never fit side by side however wide the screen. At 100% this
      works out to the same 440px as before. */
-  --seat-max: max(
-    calc((216px * var(--ts-played) + 150px * var(--ts-disc)) * var(--ts-base) + 36px),
-    calc(250px * var(--ts-base) * var(--ts-ohand) + 16px)
-  );
+  --seat-max: calc((216px * var(--ts-played) + 150px * var(--ts-disc)) * var(--ts-base) + 36px);
   grid-template-columns: minmax(0, var(--seat-max)) 104px minmax(0, var(--seat-max));
   grid-template-rows: auto auto;
 }
@@ -127,17 +126,25 @@ body {
    doesn't shift as tiles get melded / flowers drawn / the hand shrinks. The
    played row is a FIXED one-row height that scrolls sideways when a player racks
    up many melds/flowers, so it never grows and shoves the rest of the table. */
-.seat-hand { display: flex; gap: 1px; flex-wrap: nowrap; justify-content: safe center; align-items: center;
+/* Name, concealed hand and pond form one column, so the name and hand sit ABOVE
+   the pond and share its centre line. The column is exactly the pond's width, so
+   the hand's face-down tiles compress to match rather than widening the quadrant. */
+.seat-pond { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 0 0 auto;
+  width: calc(150px * var(--ts-base) * var(--ts-disc) + 16px); }
+.seat-hand { display: flex; gap: 1px; flex-wrap: nowrap; justify-content: center; align-items: center;
   height: calc(20px * var(--ts-base) * var(--ts-ohand) + 4px);
-  min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; }
+  width: 100%; min-width: 0; overflow: hidden; }
 /* Played sets sit on the OUTER edge beside the pond — two sets to a row — so the
    discard tray keeps its full width and the quadrant stays short. */
 /* wraps rather than squeezing: if the sets and the pond can't share a line (big
    tile sizes, narrow window) the sets drop to their own line and the pond keeps
    its full size */
 .seat-board { display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-start; justify-content: center; max-width: 100%; }
-.seat-tl .seat-board, .seat-bl .seat-board { flex-direction: row; }          /* sets to the left  */
-.seat-tr .seat-board, #my-zone .seat-board { flex-direction: row-reverse; }  /* sets to the right */
+/* The pond group is first in the DOM so a wrap puts it on the TOP line and drops
+   the sets beneath it; these reversals keep the sets on the quadrant's outer edge
+   while they're side by side. */
+.seat-tl .seat-board, .seat-bl .seat-board { flex-direction: row-reverse; }  /* sets to the left  */
+.seat-tr .seat-board, #my-zone .seat-board { flex-direction: row; }          /* sets to the right */
 
 /* Exactly two melds fit per row (2 x 99px + 2px gap = 200px); flowers/seasons
    fill a row of their own. The height is reserved for the ruleset's maximum
@@ -229,7 +236,7 @@ body {
 #my-zone { gap: 3px; }
 #my-zone .seat-info { justify-content: center; }
 /* played/hand tiles always keep their size (never squish) */
-.seat-played > *, #my-played > *, .seat-hand > *, .played-row > * { flex-shrink: 0; }
+.seat-played > *, #my-played > *, .played-row > * { flex-shrink: 0; }
 /* hide scrollbars on all the fixed-size seat trays so a scrollbar never eats
    layout width/height — they still scroll by wheel/drag */
 .seat-hand, .seat-played, #my-played, .seat-discards, #my-discards { scrollbar-width: none; }
