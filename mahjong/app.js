@@ -27,6 +27,7 @@ import {
   markBotTakeover,
   markSeatClaimed,
   markSeatResigned,
+  SCORING_GUIDE,
 } from './game.js';
 import { initSettings } from '../common/settings.js';
 import '../common/feedtoggle.js';
@@ -257,10 +258,10 @@ function renderMeld(meld) {
   return g;
 }
 
-// fade the right edge of a played row when its melds/flowers overflow the column,
-// so it reads as scrollable instead of looking clipped
+// fade the bottom edge of a played area when its melds/flowers run past the two
+// reserved rows, so it reads as scrollable instead of looking clipped
 function markOverflow(elm) {
-  if (elm) elm.classList.toggle('overflowing', elm.scrollWidth > elm.clientWidth + 2);
+  if (elm) elm.classList.toggle('overflowing', elm.scrollHeight > elm.clientHeight + 2);
 }
 
 // -------- tile size — independent knobs per category, saved per browser --------
@@ -1243,6 +1244,38 @@ function heRow(label, value, cls) {
   return row;
 }
 
+// cheatsheet of the special hands each ruleset scores; the ruleset currently in
+// play is listed first and flagged, the others stay below for reference
+function renderCheatsheet() {
+  const body = $('#cheat-body');
+  if (!body) return;
+  const active = (lastView && lastView.variant) || (session && session.selectedVariant) || null;
+  const guides = [...SCORING_GUIDE].sort((a, b) => (b.key === active) - (a.key === active));
+  body.replaceChildren();
+  for (const g of guides) {
+    const sec = el('div', 'cheat-sec');
+    const head = el('div', 'cheat-head');
+    head.append(el('span', 'cheat-name', g.name));
+    if (g.key === active) head.append(el('span', 'cheat-tag', 'in play'));
+    sec.append(head);
+    sec.append(el('div', 'cheat-note', g.note));
+    const rows = el('div', 'cheat-rows');
+    for (const [name, val, req] of g.rows) {
+      const r = el('div', 'cheat-row');
+      // "1 each" reads better as "1 faan each" than "1 each faan"
+      const valStr = /\beach$/.test(val)
+        ? `${val.replace(/\s*each$/, '')} ${g.unit} each`
+        : `${val} ${g.unit}`;
+      r.append(el('span', 'cheat-hand', name));
+      r.append(el('span', 'cheat-val', valStr));
+      r.append(el('span', 'cheat-req', req));
+      rows.append(r);
+    }
+    sec.append(rows);
+    body.append(sec);
+  }
+}
+
 function showHandEnd(view, sess) {
   const m = $('#handend');
   m.classList.remove('hidden');
@@ -1261,29 +1294,36 @@ function showHandEnd(view, sess) {
     title.textContent = hr.tsumo ? `${winner?.name} — Tsumo!` : `${winner?.name} — Ron!`;
     const sc = hr.scoring || {};
 
-    // 1) every yaku / faan / tai with its individual value (and, when scoring is
-    //    additive per tai, the points that tai contributes)
+    // 1) every yaku / faan / tai with its value — and, where the ruleset doubles
+    //    per tai, what that line is worth as a multiplier (×2 per tai)
+    const doubles = sc.mult != null && sc.base != null;
     const list = el('div', 'he-yaku');
     const items = sc.yaku || [];
     if (items.length) {
       for (const y of items) {
         const v = y.han != null ? y.han : y.val;
-        const valStr = sc.perTai != null ? `${v} ${unit} · +${v * sc.perTai}` : `${v} ${unit}`;
-        list.append(heRow(y.name, valStr));
+        list.append(heRow(y.name, doubles ? `${v} ${unit} · ×${Math.pow(2, v)}` : `${v} ${unit}`));
       }
     } else {
       list.append(heRow('No yaku', ''));
     }
-    // the flat base (底) that every win scores, shown so the total adds up
-    if (sc.base != null && sc.perTai != null) list.append(heRow('Base', `+${sc.base}`));
+    // spell out the two constants the score is built from
+    if (doubles) {
+      list.append(heRow('Base', `${sc.base} pts`));
+      list.append(heRow('Each tai', '×2'));
+    }
     detail.append(list);
 
-    // 2) the total count (+ fu for Riichi), then the hand's total value
-    const totalStr = view.variant === 'jp'
-      ? `${sc.han || 0} han · ${sc.fu || 0} fu`
-      : `${sc.total || 0} ${unit}`;
+    // 2) the total count (+ fu for Riichi), then the hand's value with its working
+    let totalStr;
+    if (view.variant === 'jp') totalStr = `${sc.han || 0} han · ${sc.fu || 0} fu`;
+    else if (doubles && sc.capped < sc.total) totalStr = `${sc.total} ${unit} (capped at ${sc.taiCap})`;
+    else totalStr = `${sc.total || 0} ${unit}`;
     detail.append(heRow('Total', totalStr, 'he-total'));
-    detail.append(heRow('Hand value', `${sc.points ?? 0} pts`, 'he-total'));
+    const valueStr = doubles
+      ? `${sc.base} × ${sc.mult} = ${sc.points} pts`
+      : `${sc.points ?? 0} pts`;
+    detail.append(heRow('Hand value', valueStr, 'he-total'));
 
     // 3) how that value is paid out
     const pay = hr.payments;
@@ -1440,6 +1480,9 @@ for (const b of document.querySelectorAll('.btn-leave')) b.addEventListener('cli
 for (const b of document.querySelectorAll('.btn-rules')) b.addEventListener('click', () => $('#modal-rules').classList.remove('hidden'));
 $('#btn-rules-close').addEventListener('click', () => $('#modal-rules').classList.add('hidden'));
 $('#modal-rules').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
+for (const b of document.querySelectorAll('.btn-cheat')) b.addEventListener('click', () => { renderCheatsheet(); $('#modal-cheat').classList.remove('hidden'); });
+$('#btn-cheat-close').addEventListener('click', () => $('#modal-cheat').classList.add('hidden'));
+$('#modal-cheat').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
 // NB: the hand-end modal is deliberately NOT dismissible by a backdrop click — it
 // holds the host's "Deal next hand" button, and nothing re-opens it during the
 // handEnd phase, so dismissing it used to strand the whole table.

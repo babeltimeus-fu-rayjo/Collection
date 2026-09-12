@@ -120,9 +120,10 @@ body {
 .seat-hand { display: flex; gap: 1px; flex-wrap: nowrap; justify-content: safe center; align-items: center;
   height: calc(20px * var(--ts-base) * var(--ts-ohand) + 4px);
   min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; }
-.seat-played { display: flex; gap: 4px; flex-wrap: nowrap; justify-content: safe center; align-items: center;
-  height: calc(33px * var(--ts-base) * var(--ts-played) + 6px); overflow-x: auto; overflow-y: hidden;
-  /* fill the (fixed-width) column; only a very long run of melds scrolls */
+/* melds + flowers wrap into a FIXED two-row area: nothing is cut off sideways,
+   and the height never changes, so the quadrant can't shift */
+.seat-played { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; align-content: flex-start;
+  height: calc(66px * var(--ts-base) * var(--ts-played) + 12px); overflow-y: auto; overflow-x: hidden;
   min-width: 0; max-width: 100%; }
 /* discards live in a dedicated, recessed 3×8 tray so they read as a pile,
    clearly separate from the played sets above them */
@@ -181,16 +182,16 @@ body {
 /* ---- my zone is the bottom-left quadrant (a .seat); just tune spacing */
 #my-zone { gap: 3px; }
 #my-zone .seat-info { justify-content: center; }
-#my-played { display: flex; gap: 6px; justify-content: safe center; flex-wrap: nowrap; align-items: center;
-  height: calc(33px * var(--ts-base) * var(--ts-played) + 6px); overflow-x: auto; overflow-y: hidden;
+#my-played { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; align-content: flex-start;
+  height: calc(66px * var(--ts-base) * var(--ts-played) + 12px); overflow-y: auto; overflow-x: hidden;
   min-width: 0; max-width: 100%; }
 /* played/hand tiles keep their size and scroll sideways (never squish or wrap) */
 .seat-played > *, #my-played > *, .seat-hand > * { flex-shrink: 0; }
-/* when a played row overflows (a rare, very melded hand) fade its right edge so
-   it reads as scrollable rather than abruptly clipped */
+/* if a hand somehow melds past two rows, fade the bottom edge so it reads as
+   scrollable rather than abruptly clipped */
 .seat-played.overflowing, #my-played.overflowing {
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
-  mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent);
 }
 /* hide scrollbars on all the fixed-size seat trays so a scrollbar never eats
    layout width/height — they still scroll by wheel/drag */
@@ -328,6 +329,24 @@ body {
 .rules li { margin-bottom: 8px; }
 .rules b { color: #e8d5a3; }
 .btn-row { display: flex; gap: 8px; margin-top: 12px; }
+/* special-hands cheatsheet */
+#cheat-body { max-height: 60vh; overflow-y: auto; margin-bottom: 14px; }
+.cheat-sec { margin-bottom: 18px; }
+.cheat-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.cheat-name { color: #e8d5a3; font-weight: 700; font-size: 15px; }
+.cheat-tag { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; font-weight: 700;
+  color: #14261a; background: #e8d5a3; border-radius: 999px; padding: 2px 8px; }
+.cheat-note { font-size: 12px; color: #8ab89a; line-height: 1.45; margin-bottom: 8px; }
+.cheat-row { display: grid; grid-template-columns: minmax(108px, auto) minmax(64px, auto) 1fr; gap: 10px;
+  align-items: baseline; padding: 4px 0; border-top: 1px solid rgba(255,255,255,.07); font-size: 12.5px; }
+.cheat-hand { color: #cfe3d5; font-weight: 600; }
+.cheat-val { color: #f0c674; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cheat-req { color: #9fbf9f; line-height: 1.4; }
+@media (max-width: 600px) {
+  .cheat-row { grid-template-columns: 1fr auto; gap: 4px 10px; }
+  .cheat-req { grid-column: 1 / -1; }
+}
+
 /* hand-end breakdown: a label:value ledger of how the points were reached */
 #he-detail { font-size: 13px; line-height: 1.45; color: #b0c8a8; margin-bottom: 14px; }
 .he-row { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; }

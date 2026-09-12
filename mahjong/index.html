@@ -24,7 +24,10 @@
       <button id="btn-join" class="btn secondary">Join</button>
     </div>
     <div id="home-status" role="status"></div>
-    <button class="btn ghost btn-rules" type="button">How to play</button>
+    <div class="copy-row">
+      <button class="btn ghost btn-rules" type="button">How to play</button>
+      <button class="btn ghost btn-cheat" type="button">Hands &amp; scoring</button>
+    </div>
     <p class="small-print">An online Mahjong table for four, running peer-to-peer over WebRTC. Browsers find each other with Google STUN servers and a free signaling broker, then talk directly. The game lives in the host's tab — keep it open!</p>
   </section>
 
@@ -46,6 +49,7 @@
       <button id="btn-start" class="btn primary hidden" type="button">Start game</button>
       <div class="copy-row">
         <button class="btn ghost btn-rules" type="button">How to play</button>
+        <button class="btn ghost btn-cheat" type="button">Hands &amp; scoring</button>
         <button class="btn ghost btn-leave" type="button">Leave</button>
       </div>
     </div>
@@ -57,6 +61,7 @@
       <span id="room-chip">·····</span>
       <span class="spacer"></span>
       <button id="btn-size" class="btn ghost" type="button" title="Change tile size">Size</button>
+      <button class="btn ghost btn-cheat" type="button" title="Special hands &amp; scoring">Hands</button>
       <button class="btn ghost btn-rules" type="button">Rules</button>
       <button class="btn ghost btn-leave" type="button">Leave</button>
     </div>
@@ -164,6 +169,15 @@
         <li><b>Scoring:</b> the winner earns points based on the hand's value. Tsumo: all others pay. Ron: the discarder pays.</li>
       </ol>
       <button id="btn-rules-close" class="btn secondary" type="button">Got it</button>
+    </div>
+  </div>
+
+  <!-- SPECIAL HANDS / SCORING CHEATSHEET -->
+  <div id="modal-cheat" class="modal hidden">
+    <div class="panel wide">
+      <h2>Special hands &amp; scoring</h2>
+      <div id="cheat-body"></div>
+      <button id="btn-cheat-close" class="btn secondary" type="button">Got it</button>
     </div>
   </div>
 

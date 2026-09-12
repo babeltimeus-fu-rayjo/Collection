@@ -1107,6 +1107,70 @@ function getWaits(hand, variant, melds) {
 
 // ---------------------------------------------------------------- scoring
 
+// Player-facing cheatsheet of the special hands each ruleset scores. Kept next to
+// the scorers below — update both together if a hand's value changes.
+export const SCORING_GUIDE = [
+  {
+    key: 'hk',
+    name: 'Hong Kong',
+    unit: 'faan',
+    note: '13-tile hand: 4 sets + a pair. Minimum 3 faan to win. Faan → points: 3→8, 4→16, 5→32, 6→48, 7→64, 8–9→128, 10+→256.',
+    rows: [
+      ['Self-draw', '1', 'Win on the tile you drew yourself'],
+      ['Concealed hand', '1', 'Win on a discard with no open melds'],
+      ['Seat wind', '1', 'Triplet (or kan) of your own seat wind'],
+      ['Round wind', '1', 'Triplet (or kan) of the prevailing round wind'],
+      ['Dragon triplet', '1 each', 'Triplet of Red, Green or White dragon'],
+      ['All sequences', '1', 'Every set is a run'],
+      ['All triplets', '3', 'Every set is a triplet or kan'],
+      ['Mixed flush', '3', 'One suit plus honours'],
+      ['Full flush', '6', 'A single suit, no honours'],
+      ['All honours', '10', 'Only winds and dragons'],
+      ['Flowers', '1 each', 'Each flower / season you drew'],
+    ],
+  },
+  {
+    key: 'jp',
+    name: 'Japanese Riichi',
+    unit: 'han',
+    note: '13-tile hand: 4 sets + a pair. You need at least one yaku to win; the payout comes from han + fu, and the dealer pays (and receives) more.',
+    rows: [
+      ['Riichi', '1', 'Declared while concealed and tenpai (1000 pt bet)'],
+      ['Ippatsu', '1', 'Win within one go-around of your riichi'],
+      ['Menzen Tsumo', '1', 'Self-draw with a fully concealed hand'],
+      ['Tanyao', '1', 'No terminals (1 or 9) and no honours'],
+      ['Seat wind', '1', 'Triplet of your seat wind'],
+      ['Round wind', '1', 'Triplet of the round wind'],
+      ['Haku / Hatsu / Chun', '1 each', 'Triplet of White / Green / Red dragon'],
+      ['Pinfu', '1', 'All sequences, concealed'],
+      ['Iipeiko', '1', 'Two identical sequences, concealed'],
+      ['Toitoi', '2', 'Every set is a triplet or kan'],
+      ['Chiitoitsu', '2', 'Seven pairs, concealed'],
+      ['Honitsu', '3 / 2', 'One suit plus honours (concealed / open)'],
+      ['Chinitsu', '6 / 5', 'A single suit, no honours (concealed / open)'],
+      ['Kokushi Musou', '13', 'Thirteen orphans — yakuman, 32000 pts'],
+      ['Dora', '+1 each', 'Each dora tile; ura-dora also count after riichi'],
+    ],
+  },
+  {
+    key: 'tw',
+    name: 'Taiwanese',
+    unit: 'tai',
+    note: '16-tile hand: 5 sets + a pair. Base 200 points, doubled once per tai (×2), capped at 10 tai.',
+    rows: [
+      ['Self-draw', '1', 'Win on the tile you drew yourself'],
+      ['Concealed hand', '1', 'No open melds'],
+      ['Seat wind', '1', 'Triplet (or kan) of your own seat wind'],
+      ['Round wind', '1', 'Triplet (or kan) of the prevailing round wind'],
+      ['Dragon triplet', '1 each', 'Triplet of Red, Green or White dragon'],
+      ['All triplets', '4', 'Every set is a triplet or kan'],
+      ['Mixed flush', '4', 'One suit plus honours'],
+      ['Full flush', '8', 'A single suit, no honours'],
+      ['Flowers', '1 each', 'Each flower / season you drew'],
+    ],
+  },
+];
+
 function scoreHand(G, winnerSeat, loserSeat, isTsumo) {
   if (G.variant === 'jp') return scoreJP(G, winnerSeat, loserSeat, isTsumo);
   if (G.variant === 'tw') return scoreTW(G, winnerSeat, loserSeat, isTsumo);
@@ -1377,12 +1441,14 @@ function scoreTW(G, winnerSeat, loserSeat, isTsumo) {
   if (p.flowers.length > 0) tai.push({ name: `${p.flowers.length} flower(s)`, val: p.flowers.length });
 
   const total = Math.max(1, tai.reduce((s, t) => s + t.val, 0));
-  // additive Taiwanese scoring: a flat base (底) plus a fixed amount per tai (台),
-  // so each tai is worth a clear, equal number of points and the total adds up
-  const base = 1000;   // 底
-  const perTai = 500;  // 台
-  const points = base + total * perTai;
-  return { tai, total, points, base, perTai, summary: `${total} tai — ${points} pts`, yaku: tai };
+  // Taiwanese scoring: a base (底) doubled once per tai (台), capped at 10 tai.
+  // base/mult/capped are reported so the hand-end screen can show the arithmetic.
+  const base = 200;        // 底
+  const taiCap = 10;
+  const capped = Math.min(total, taiCap);
+  const mult = Math.pow(2, capped);
+  const points = base * mult;
+  return { tai, total, points, base, mult, capped, taiCap, summary: `${total} tai (${points} pts)`, yaku: tai };
 }
 
 // ---------------------------------------------------------------- scoring helpers
