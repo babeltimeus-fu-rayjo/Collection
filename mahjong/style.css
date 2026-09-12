@@ -148,8 +148,8 @@ body {
 .seat-tl .seat-board, .seat-bl .seat-board { flex-direction: row-reverse; }  /* sets to the left  */
 .seat-tr .seat-board, #my-zone .seat-board { flex-direction: row; }          /* sets to the right */
 
-/* Exactly two melds fit per row (2 x 163px + 2px gap = 328px); flowers/seasons
-   fill a row of their own (8 x 40px + 7 x 2px = 334px, which sets the width). The height is reserved for the ruleset's maximum
+/* Exactly two melds fit per row (2 x 163px + 2px gap = 328px, which sets the
+   width); flowers/seasons fill a row of their own (8 x 40px + 7 x 1px = 327px). The height is reserved for the ruleset's maximum
    (--played-rows), so every set stays visible and the quadrant never resizes. */
 .seat-played, #my-played {
   display: flex; flex-wrap: wrap; gap: 2px; align-content: flex-start; flex: 0 0 auto;
@@ -160,10 +160,11 @@ body {
 /* sets hug the pond and grow outward */
 .seat-tl .seat-played, .seat-bl .seat-played { justify-content: flex-end; }
 .seat-tr .seat-played, #my-played { justify-content: flex-start; }
-/* Flowers & seasons share one row. They're independent tiles, not a set, so they
-   get the same 2px separation that sits between melds — the column below is sized
-   to fit all 8 of them at that spacing (8 x 40px + 7 x 2px = 334px). */
-.played-row { display: flex; gap: 2px; flex-wrap: nowrap; }
+/* Flowers & seasons share one row, on the SAME 1px pitch the tiles inside a meld
+   use. Anything looser makes the row wider than the meld rows beneath it, and a
+   row of 8 tiles that outruns every row below reads as bigger tiles even when
+   they measure identically (8 x 40px + 7 x 1px = 327px, against 328px of melds). */
+.played-row { display: flex; gap: 1px; flex-wrap: nowrap; }
 
 /* No width breakpoint here on purpose: .seat-board wraps on its own, so the sets
    stay beside the pond whenever they actually fit (which depends on the tile-size
