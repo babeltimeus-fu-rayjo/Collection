@@ -34,6 +34,7 @@ import '../common/feedtoggle.js';
 import '../common/version.js';
 
 const cfg = initSettings('mjg', [
+  { key: 'revealBots', label: "Reveal bots' hands", def: false, bool: true, section: 'Testing', host: true, hint: 'Turn the bots\' concealed tiles face up while the hand is still being played, so you can see what they are holding. Only the host builds views, so this reveals them to everyone at the table.' },
   { key: 'botDelay', label: 'Bot thinking delay', def: [1200, 800], section: 'Host pacing', host: true },
   { key: 'claimTimeout', label: 'Claim timeout (0 = off)', def: 0, section: 'Host pacing', host: true, hint: 'Auto-pass a player who hasn\'t responded to a claim after this long. 0 waits indefinitely (the default).' },
   { key: 'postFlyDelay', label: 'Pause after discard fly', def: 0, section: 'Host pacing', host: true, hint: 'Extra pause after a discarded tile finishes flying before the next bot acts. Bots always wait for the fly itself; this adds on top.' },
@@ -44,6 +45,20 @@ const cfg = initSettings('mjg', [
   { key: 'bubbleTrunc', label: 'Bubble text cap', def: 84, min: 12, max: 400, step: 4, unit: 'ch', ms: false, section: 'Bubbles & banners' },
   { key: 'flashMs', label: 'Banner duration', def: 1800, section: 'Bubbles & banners' },
 ]);
+
+// What the host is allowed to put in a view beyond what the rules expose. Only
+// the testing drawer's "Reveal bots' hands" lives here, and it is read fresh on
+// every broadcast, so the switch takes effect on the next state the host sends.
+const viewOpts = () => ({ revealBots: cfg.on('revealBots') });
+
+// Settings are stored, not observed, so a toggle would otherwise sit unseen
+// until somebody moved. Re-broadcast when the drawer changes, so ticking the box
+// lays the bots' tiles out straight away.
+document.addEventListener('change', (e) => {
+  if (!e.target.closest || !e.target.closest('#cfg-drawer')) return;
+  // after the drawer's own handler has saved the new value, not before it
+  setTimeout(() => { if (session && session.isHost && session.G) session.broadcast(); }, 0);
+}, true);
 
 // how long a discarded tile spends flying out of its quadrant; bots wait at
 // least this long after a discard (see scheduleBots) so the fly always lands
@@ -714,7 +729,7 @@ class HostSession {
     this.watchers.push({ id, name, conn, target });
     try {
       conn.send({ t: 'welcome', observer: true, code: this.code });
-      if (this.G) conn.send({ t: 'state', view: viewFor(this.G, target, this.code) });
+      if (this.G) conn.send({ t: 'state', view: viewFor(this.G, target, this.code, viewOpts()) });
     } catch {}
   }
 
@@ -753,15 +768,15 @@ class HostSession {
     if (!this.G) return;
     const wnames = this.watchers.map((x) => x.name);
     for (const [seat, conn] of this.conns) {
-      try { conn.send({ t: 'state', view: { ...viewFor(this.G, seat, this.code), watchers: wnames } }); } catch {}
+      try { conn.send({ t: 'state', view: { ...viewFor(this.G, seat, this.code, viewOpts()), watchers: wnames } }); } catch {}
     }
     for (const w of this.watchers) {
-      try { w.conn.send({ t: 'state', view: { ...viewFor(this.G, w.target, this.code), watchers: wnames } }); } catch {}
+      try { w.conn.send({ t: 'state', view: { ...viewFor(this.G, w.target, this.code, viewOpts()), watchers: wnames } }); } catch {}
     }
     pendingMove = false;
     selectedTile = null;
     showScreen('game');
-    renderGame({ ...viewFor(this.G, 0, this.code), watchers: wnames }, this);
+    renderGame({ ...viewFor(this.G, 0, this.code, viewOpts()), watchers: wnames }, this);
     this.scheduleBots();
     this.scheduleClaimTimeout();
   }

@@ -1719,10 +1719,12 @@ function botPickDiscard(G, p) {
 
 // ---------------------------------------------------------------- view
 
-export function viewFor(G, seat, code) {
+// opts.revealBots — a host-side testing switch that lays the bots' concealed
+// tiles face up mid-hand; see the settings drawer in app.js.
+export function viewFor(G, seat, code, opts = {}) {
   const p = playerBySeat(G, seat);
   // once the hand is over nothing is secret any more
-  const revealAll = G.phase === 'handEnd' || G.phase === 'over';
+  const handOver = G.phase === 'handEnd' || G.phase === 'over';
   const players = G.players.map((q) => {
     const isMe = q.seat === seat;
     return {
@@ -1731,8 +1733,9 @@ export function viewFor(G, seat, code) {
       bot: q.bot,
       connected: q.connected,
       // hidden while the hand is live; everyone's is laid open once it is over,
-      // so the table can be read before the score panel covers it
-      hand: (isMe || revealAll) ? q.hand : q.hand.map(() => null),
+      // so the table can be read before the score panel covers it — and a bot's
+      // can be laid open the whole time, for testing
+      hand: (isMe || handOver || (opts.revealBots && q.bot)) ? q.hand : q.hand.map(() => null),
       melds: q.melds,
       discards: q.discards,
       flowers: q.flowers,
