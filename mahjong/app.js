@@ -1157,6 +1157,23 @@ function renderGame(view, sess) {
     $('#faan-parts').textContent = o.parts.length
       ? `· ${o.parts.map((f) => f.name).join(', ')}${short ? ` · ${o.minToWin - o.total} more to win` : ''}`
       : `· nothing banked yet · ${o.minToWin} needed to win`;
+
+    // and the ways out: every shape that still reaches the minimum, nearest
+    // first, counting only tiles that are actually still available
+    const routes = $('#faan-routes');
+    routes.replaceChildren();
+    if (o.routes && o.routes.length) {
+      routes.append(el('span', '', `Ways to ${o.minToWin}+: `));
+      o.routes.slice(0, 2).forEach((r, i) => {
+        if (i) routes.append(el('span', '', '  ·  '));
+        const desc = `${r.parts.join(' + ') || 'any winning hand'}${r.selfDraw ? ' + self-draw' : ''}`;
+        routes.append(el('b', '', desc));
+        routes.append(el('span', '', ` → ${r.faan} faan `));
+        routes.append(r.away === 0 ? el('span', 'ready', '(ready)') : el('span', '', `(${r.away} away)`));
+      });
+    } else {
+      routes.append(el('span', '', 'No hand from here reaches 3 faan — play for the draw'));
+    }
   } else {
     faanBar.classList.add('hidden');
   }

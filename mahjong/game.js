@@ -1164,7 +1164,7 @@ export const SCORING_GUIDE = [
     key: 'jp',
     name: 'Japanese Riichi',
     unit: 'han',
-    note: '13-tile hand: 4 sets + a pair. You need at least one yaku to win; the payout comes from han + fu, and the dealer pays (and receives) more.',
+    note: ' 13-tile hand: 4 sets + a pair. A yaku is a named pattern, and the rows below ARE the yaku — you must hold at least one of them to declare a win at all. A hand that is merely complete, with no pattern, cannot be won on: you keep playing. The cheapest yaku are usually Riichi (just declare it while concealed and tenpai), Menzen Tsumo (self-draw a concealed hand) and Tanyao (no terminals or honours), so a concealed hand is nearly always worth something. Dora are a bonus on top and never count as your yaku. The payout comes from han + fu, and the dealer pays and receives more.'.trim(),
     rows: [
       ['Riichi', '1', 'Declared while concealed and tenpai (1000 pt bet)'],
       ['Ippatsu', '1', 'Win within one go-around of your riichi'],
@@ -1180,14 +1180,14 @@ export const SCORING_GUIDE = [
       ['Honitsu', '3 / 2', 'One suit plus honours (concealed / open)'],
       ['Chinitsu', '6 / 5', 'A single suit, no honours (concealed / open)'],
       ['Kokushi Musou', '13', 'Thirteen orphans — yakuman, 32000 pts'],
-      ['Dora', '+1 each', 'Each dora tile; ura-dora also count after riichi'],
+      ['Dora', '+1 each', 'Each dora tile; ura-dora also count after riichi. A bonus only — never a yaku by itself'],
     ],
   },
   {
     key: 'tw',
     name: 'Taiwanese',
     unit: 'tai',
-    note: '16-tile hand: 5 sets + a pair. Base 200 points, doubled once per tai (×2), capped at 10 tai.',
+    note: '16-tile hand: 5 sets + a pair. Points are additive: a flat 200 base (底) plus 200 for every tai (台), so 3 tai pays 200 + 600 = 800. Every hand scores at least 1 tai. On a self-draw each of the other three pays the full amount.',
     rows: [
       ['Self-draw', '1', 'Win on the tile you drew yourself'],
       ['Concealed hand', '1', 'No open melds'],
@@ -1779,6 +1779,281 @@ function botPickDiscard(G, p) {
   return scored[0].tile;
 }
 
+// ---------------------------------------------------------------- HK routes
+//
+// "What could this hand still be worth, and how far away is it?" — answered
+// exactly rather than guessed. Every scoring shape Hong Kong recognises is
+// measured against the tiles you hold AND the tiles still unseen, so a route
+// needing a fourth Red Dragon when three are already on the table is never
+// offered. Distance is the number of tiles you'd have to swap out, so a route
+// two away is two draws of work, not a vague aspiration.
+//
+// The engine is a max-reuse DP: for every shape, how many of my tiles can
+// survive into a finished hand of that shape? Tiles that can't survive are the
+// distance. Suits are walked value by value carrying the runs that straddle the
+// boundary; honours are independent, so they just convolve.
+
+
+const SUIT_BASE = { m: 0, p: 9, s: 18 };
+const SUIT_NAME = { m: 'characters', p: 'circles', s: 'bamboo' };
+const KEY_LIST = (() => {
+  const ks = [];
+  for (const s of SUITS) for (let v = 1; v <= 9; v++) ks.push(`${s}${v}`);
+  for (const w of HONOR_WINDS) ks.push(`w${w}`);
+  for (const d of HONOR_DRAGONS) ks.push(`d${d}`);
+  return ks;
+})();
+const KEY_IDX = new Map(KEY_LIST.map((k, i) => [k, i]));
+function keyIdx(key) { const i = KEY_IDX.get(key); return i === undefined ? -1 : i; }
+
+const NEG = -1e9;
+const SUITS_ORDER = SUITS;
+const HONORS_ORDER = [...HONOR_WINDS.map((w) => `w${w}`), ...HONOR_DRAGONS.map((d) => `d${d}`)];
+const MAX_HF = 6;          // most faan an honour pung set can be worth
+
+function emptySuitTable() {
+  return Array.from({ length: 5 }, () => [NEG, NEG]);
+}
+
+// max of my tiles reusable inside one 9-value suit, indexed [sets][pairUsed]
+function suitReuse(mine, supply, base, allowRun, allowTrip) {
+  const memo = new Map();
+  const go = (i, c2, c1) => {
+    const mk = (i * 5 + c2) * 5 + c1;
+    const hit = memo.get(mk);
+    if (hit) return hit;
+    const res = emptySuitTable();
+    if (i === 9) {
+      if (c2 === 0 && c1 === 0) res[0][0] = 0;
+      memo.set(mk, res);
+      return res;
+    }
+    const maxRun = (allowRun && i <= 6) ? 4 : 0;
+    for (let r = 0; r <= maxRun; r++) {
+      for (let t = 0; t <= (allowTrip ? 1 : 0); t++) {
+        for (let pr = 0; pr <= 1; pr++) {
+          const used = c2 + c1 + r + 3 * t + 2 * pr;
+          if (used > supply[base + i]) continue;
+          const gain = Math.min(used, mine[base + i]);
+          const sub = go(i + 1, c1, r);
+          for (let s = 0; s + r + t <= 4; s++) {
+            for (let p = 0; p + pr <= 1; p++) {
+              const v = sub[s][p];
+              if (v <= NEG / 2) continue;
+              const ns = s + r + t, np = p + pr;
+              if (gain + v > res[ns][np]) res[ns][np] = gain + v;
+            }
+          }
+        }
+      }
+    }
+    memo.set(mk, res);
+    return res;
+  };
+  return go(0, 0, 0);
+}
+
+function emptyHonorTable() {
+  // [sets][pair][honourFaan][honoursUsed]
+  return Array.from({ length: 5 }, () =>
+    Array.from({ length: 2 }, () =>
+      Array.from({ length: MAX_HF + 1 }, () => [NEG, NEG])));
+}
+
+// honours don't form runs, so each one is independent and the groups convolve
+function honorReuse(mine, supply, base, allowTrip, honVal) {
+  let cur = emptyHonorTable();
+  cur[0][0][0][0] = 0;
+  for (let j = 0; j < HONORS_ORDER.length; j++) {
+    const next = emptyHonorTable();
+    const idx = base + j;
+    for (let s = 0; s < 5; s++) for (let p = 0; p < 2; p++) {
+      for (let hf = 0; hf <= MAX_HF; hf++) for (let hu = 0; hu < 2; hu++) {
+        const have = cur[s][p][hf][hu];
+        if (have <= NEG / 2) continue;
+        for (let t = 0; t <= (allowTrip ? 1 : 0); t++) {
+          for (let pr = 0; pr <= 1; pr++) {
+            if (t && pr) continue;                 // 3 + 2 copies is five, never legal
+            const used = 3 * t + 2 * pr;
+            if (used > supply[idx]) continue;
+            if (s + t > 4 || p + pr > 1) continue;
+            const nhf = Math.min(MAX_HF, hf + (t ? honVal[j] : 0));
+            const nhu = (used > 0) ? 1 : hu;
+            const gain = Math.min(used, mine[idx]);
+            if (have + gain > next[s + t][p + pr][nhf][nhu]) {
+              next[s + t][p + pr][nhf][nhu] = have + gain;
+            }
+          }
+        }
+      }
+    }
+    cur = next;
+  }
+  return cur;
+}
+
+const ZERO_SUIT = (() => { const t = emptySuitTable(); t[0][0] = 0; return t; })();
+const ZERO_HONOR = (() => { const t = emptyHonorTable(); t[0][0][0][0] = 0; return t; })();
+
+function convolveSuits(tables) {
+  let cur = emptySuitTable();
+  cur[0][0] = 0;
+  for (const t of tables) {
+    const next = emptySuitTable();
+    for (let s = 0; s < 5; s++) for (let p = 0; p < 2; p++) {
+      if (cur[s][p] <= NEG / 2) continue;
+      for (let s2 = 0; s + s2 < 5; s2++) for (let p2 = 0; p + p2 < 2; p2++) {
+        const v = t[s2][p2];
+        if (v <= NEG / 2) continue;
+        if (cur[s][p] + v > next[s + s2][p + p2]) next[s + s2][p + p2] = cur[s][p] + v;
+      }
+    }
+    cur = next;
+  }
+  return cur;
+}
+
+// best reuse for a whole shape, plus the honour faan that came with it
+function shapeBest(suitPart, honorPart, need, requireHonor) {
+  let best = { reuse: NEG, hf: 0 };
+  for (let s = 0; s <= need; s++) for (let p = 0; p < 2; p++) {
+    const a = suitPart[s][p];
+    if (a <= NEG / 2) continue;
+    const s2 = need - s, p2 = 1 - p;
+    for (let hf = 0; hf <= MAX_HF; hf++) for (let hu = 0; hu < 2; hu++) {
+      if (requireHonor && hu === 0) continue;
+      const b = honorPart[s2][p2][hf][hu];
+      if (b <= NEG / 2) continue;
+      const reuse = a + b;
+      // more reuse first (closer), then more honour faan at the same distance
+      if (reuse > best.reuse || (reuse === best.reuse && hf > best.hf)) best = { reuse, hf };
+    }
+  }
+  return best;
+}
+
+const SET_MODES = [
+  { id: 'free', name: null, val: 0, run: true, trip: true },
+  { id: 'sequences', name: 'all sequences', val: 1, run: true, trip: false },
+  { id: 'triplets', name: 'all triplets', val: 3, run: false, trip: true },
+];
+
+function hkRoutesFor(ctx) {
+  // ctx: { hand, melds, flowers, seatWind, roundWind, seen } — seen counts every
+  // tile anyone can see that isn't in my hand (all discards, all melds).
+  const { hand, melds, flowers, seatWind: sw, roundWind: rw, seen } = ctx;
+  const need = 4 - melds.length;
+  if (need < 0) return [];
+
+  const mine = new Array(34).fill(0);
+  for (const t of hand) { const i = keyIdx(t.key); if (i >= 0) mine[i]++; }
+  const supply = new Array(34).fill(0);
+  for (let i = 0; i < 34; i++) supply[i] = Math.max(0, Math.min(4, 4 - (seen[i] || 0)));
+
+  const honVal = HONORS_ORDER.map((k) => {
+    let v = 0;
+    if (k === `w${sw}`) v += 1;
+    if (k === `w${rw}`) v += 1;
+    if (k[0] === 'd') v += 1;
+    return v;
+  });
+
+  // faan already banked in declared melds, plus flowers
+  let meldHon = 0;
+  for (const m of melds) {
+    const t = m.tiles[0];
+    if (!t) continue;
+    if (t.kind === 'wind' && t.v === sw) meldHon++;
+    if (t.kind === 'wind' && t.v === rw) meldHon++;
+    if (t.kind === 'dragon') meldHon++;
+  }
+  const flowerFaan = flowers.length;
+  const anyChiMeld = melds.some((m) => m.type === 'chi');
+  const allChiMelds = melds.every((m) => m.type === 'chi');
+  const meldKinds = new Set(melds.flatMap((m) => m.tiles.map((t) => t.kind)));
+
+  // suit tables, once per (suit, run/trip) combination — routes just reuse them
+  const suitTab = {};
+  for (const s of SUITS_ORDER) {
+    for (const m of SET_MODES) suitTab[`${s}:${m.id}`] = suitReuse(mine, supply, SUIT_BASE[s], m.run, m.trip);
+  }
+  const honTab = {};
+  for (const m of SET_MODES) honTab[m.id] = honorReuse(mine, supply, 27, m.trip, honVal);
+
+  const FLUSH = [
+    { id: 'any', name: null, val: 0, suits: SUITS_ORDER, honors: true, requireHonor: false },
+    ...SUITS_ORDER.map((s) => ({ id: `mixed:${s}`, name: `mixed flush in ${SUIT_NAME[s]}`, val: 3, suits: [s], honors: true, requireHonor: true })),
+    ...SUITS_ORDER.map((s) => ({ id: `full:${s}`, name: `full flush in ${SUIT_NAME[s]}`, val: 6, suits: [s], honors: false, requireHonor: false })),
+    { id: 'honors', name: 'all honours', val: 10, suits: [], honors: true, requireHonor: true },
+  ];
+
+  const concealed = hand.length;
+  const out = [];
+  for (const f of FLUSH) {
+    // a declared meld outside the flush rules it out before we start
+    if (f.suits.length < 3 || !f.honors) {
+      const okKinds = new Set(f.suits);
+      if (f.honors) { okKinds.add('wind'); okKinds.add('dragon'); }
+      if ([...meldKinds].some((k) => !okKinds.has(k))) continue;
+    }
+    for (const m of SET_MODES) {
+      if (m.id === 'sequences' && !allChiMelds) continue;
+      if (m.id === 'triplets' && anyChiMeld) continue;
+      const suits = SUITS_ORDER.map((s) => (f.suits.includes(s) ? suitTab[`${s}:${m.id}`] : ZERO_SUIT));
+      const hon = f.honors ? honTab[m.id] : ZERO_HONOR;
+      const best = shapeBest(convolveSuits(suits), hon, need, f.requireHonor);
+      if (best.reuse <= NEG / 2) continue;
+      const shape = f.val + m.val + best.hf + meldHon + flowerFaan;
+      const parts = [];
+      if (f.name) parts.push(f.name);
+      if (m.name) parts.push(m.name);
+      // faan, not pungs: an East pung in the East round is worth two on its own
+      const honFaan = best.hf + meldHon;
+      if (honFaan > 0) parts.push(`${honFaan} from dragon/wind pungs`);
+      if (flowerFaan > 0) parts.push(`${flowerFaan} flower${flowerFaan > 1 ? 's' : ''}`);
+      out.push({ id: `${f.id}|${m.id}`, parts, shape, away: concealed - best.reuse });
+    }
+  }
+  return out;
+}
+
+
+// Everything above is shape arithmetic. This turns a live game into the question
+// it answers, and adds the one faan the shape can't know about: a self-draw is
+// always available, so a route one short of the minimum is still a route.
+export function hkOutlook(G, seat) {
+  if (G.variant !== 'hk') return null;
+  const locked = hkLockedFaan(G, seat);
+  const p = playerBySeat(G, seat);
+
+  // every tile anyone can see that isn't in my hand — a route needing a fourth
+  // Red Dragon when three are already on the table is not a route
+  const seen = new Array(34).fill(0);
+  const bump = (t) => { const i = keyIdx(t.key); if (i >= 0) seen[i]++; };
+  for (const q of G.players) {
+    for (const t of q.discards) bump(t);
+    for (const m of q.melds) for (const t of m.tiles) bump(t);
+  }
+  for (const d of G.dora) bump(d);
+
+  const shapes = hkRoutesFor({
+    hand: p.hand, melds: p.melds, flowers: p.flowers,
+    seatWind: seatWind(G, seat), roundWind: G.roundWind, seen,
+  });
+
+  const routes = shapes
+    .map((r) => (r.shape >= HK_MIN_FAAN
+      ? { ...r, faan: r.shape, selfDraw: false }
+      : { ...r, faan: r.shape + 1, selfDraw: true }))
+    .filter((r) => r.faan >= HK_MIN_FAAN)
+    // nearest first; at equal distance the bigger hand leads
+    .sort((a, b) => a.away - b.away || b.faan - a.faan)
+    .slice(0, 3)
+    .map((r) => ({ parts: r.parts, faan: r.faan, away: r.away, selfDraw: r.selfDraw }));
+
+  return { ...locked, routes };
+}
+
 // ---------------------------------------------------------------- view
 
 // opts.revealBots — a host-side testing switch that lays the bots' concealed
@@ -1857,7 +2132,7 @@ export function viewFor(G, seat, code, opts = {}) {
     actions,
     riichiSticks: G.riichiSticks,
     honba: G.honba,
-    outlook: hkLockedFaan(G, seat),
+    outlook: hkOutlook(G, seat),
     handResult: G.handResult,
     code,
     log: G.log.slice(-30),
