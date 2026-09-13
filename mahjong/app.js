@@ -1159,12 +1159,12 @@ function renderGame(view, sess) {
   // every phase so it is there while you choose a discard, and it names the
   // pieces so the number is checkable rather than magic.
   const faanBar = $('#faan-bar');
-  if (view.variant === 'hk' && view.outlook) {
+  if (view.outlook) {
     const o = view.outlook;
     faanBar.classList.remove('hidden');
-    const short = o.total < o.minToWin;
+    const short = o.yakuHan < o.minToWin;
     const lock = $('#faan-locked');
-    lock.replaceChildren(term('current', `Current ${o.total} faan`));
+    lock.replaceChildren(term('current', `Current ${o.total} ${o.unit}`));
     lock.classList.toggle('short', short);
     const pieces = $('#faan-parts');
     pieces.replaceChildren();
@@ -1174,9 +1174,9 @@ function renderGame(view, sess) {
         if (i) pieces.append(el('span', '', ', '));
         pieces.append(f.term ? term(f.term, f.name) : el('span', '', f.name));
       });
-      if (short) pieces.append(el('span', '', ` · ${o.minToWin - o.total} more to win`));
+      if (short) pieces.append(el('span', '', ` · need ${o.goal} to win`));
     } else {
-      pieces.append(el('span', '', `· nothing banked yet · ${o.minToWin} needed to win`));
+      pieces.append(el('span', '', `· nothing banked yet · need ${o.goal} to win`));
     }
 
     // and the way out: the easiest shape that still reaches the minimum, with
@@ -1184,14 +1184,15 @@ function renderGame(view, sess) {
     const routes = $('#faan-routes');
     routes.replaceChildren();
     lastRoutes = o.routes || [];
+    waysUnit = o.unit;
     if (lastRoutes.length) {
       const r = lastRoutes[0];
-      routes.append(el('span', '', `Easiest way to ${o.minToWin}+: `));
+      routes.append(el('span', '', `Easiest way to ${o.goal}: `));
       const b = el('b', '');
       b.append(routeLabel(r));
       routes.append(b);
       routes.append(el('span', '', ' → '));
-      routes.append(term('faan', `${r.faan} faan`));
+      routes.append(term(o.unit === 'han' ? 'han' : 'faan', `${r.faan} ${o.unit}`));
       routes.append(el('span', '', ' · '));
       routes.append(routeNeedEl(r, 3));
       if (lastRoutes.length > 1) {
@@ -1201,7 +1202,7 @@ function renderGame(view, sess) {
         routes.append(el('span', '', ' '), more);
       }
     } else {
-      routes.append(el('span', '', `No hand from here reaches ${o.minToWin} faan — play for the draw`));
+      routes.append(el('span', '', `No hand from here reaches ${o.goal} — play for the draw`));
     }
     paintWays();
   } else {
@@ -1565,6 +1566,17 @@ function heRow(label, value, cls) {
 
 // cheatsheet of the special hands each ruleset scores; the ruleset currently in
 // play is listed first and flagged, the others stay below for reference
+// cheatsheet row names that the glossary can explain
+const CHEAT_TERMS = {
+  'Self-draw': 'selfdraw', 'Menzen Tsumo': 'selfdraw', 'Concealed hand': 'selfdraw',
+  'Seat wind': 'seatwind', 'Round wind': 'roundwind', 'Dragon triplet': 'dragonpung',
+  'All sequences': 'sequences', 'All triplets': 'triplets',
+  'Mixed flush': 'mixed', 'Full flush': 'full', 'All honours': 'honors', 'Flowers': 'flowers',
+  Riichi: 'riichi', Tanyao: 'tanyao', Pinfu: 'pinfu', Toitoi: 'toitoi',
+  Chiitoitsu: 'chiitoitsu', Honitsu: 'honitsu', Chinitsu: 'chinitsu',
+  'Kokushi Musou': 'kokushi', Dora: 'dora', 'Haku / Hatsu / Chun': 'yakuhai',
+};
+
 function renderCheatsheet() {
   const body = $('#cheat-body');
   if (!body) return;
@@ -1586,7 +1598,9 @@ function renderCheatsheet() {
       const valStr = /\beach$/.test(val)
         ? `${val.replace(/\s*each$/, '')} ${g.unit} each`
         : `${val} ${g.unit}`;
-      r.append(el('span', 'cheat-hand', name));
+      const key = CHEAT_TERMS[name];
+      r.append(key ? (() => { const c = el('span', 'cheat-hand'); c.append(term(key, name)); return c; })()
+                   : el('span', 'cheat-hand', name));
       r.append(el('span', 'cheat-val', valStr));
       r.append(el('span', 'cheat-req', req));
       rows.append(r);
@@ -1594,6 +1608,7 @@ function renderCheatsheet() {
     sec.append(rows);
     body.append(sec);
   }
+  wireTerms(body);
 }
 
 // Everyone's hand is laid open the moment a hand ends; the score panel waits
@@ -1766,8 +1781,53 @@ const GLOSSARY = {
     body: 'How many tiles in your hand this route has no use for. You would be discarding these over the coming turns.' },
   needs: { title: 'Needs',
     body: 'What you would then have to draw or claim. A number in brackets is how many of that tile nobody has seen yet — when it is as low as the number you need, the route is a long shot.' },
-  current: { title: 'Current faan',
-    body: "What this hand is worth right now whatever happens next: flowers, and dragon or wind pungs you have already melded. A triplet still hidden in your hand doesn't count — discard out of it and it's gone." },
+  han: { title: 'Han',
+    body: "Riichi's scoring unit. You need at least one han that is NOT dora — that is what a yaku is — before a finished hand can be declared at all. Han and fu together set the payout." },
+  riichi: { title: 'Riichi \u00b7 1 han',
+    body: 'Declare when your hand is concealed and one tile from winning. It costs a 1000-point stick and locks your discards, and it is itself the yaku — which is why almost any concealed hand still has a way home.' },
+  tanyao: { title: 'Tanyao \u00b7 1 han',
+    body: 'No terminals and no honours: every tile between 2 and 8. The easiest yaku to steer into, and one of the few that survives opening your hand.',
+    tiles: [T_('m', 3), T_('m', 4), T_('m', 5), T_('p', 7), T_('p', 7), T_('p', 7)] },
+  pinfu: { title: 'Pinfu \u00b7 1 han',
+    body: 'Every set is a run, with a concealed hand. Lost the moment you claim a tile from anyone.',
+    tiles: [T_('s', 2), T_('s', 3), T_('s', 4), T_('p', 6), T_('p', 7), T_('p', 8)] },
+  toitoi: { title: 'Toitoi \u00b7 2 han',
+    body: 'Every set is a triplet or a kan. Unlike most of the cheap yaku, this one survives claiming tiles.',
+    tiles: [T_('m', 2), T_('m', 2), T_('m', 2), T_('s', 6), T_('s', 6), T_('s', 6)] },
+  honitsu: { title: 'Honitsu \u00b7 3 han concealed, 2 open',
+    body: 'One suit plus any winds and dragons — the shape Hong Kong calls a mixed flush.',
+    tiles: [T_('p', 2), T_('p', 3), T_('p', 4), T_('p', 9), T_('p', 9), T_('dragon', 'R'), T_('dragon', 'R'), T_('dragon', 'R')] },
+  chinitsu: { title: 'Chinitsu \u00b7 6 han concealed, 5 open',
+    body: 'A single suit and nothing else — no winds, no dragons.',
+    tiles: [T_('s', 1), T_('s', 2), T_('s', 3), T_('s', 5), T_('s', 5), T_('s', 7), T_('s', 8), T_('s', 9)] },
+  yakuhai: { title: 'Yakuhai \u00b7 1 han each',
+    body: 'A triplet of a dragon, of your seat wind, or of the round wind. It stacks: a triplet that is both your seat wind and the round wind is two han.',
+    tiles: [T_('dragon', 'G'), T_('dragon', 'G'), T_('dragon', 'G')] },
+  chiitoitsu: { title: 'Chiitoitsu \u00b7 2 han',
+    body: 'Seven different pairs instead of four sets and a pair. Concealed only.',
+    tiles: [T_('m', 3), T_('m', 3), T_('p', 7), T_('p', 7), T_('s', 1), T_('s', 1), T_('wind', 'W'), T_('wind', 'W')] },
+  kokushi: { title: 'Kokushi musou \u00b7 yakuman',
+    body: 'One of each terminal and honour \u2014 thirteen distinct tiles \u2014 plus a second copy of any one of them. Concealed only, and worth the maximum.',
+    tiles: [T_('m', 1), T_('m', 9), T_('p', 1), T_('p', 9), T_('s', 1), T_('s', 9), T_('dragon', 'R')] },
+  chi: { title: 'Chi',
+    body: 'Claim a discard to finish a run of three, and only from the player on your left. The set is turned face up, which costs you every concealed-only yaku.',
+    tiles: [T_('s', 4), T_('s', 5), T_('s', 6)] },
+  pon: { title: 'Pon',
+    body: 'Claim a discard to finish a triplet, from anyone at the table. Outranks Chi when two people want the same tile.',
+    tiles: [T_('p', 8), T_('p', 8), T_('p', 8)] },
+  kan: { title: 'Kan',
+    body: 'A fourth copy of a tile you already have three of. You draw a replacement, and in Riichi it flips another dora indicator.',
+    tiles: [T_('m', 5), T_('m', 5), T_('m', 5), T_('m', 5)] },
+  ron: { title: 'Ron',
+    body: 'Win on a tile somebody else discarded. Beats every other claim, and the discarder alone pays.' },
+  tsumo: { title: 'Tsumo',
+    body: 'Win on the tile you drew yourself. Everyone pays — which is what makes a self-draw worth roughly three times a win on a discard.' },
+  furiten: { title: 'Furiten',
+    body: 'A Riichi rule: if any tile that would complete your hand is sitting in your own discards, you cannot win by Ron. You may still win by self-draw.' },
+  dora: { title: 'Dora \u00b7 +1 han each',
+    body: 'Bonus tiles marked by the indicator in the centre. They add han but are never a yaku: a hand with nothing but dora still cannot be declared.' },
+  current: { title: 'Current score',
+    body: "What this hand is worth right now whatever happens next: flowers, a declared riichi, and dragon or wind triplets you have already melded. A triplet still hidden in your hand doesn't count — discard out of it and it's gone." },
 };
 
 let tipEl = null;
@@ -1798,9 +1858,28 @@ function showTip(anchor, key) {
   tipEl.style.top = `${Math.round(top)}px`;
 }
 
+// attach the hover note to anything already marked up with data-term — lets the
+// static panels (Rules, Hands & scoring) carry terms without building them in JS
+function wireTerms(root) {
+  for (const n of root.querySelectorAll('[data-term]')) {
+    if (n.dataset.wired) continue;
+    n.dataset.wired = '1';
+    n.classList.add('term');
+    n.tabIndex = 0;
+    const key = n.dataset.term;
+    n.addEventListener('mouseenter', () => showTip(n, key));
+    n.addEventListener('focus', () => showTip(n, key));
+    n.addEventListener('mouseleave', hideTip);
+    n.addEventListener('blur', hideTip);
+    n.addEventListener('click', (e) => { e.stopPropagation(); showTip(n, key); });
+  }
+}
+
 // a term that explains itself
 function term(key, text) {
   const sp = el('span', 'term', text);
+  sp.dataset.term = key;
+  sp.dataset.wired = '1';
   sp.tabIndex = 0;
   sp.addEventListener('mouseenter', () => showTip(sp, key));
   sp.addEventListener('focus', () => showTip(sp, key));
@@ -1812,18 +1891,23 @@ function term(key, text) {
 }
 document.addEventListener('click', hideTip);
 window.addEventListener('scroll', hideTip, { passive: true });
+// the static panels carry their terms in the markup
+wireTerms(document);
 
 // "drop 3 · needs East Wind x3, Red Dragon x1" — the discards AND the draws,
 // because a distance on its own never says what you are waiting for, and three
 // of a tile with three left is not the same work as three of a fresh one
 function routeLabel(r) {
   const wrap = el('span', '');
-  const bits = r.parts.length ? r.parts : [{ term: null, text: 'any winning hand' }];
-  bits.forEach((b, i) => {
-    if (i) wrap.append(el('span', '', ' + '));
-    wrap.append(b.term ? term(b.term, b.text) : el('span', '', b.text));
-  });
-  if (r.selfDraw) { wrap.append(el('span', '', ' + ')); wrap.append(term('selfdraw', 'self-draw')); }
+  const bits = [...r.parts];
+  // a bare shape needs a name — unless the whole point of the route IS the
+  // declaration, in which case "riichi" says it on its own
+  if (!bits.length && !r.riichi && !r.selfDraw) bits.push({ term: null, text: 'any winning hand' });
+  let n = 0;
+  const add = (node) => { if (n++) wrap.append(el('span', '', ' + ')); wrap.append(node); };
+  for (const b of bits) add(b.term ? term(b.term, b.text) : el('span', '', b.text));
+  if (r.selfDraw) add(term('selfdraw', 'self-draw'));
+  if (r.riichi) add(term('riichi', 'riichi'));
   return wrap;
 }
 
@@ -1853,6 +1937,7 @@ function routeNeed(r, cap = 0) {
 }
 
 let lastRoutes = [];
+let waysUnit = 'faan';
 
 // The full list, since the line under the hand only has room for the best one.
 // It opens in place rather than over the board — you want to read it WHILE
@@ -1872,12 +1957,12 @@ function paintWays() {
   const intro = $('#ways-intro');
   body.replaceChildren();
   intro.textContent = lastRoutes.length
-    ? 'Every shape that still reaches three faan, easiest first. "Drop" is how many tiles in your hand have to go; "needs" is what you then have to draw, with the number still unseen when it is getting scarce.'
-    : 'Nothing from this hand reaches three faan any more.';
+    ? `Every shape that still gets you a declarable hand, easiest first. "Drop" is how many tiles in your hand have to go; "needs" is what you then have to draw, with the number still unseen when it is getting scarce.`
+    : 'Nothing from this hand can be declared any more.';
   for (const r of lastRoutes) {
     const row = el('div', 'ways-row');
     const f = el('span', 'ways-faan');
-    f.append(term('faan', `${r.faan} faan`));
+    f.append(term(waysUnit === 'han' ? 'han' : 'faan', `${r.faan} ${waysUnit}`));
     row.append(f);
     const nm = el('span', 'ways-name');
     nm.append(routeLabel(r));

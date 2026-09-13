@@ -1290,7 +1290,7 @@ export function hkLockedFaan(G, seat) {
     }
   }
   const total = parts.reduce((a, f) => a + f.val, 0);
-  return { total, parts, minToWin: HK_MIN_FAAN };
+  return { total, yakuHan: total, parts, minToWin: HK_MIN_FAAN, unit: 'faan', goal: `${HK_MIN_FAAN}+ faan` };
 }
 
 function hkFaanToPoints(faan) {
@@ -2173,11 +2173,236 @@ function hkRoutesFor(ctx) {
 // Everything above is shape arithmetic. This turns a live game into the question
 // it answers, and adds the one faan the shape can't know about: a self-draw is
 // always available, so a route one short of the minimum is still a route.
+// ---- Riichi: the same question, a different rulebook.
+//
+// The bar is far lower — one han that isn't dora — but the trap is different:
+// open your hand and riichi, pinfu, tsumo and seven pairs all vanish at once,
+// and a beginner discovers this only when a finished hand refuses to be
+// declared. So the routes are worth showing precisely BECAUSE most of them are
+// cheap: the useful message is usually "you are still concealed, just reach
+// tenpai and declare".
+export const JP_MIN_HAN = 1;
+
+// Seven pairs and thirteen orphans don't fit the four-sets-and-a-pair machinery
+// at all, so they get their own arithmetic. Both are concealed-only.
+function chiitoiRoute(mine, supply, concealed) {
+  const cands = [];
+  for (let i = 0; i < 34; i++) {
+    if (supply[i] < 2) continue;                 // can't finish a pair nobody has
+    cands.push({ i, have: Math.min(2, mine[i]) });
+  }
+  if (cands.length < 7) return null;
+  cands.sort((a, b) => b.have - a.have);
+  const picked = cands.slice(0, 7);
+  const reuse = picked.reduce((a, c) => a + c.have, 0);
+  const wants = picked.filter((c) => c.have < 2)
+    .map((c) => ({ key: KEY_LIST[c.i], count: 2 - c.have, left: Math.max(0, supply[c.i] - mine[c.i]) }));
+  return { away: concealed - reuse, wants };
+}
+
+const ORPHAN_KEYS = [
+  ...SUITS.flatMap((s) => [`${s}1`, `${s}9`]),
+  ...HONOR_WINDS.map((w) => `w${w}`), ...HONOR_DRAGONS.map((d) => `d${d}`),
+];
+
+function kokushiRoute(mine, supply, concealed) {
+  let distinct = 0, pairable = false;
+  const wants = [];
+  for (const k of ORPHAN_KEYS) {
+    const i = keyIdx(k);
+    if (supply[i] < 1) return null;              // one of the thirteen is gone
+    if (mine[i] > 0) distinct++;
+    else wants.push({ key: k, count: 1, left: Math.max(0, supply[i] - mine[i]) });
+    if (mine[i] > 1) pairable = true;
+  }
+  const reuse = Math.min(concealed, distinct + (pairable ? 1 : 0));
+  return { away: concealed - reuse, wants };
+}
+
+export function jpLockedHan(G, seat) {
+  if (G.variant !== 'jp') return null;
+  const p = playerBySeat(G, seat);
+  const sw = seatWind(G, seat);
+  const parts = [];
+  if (p.riichi) parts.push({ term: 'riichi', name: 'Riichi', val: 1 });
+  for (const m of p.melds) {
+    const t = m.tiles[0];
+    if (!t) continue;
+    if (t.kind === 'wind' && t.v === sw) parts.push({ term: 'seatwind', name: 'Seat wind', val: 1 });
+    if (t.kind === 'wind' && t.v === G.roundWind) parts.push({ term: 'roundwind', name: 'Round wind', val: 1 });
+    if (t.kind === 'dragon') {
+      parts.push({ term: 'dragonpung', name: `${t.v === 'R' ? 'Chun' : t.v === 'G' ? 'Hatsu' : 'Haku'}`, val: 1 });
+    }
+  }
+  // dora sitting inside a declared meld can't be discarded away either. Dora is
+  // never a yaku, so it is listed but doesn't count toward the minimum.
+  let melded = 0;
+  for (const ind of G.dora) {
+    const dk = doraKey(ind);
+    for (const m of p.melds) melded += m.tiles.filter((t) => t.key === dk).length;
+  }
+  if (melded > 0) parts.push({ term: 'dora', name: `${melded} dora`, val: melded, bonus: true });
+
+  const total = parts.reduce((a, f) => a + f.val, 0);
+  const yakuHan = parts.filter((f) => !f.bonus).reduce((a, f) => a + f.val, 0);
+  return { total, yakuHan, parts, minToWin: JP_MIN_HAN, unit: 'han', goal: 'a yaku' };
+}
+
 // a tile key back into the shape tileName wants
 function keyParts(key) {
   if (key[0] === 'w') return { kind: 'wind', v: key.slice(1) };
   if (key[0] === 'd') return { kind: 'dragon', v: key.slice(1) };
   return { kind: key[0], v: Number(key.slice(1)) };
+}
+
+// Riichi's shape-based yaku, measured with the same DP as Hong Kong's. Tanyao
+// needs no new machinery: zero the supply of every terminal and honour and the
+// solver simply can't build with them.
+function jpRoutesFor(ctx) {
+  const { hand, melds, seatWind: sw, roundWind: rw, seen } = ctx;
+  const need = 4 - melds.length;
+  if (need < 0) return [];
+  const concealed = hand.length;
+  const closed = melds.every((m) => !m.open);
+
+  const mine = new Array(34).fill(0);
+  for (const t of hand) { const i = keyIdx(t.key); if (i >= 0) mine[i]++; }
+  const supply = new Array(34).fill(0);
+  for (let i = 0; i < 34; i++) supply[i] = Math.max(0, Math.min(4, 4 - (seen[i] || 0)));
+  // simples only: no terminals, no honours
+  const simples = supply.map((v, i) => {
+    const k = KEY_LIST[i];
+    if (k[0] === 'w' || k[0] === 'd') return 0;
+    const n = Number(k.slice(1));
+    return (n >= 2 && n <= 8) ? v : 0;
+  });
+
+  const honVal = HONORS_ORDER.map((k) => {
+    let v = 0;
+    if (k === `w${sw}`) v += 1;
+    if (k === `w${rw}`) v += 1;
+    if (k[0] === 'd') v += 1;
+    return v;
+  });
+  let meldHon = 0;
+  for (const m of melds) {
+    const t = m.tiles[0];
+    if (!t) continue;
+    if (t.kind === 'wind' && t.v === sw) meldHon++;
+    if (t.kind === 'wind' && t.v === rw) meldHon++;
+    if (t.kind === 'dragon') meldHon++;
+  }
+  const anyChi = melds.some((m) => m.type === 'chi');
+  const allChi = melds.every((m) => m.type === 'chi');
+  const meldKinds = new Set(melds.flatMap((m) => m.tiles.map((t) => t.kind)));
+
+  const tab = (sup, suit, mode) => suitReuse(mine, sup, SUIT_BASE[suit], mode.run, mode.trip);
+  const honTab = (sup, mode) => honorReuse(mine, sup, 27, mode.trip, honVal);
+  const out = [];
+
+  const evaluate = (id, label, han, opts) => {
+    const { sup = supply, suits = SUITS_ORDER, honors = true, requireHonor = false, mode } = opts;
+    if (opts.closedOnly && !closed) return;
+    if (mode.id === 'sequences' && !allChi) return;
+    if (mode.id === 'triplets' && anyChi) return;
+    const okKinds = new Set(suits);
+    if (honors) { okKinds.add('wind'); okKinds.add('dragon'); }
+    if ([...meldKinds].some((k) => !okKinds.has(k))) return;
+    const parts_ = SUITS_ORDER.map((x) => (suits.includes(x)
+      ? tab(sup, x, mode)
+      : { table: ZERO_SUIT, trace: () => new Array(9).fill(0) }));
+    const hon = honors ? honTab(sup, mode) : { table: ZERO_HONOR, trace: () => new Array(HONORS_ORDER.length).fill(0) };
+    const best = shapeBest(convolveSuits(parts_.map((x) => x.table)), hon.table, need, requireHonor);
+    if (best.reuse <= NEG / 2) return;
+
+    const wants = [];
+    const noteWant = (idx, used) => {
+      const short = used - mine[idx];
+      if (short > 0) wants.push({ key: KEY_LIST[idx], count: short, left: Math.max(0, supply[idx] - mine[idx]) });
+    };
+    if (best.suitSplit) {
+      parts_.forEach((t2, si) => {
+        const [ss, sp] = best.suitSplit[si] || [0, 0];
+        t2.trace(ss, sp).forEach((u, vi) => noteWant(SUIT_BASE[SUITS_ORDER[si]] + vi, u));
+      });
+    }
+    hon.trace(best.honSets, best.honPair, best.hf, best.hu).forEach((u, hi) => noteWant(27 + hi, u));
+    wants.sort((a, b) => b.count - a.count || a.left - b.left);
+
+    const yakuhai = best.hf + meldHon;
+    const parts = [...label];
+    if (yakuhai > 0) parts.push({ term: 'yakuhai', text: `${yakuhai} yakuhai` });
+    out.push({
+      id, parts, shape: han + yakuhai,
+      away: concealed - best.reuse, wants,
+      effort: (concealed - best.reuse) + wants.reduce((a, w) => a + w.count * (4 / Math.max(1, w.left)), 0),
+    });
+  };
+
+  const FREE = SET_MODES[0], SEQ = SET_MODES[1], TRIP = SET_MODES[2];
+  // The plain hand: worth nothing on its own. It usually comes back carrying a
+  // yakuhai or two, since the solver prefers the better arrangement at the same
+  // distance — so keep a bare copy as well. For a concealed hand that copy
+  // becomes "riichi", which is the one line a beginner most needs to read:
+  // reach tenpai, declare, and the declaration IS the yaku.
+  evaluate('any', [], 0, { mode: FREE });
+  const plain = out.find((r) => r.id === 'any');
+  if (plain && plain.parts.length) out.push({ ...plain, id: 'plain', parts: [], shape: 0 });
+  evaluate('tanyao', [{ term: 'tanyao', text: 'tanyao' }], 1, { mode: FREE, sup: simples, honors: false });
+  evaluate('pinfu', [{ term: 'pinfu', text: 'pinfu' }], 1, { mode: SEQ, closedOnly: true });
+  evaluate('toitoi', [{ term: 'toitoi', text: 'toitoi' }], 2, { mode: TRIP });
+  for (const s of SUITS_ORDER) {
+    evaluate(`honitsu:${s}`, [{ term: 'honitsu', text: `honitsu in ${SUIT_NAME[s]}` }], closed ? 3 : 2,
+      { mode: FREE, suits: [s], requireHonor: true });
+    evaluate(`chinitsu:${s}`, [{ term: 'chinitsu', text: `chinitsu in ${SUIT_NAME[s]}` }], closed ? 6 : 5,
+      { mode: FREE, suits: [s], honors: false });
+  }
+
+  if (closed) {
+    const c = chiitoiRoute(mine, supply, concealed);
+    if (c) out.push({ id: 'chiitoi', parts: [{ term: 'chiitoitsu', text: 'chiitoitsu' }], shape: 2, away: c.away, wants: c.wants,
+      effort: c.away + c.wants.reduce((a, w) => a + w.count * (4 / Math.max(1, w.left)), 0) });
+    const k = kokushiRoute(mine, supply, concealed);
+    if (k) out.push({ id: 'kokushi', parts: [{ term: 'kokushi', text: 'kokushi musou' }], shape: 13, away: k.away, wants: k.wants,
+      effort: k.away + k.wants.reduce((a, w) => a + w.count * (4 / Math.max(1, w.left)), 0) });
+  }
+  return out;
+}
+
+export function jpOutlook(G, seat) {
+  if (G.variant !== 'jp') return null;
+  const locked = jpLockedHan(G, seat);
+  const p = playerBySeat(G, seat);
+  const closed = p.melds.every((m) => !m.open);
+
+  const seen = new Array(34).fill(0);
+  const bump = (t) => { const i = keyIdx(t.key); if (i >= 0) seen[i]++; };
+  for (const q of G.players) {
+    for (const t of q.discards) bump(t);
+    for (const m of q.melds) for (const t of m.tiles) bump(t);
+  }
+  for (const d of G.dora) bump(d);
+
+  const shapes = jpRoutesFor({
+    hand: p.hand, melds: p.melds, seatWind: seatWind(G, seat), roundWind: G.roundWind, seen,
+  });
+
+  const routes = shapes
+    .map((r) => {
+      // A concealed hand can always declare riichi, which IS the yaku — so a
+      // shape worth nothing still gets you home as long as you stay closed.
+      if (r.shape >= JP_MIN_HAN) return { ...r, han: r.shape, riichi: false };
+      if (closed && !p.riichi) return { ...r, han: r.shape + 1, riichi: true };
+      return null;
+    })
+    .filter((r) => r && r.han >= JP_MIN_HAN)
+    .sort((a, b) => a.effort - b.effort || a.away - b.away || b.han - a.han)
+    .map((r) => ({
+      parts: r.parts, faan: r.han, away: r.away, selfDraw: false, riichi: r.riichi, effort: r.effort,
+      wants: r.wants.map((w) => ({ name: tileName({ key: w.key, ...keyParts(w.key) }), count: w.count, left: w.left })),
+    }));
+
+  return { ...locked, routes };
 }
 
 export function hkOutlook(G, seat) {
@@ -2295,7 +2520,7 @@ export function viewFor(G, seat, code, opts = {}) {
     actions,
     riichiSticks: G.riichiSticks,
     honba: G.honba,
-    outlook: hkOutlook(G, seat),
+    outlook: G.variant === 'jp' ? jpOutlook(G, seat) : hkOutlook(G, seat),
     handResult: G.handResult,
     code,
     log: G.log.slice(-30),
