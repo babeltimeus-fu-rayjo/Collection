@@ -413,6 +413,19 @@ body {
 #faan-locked.short { color: #d8a05a; }
 #faan-parts { color: #7fa38c; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* a claim you don't want keeps coming back every time that tile is thrown, so
+   each call carries a chip that retires it for the rest of the hand */
+.claim-group { display: inline-flex; align-items: stretch; }
+.claim-group .btn { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.claim-mute {
+  border: none; cursor: pointer; font-size: 11px; line-height: 1; padding: 0 7px;
+  background: rgba(0,0,0,.28); color: rgba(255,255,255,.55);
+  border-radius: 0 8px 8px 0; border-left: 1px solid rgba(0,0,0,.3);
+}
+.claim-mute:hover { background: rgba(0,0,0,.45); color: #fff; }
+.claim-note { font-size: 12px; color: #5a8a6a; align-self: center; display: inline-flex; align-items: center; gap: 6px; }
+.claim-mute.undo { border-radius: 6px; border-left: none; background: #1a5a38; color: #c8e0d0; padding: 2px 8px; }
+
 /* ================================================================ feed (history log) */
 /* a floating popup anchored above the 📜 button, styled like the settings drawer;
    hidden by default — toggle it with 📜 (common/feedtoggle.js) */

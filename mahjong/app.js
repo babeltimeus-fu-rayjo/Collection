@@ -636,6 +636,16 @@ let session = null;
 let lastView = null;
 let lastSess = null;
 let pendingMove = false;
+// Claims you've told the table to stop offering. A call you don't want tends to
+// come back every time that tile is thrown, so each one can be waved away for
+// the rest of the hand — keyed by the SET it would make, not by the button, so
+// muting "Chi 1m+2m" doesn't also mute "Chi 2m+4m" on the same tile. Cleared on
+// every new deal, since the next hand is a different problem.
+let claimMuted = new Set();
+let claimMutedHand = null;
+const ponMuteKey = (t) => `pon:${t ? t.key : '?'}`;
+const kanMuteKey = (t) => `kan:${t ? t.key : '?'}`;
+const chiMuteKey = (combo, t) => `chi:${[...combo.map((x) => x.key), t ? t.key : '?'].sort().join('+')}`;
 let selectedTile = null;
 let handOrder = [];   // tile-id display order for my hand (drag to rearrange)
 let lastHandSeen = -1; // reset handOrder on a new hand (tile ids are reused each deal)
@@ -1023,6 +1033,8 @@ let chatSeenN = 0;
 function renderGame(view, sess) {
   lastView = view;
   lastSess = sess;
+  const handKey = `${view.roundWind}${view.handNum}.${view.honba}`;
+  if (handKey !== claimMutedHand) { claimMutedHand = handKey; claimMuted = new Set(); }
   const my = view.mySeat;
 
   // a new hand reuses tile ids from the previous hand, so drop the old drag
@@ -1398,40 +1410,73 @@ function renderActions(view, sess) {
   if (view.claimOpts) {
     const opts = view.claimOpts;
     const blocked = new Set(opts.blockedOpts || []);
+    const tile = opts.tile;
+    let offered = 0;
+
+    // a claim plus the little chip that stops it being offered again
+    const offer = (btn, muteKey, onTake, blockedWhy) => {
+      if (muteKey && claimMuted.has(muteKey)) return;
+      offered++;
+      if (blockedWhy) { btn.disabled = true; btn.title = blockedWhy; }
+      else btn.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; onTake(); } });
+      if (!muteKey) { bar.append(btn); return; }
+      const group = el('span', 'claim-group');
+      const mute = el('button', 'claim-mute', '✕');
+      mute.type = 'button';
+      mute.title = 'Stop offering this call for the rest of the hand';
+      mute.setAttribute('aria-label', `Stop offering ${btn.textContent}`);
+      mute.addEventListener('click', () => {
+        claimMuted.add(muteKey);
+        if (lastView) renderGame(lastView, session);
+      });
+      group.append(btn, mute);
+      bar.append(group);
+    };
+
+    // Ron is never muted — declining a win is not a thing you want made easy
     if (opts.options.includes('ron')) {
-      const b = el('button', 'btn ron', 'Ron');
-      b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; session.localMove({ kind: 'ron' }); } });
-      bar.append(b);
+      offer(el('button', 'btn ron', 'Ron'), null, () => session.localMove({ kind: 'ron' }), null);
     }
     if (opts.options.includes('kan')) {
-      const b = el('button', 'btn kan-btn', 'Kan');
-      if (blocked.has('kan')) { b.disabled = true; b.title = 'A player may still Ron — wait for them to pass'; }
-      else b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; session.localMove({ kind: 'kan' }); } });
-      bar.append(b);
+      offer(el('button', 'btn kan-btn', 'Kan'), kanMuteKey(tile),
+        () => session.localMove({ kind: 'kan' }),
+        blocked.has('kan') ? 'A player may still Ron — wait for them to pass' : null);
     }
     if (opts.options.includes('pon')) {
-      const b = el('button', 'btn pon-btn', 'Pon');
-      if (blocked.has('pon')) { b.disabled = true; b.title = 'A player may still Ron — wait for them to pass'; }
-      else b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; session.localMove({ kind: 'pon' }); } });
-      bar.append(b);
+      offer(el('button', 'btn pon-btn', 'Pon'), ponMuteKey(tile),
+        () => session.localMove({ kind: 'pon' }),
+        blocked.has('pon') ? 'A player may still Ron — wait for them to pass' : null);
     }
     if (opts.options.includes('chi')) {
       for (const combo of opts.chiCombos) {
-        const label = `Chi ${combo.map((t) => shortTag(t)).join('+')}`;
-        const b = el('button', 'btn chi-btn', label);
-        if (blocked.has('chi')) { b.disabled = true; b.title = 'A player may Pon or Ron — wait for them to pass'; }
-        else b.addEventListener('click', () => {
-          if (!pendingMove) { pendingMove = true; session.localMove({ kind: 'chi', tile1: combo[0].id, tile2: combo[1].id }); }
-        });
-        bar.append(b);
+        offer(el('button', 'btn chi-btn', `Chi ${combo.map((t) => shortTag(t)).join('+')}`), chiMuteKey(combo, tile),
+          () => session.localMove({ kind: 'chi', tile1: combo[0].id, tile2: combo[1].id }),
+          blocked.has('chi') ? 'A player may Pon or Ron — wait for them to pass' : null);
       }
     }
+
+    // everything on offer has been waved away: pass without asking again
+    if (offered === 0) {
+      if (!pendingMove) { pendingMove = true; session.localMove({ kind: 'pass' }); }
+      bar.append(el('span', 'claim-note', 'Calls muted for this hand — passing'));
+      return;
+    }
+
     const pass = el('button', 'btn secondary', 'Pass');
     pass.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; session.localMove({ kind: 'pass' }); } });
     bar.append(pass);
+    if (claimMuted.size) {
+      const note = el('span', 'claim-note', `${claimMuted.size} call${claimMuted.size > 1 ? 's' : ''} muted`);
+      const undo = el('button', 'claim-mute undo', 'undo');
+      undo.type = 'button';
+      undo.title = 'Offer the muted calls again';
+      undo.addEventListener('click', () => { claimMuted = new Set(); if (lastView) renderGame(lastView, session); });
+      note.append(undo);
+      bar.append(note);
+    }
     if (blocked.size) {
-      const hint = el('span', '', 'Higher-priority calls pending…');
-      hint.style.cssText = 'font-size:12px;color:#c9a94e;align-self:center;';
+      const hint = el('span', 'claim-note', 'Higher-priority calls pending…');
+      hint.style.color = '#c9a94e';
       bar.append(hint);
     }
     return;
