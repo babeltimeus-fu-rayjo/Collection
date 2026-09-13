@@ -464,6 +464,12 @@ body {
 .ex-pair-tiles { display: flex; align-items: center; gap: 4px; }
 .ex-arrow { color: #7fa38c; font-size: 12px; }
 .ex-note { font-size: 10px; color: #6f9a80; white-space: nowrap; }
+/* a whole cycle, so one example never has to stand in for the order */
+.ex-chain { display: flex; align-items: center; gap: 8px; margin-top: 7px; flex-wrap: wrap; }
+.ex-chain-label { font-size: 10px; color: #6f9a80; min-width: 46px; }
+.ex-chain-tiles { display: flex; align-items: center; gap: 3px; }
+/* the closing repeat is the same tile again, not another one */
+.ex-wrap { opacity: .45; }
 .tip-tiles .tile { --u: .62px; }
 
 /* the full list of ways to a Hong Kong win, in place under the hand — the page

@@ -1897,17 +1897,17 @@ const GLOSSARY = {
     pairs: [
       { from: T_('p', 3), to: T_('p', 4), note: 'next in the suit' },
       { from: T_('s', 9), to: T_('s', 1), note: 'nine wraps to one' },
-      { from: T_('wind', 'N'), to: T_('wind', 'E'), note: 'winds cycle' },
-      { from: T_('dragon', 'W'), to: T_('dragon', 'G'), note: 'so do dragons' },
+    ],
+    chains: [
+      { label: 'winds', wraps: true, tiles: [T_('wind', 'E'), T_('wind', 'S'), T_('wind', 'W'), T_('wind', 'N'), T_('wind', 'E')] },
+      { label: 'dragons', wraps: true, tiles: [T_('dragon', 'W'), T_('dragon', 'G'), T_('dragon', 'R'), T_('dragon', 'W')] },
     ] },
   dragons: { title: 'The three dragons',
     body: 'White, green and red. A triplet of any one of them pays in every ruleset here, and for dora they cycle in this order — red leading back round to white.',
     links: { triplet: 'pung', dora: 'dora' },
-    pairsCaption: 'the cycle',
-    pairs: [
-      { from: T_('dragon', 'W'), to: T_('dragon', 'G'), note: 'white → green' },
-      { from: T_('dragon', 'G'), to: T_('dragon', 'R'), note: 'green → red' },
-      { from: T_('dragon', 'R'), to: T_('dragon', 'W'), note: 'red → white' },
+    pairsCaption: 'white, green, red — and round again',
+    chains: [
+      { label: '', wraps: true, tiles: [T_('dragon', 'W'), T_('dragon', 'G'), T_('dragon', 'R'), T_('dragon', 'W')] },
     ] },
   uradora: { title: 'Ura-dora',
     body: 'A second set of dora indicators, hidden under the first and revealed only if you win after declaring riichi. Pure luck, and often the difference between a modest hand and a big one.' },
@@ -1998,9 +1998,28 @@ function scheduleClose(depth) {
 // It is also how the dragon order explains itself to somebody who has no idea
 // the tiles are called Haku, Hatsu and Chun.
 function exampleEl(g) {
+  const box = (g.pairs || g.chains) ? el('div', 'ex-pairs') : null;
+  // caption first, once, whichever forms follow it
+  if (box && g.pairsCaption) box.append(el('div', 'ex-caption', g.pairsCaption));
+  if (g.chains) {
+    for (const ch of g.chains) {
+      const line = el('div', 'ex-chain');
+      if (ch.label) line.append(el('span', 'ex-chain-label', ch.label));
+      const strip = el('div', 'ex-chain-tiles');
+      ch.tiles.forEach((t, i) => {
+        if (i) strip.append(el('span', 'ex-arrow', '\u2192'));
+        const node = renderTile(t);
+        // the repeat that closes the loop is dimmed: it is the same tile again,
+        // not a fifth wind
+        if (i === ch.tiles.length - 1 && ch.wraps) node.classList.add('ex-wrap');
+        strip.append(node);
+      });
+      line.append(strip);
+      box.append(line);
+    }
+    if (!g.pairs) return box;
+  }
   if (g.pairs) {
-    const box = el('div', 'ex-pairs');
-    if (g.pairsCaption) box.append(el('div', 'ex-caption', g.pairsCaption));
     const row = el('div', 'ex-pair-row');
     for (const pr of g.pairs) {
       const cell = el('div', 'ex-pair');
@@ -2010,7 +2029,7 @@ function exampleEl(g) {
       if (pr.note) cell.append(el('div', 'ex-note', pr.note));
       row.append(cell);
     }
-    box.append(row);
+    box.insertBefore(row, box.querySelector('.ex-chain'));
     return box;
   }
   if (g.tiles) {
