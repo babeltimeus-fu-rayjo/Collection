@@ -430,7 +430,10 @@ body {
 .term { border-bottom: 1px dotted currentColor; cursor: help; outline: none; }
 .term:hover, .term:focus-visible { color: #e8d5a3; }
 .tip {
-  position: fixed; z-index: 95; max-width: 320px; pointer-events: none;
+  /* above .modal (100) and the flash banner (150), below toasts (200) — the
+     terms it explains live INSIDE those panels, so anything lower renders
+     behind the thing you are reading */
+  position: fixed; z-index: 170; max-width: 320px; pointer-events: none;
   background: #0b2a1b; border: 1px solid #2a6b45; border-radius: 10px;
   padding: 9px 11px; box-shadow: 0 10px 28px rgba(0,0,0,.6);
   font-size: 12px; line-height: 1.5; text-align: left;
