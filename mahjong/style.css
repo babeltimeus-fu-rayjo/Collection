@@ -415,6 +415,10 @@ body {
 
 /* a claim you don't want keeps coming back every time that tile is thrown, so
    each call carries a chip that retires it for the rest of the hand */
+/* a claim button names its tiles by showing them — no suit notation to learn */
+.btn-tiles { display: inline-flex; gap: 1px; margin-left: 6px; vertical-align: middle; }
+.btn-tiles .tile { --u: .5px; }
+
 .claim-group { display: inline-flex; align-items: stretch; }
 .claim-group .btn { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .claim-mute {

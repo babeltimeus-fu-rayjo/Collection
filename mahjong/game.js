@@ -25,6 +25,8 @@ export function variantByKey(key) {
 // ---------------------------------------------------------------- tiles
 
 const SUITS = ['m', 'p', 's'];
+// one set of English suit names, used everywhere a suit is spelled out
+export const SUIT_WORD = { m: 'Characters', p: 'Circles', s: 'Bamboo' };
 const HONOR_WINDS = ['E', 'S', 'W', 'N'];
 const HONOR_DRAGONS = ['R', 'G', 'W'];
 // Haku -> Hatsu -> Chun -> Haku: the order a dora indicator walks, which is not
@@ -43,8 +45,11 @@ export function tileName(t) {
   if (t.kind === 'wind') return { E: 'East', S: 'South', W: 'West', N: 'North' }[t.v] + ' Wind';
   if (t.kind === 'dragon') return { R: 'Red', G: 'Green', W: 'White' }[t.v] + ' Dragon';
   if (t.kind === 'flower') return t.v <= 4 ? `Flower ${t.v}` : `Season ${t.v - 4}`;
-  const sn = { m: 'Man', p: 'Pin', s: 'Sou' }[t.kind];
-  return `${t.v} ${sn}`;
+  // Characters / Circles / Bamboo throughout — the same words the Rules panel
+  // uses. Man / Pin / Sou name the same three suits in Japanese, and mixing the
+  // two sets on one screen is how "full flush in characters ... needs 9 Pin"
+  // ended up in front of somebody trying to learn the game.
+  return `${t.v} ${SUIT_WORD[t.kind]}`;
 }
 
 export function tileShort(t) {
@@ -1856,7 +1861,7 @@ function botPickDiscard(G, p) {
 
 
 const SUIT_BASE = { m: 0, p: 9, s: 18 };
-const SUIT_NAME = { m: 'characters', p: 'circles', s: 'bamboo' };
+const SUIT_NAME = { m: SUIT_WORD.m.toLowerCase(), p: SUIT_WORD.p.toLowerCase(), s: SUIT_WORD.s.toLowerCase() };
 const KEY_LIST = (() => {
   const ks = [];
   for (const s of SUITS) for (let v = 1; v <= 9; v++) ks.push(`${s}${v}`);

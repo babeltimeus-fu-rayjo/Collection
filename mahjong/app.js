@@ -243,16 +243,6 @@ function cornerIndex(t) {
   return '';
 }
 
-// compact text label for buttons (chi/kan)
-function shortTag(t) {
-  if (!t) return '?';
-  if (t.kind === 'm' || t.kind === 'p' || t.kind === 's') return `${t.v}${t.kind}`;
-  if (t.kind === 'wind') return t.v;
-  if (t.kind === 'dragon') return { R: 'R', G: 'G', W: 'W' }[t.v] || t.v;
-  if (t.kind === 'flower') return `F${t.v}`;
-  return t.key;
-}
-
 function tileSuitClass(t) {
   if (!t) return '';
   if (t.kind === 'm') return 'man';
@@ -1471,7 +1461,11 @@ function renderActions(view, sess) {
     }
     if (opts.options.includes('chi')) {
       for (const combo of opts.chiCombos) {
-        offer(el('button', 'btn chi-btn', `Chi ${combo.map((t) => shortTag(t)).join('+')}`), chiMuteKey(combo, tile),
+        const chiBtn = el('button', 'btn chi-btn', 'Chi');
+        const strip = el('span', 'btn-tiles');
+        for (const t of combo) strip.append(renderTile(t));
+        chiBtn.append(strip);
+        offer(chiBtn, chiMuteKey(combo, tile),
           () => session.localMove({ kind: 'chi', tile1: combo[0].id, tile2: combo[1].id }),
           blocked.has('chi') ? 'A player may Pon or Ron — wait for them to pass' : null);
       }
@@ -1526,7 +1520,9 @@ function renderActions(view, sess) {
     }
     if (a.canClosedKan && a.closedKanKeys.length > 0) {
       for (const key of a.closedKanKeys) {
-        const b = el('button', 'btn kan-btn', `Kan (${key})`);
+        const b = el('button', 'btn kan-btn', 'Kan');
+        const kt = view.players.find((q) => q.seat === my)?.hand.find((h) => h.key === key);
+        if (kt) { const strip = el('span', 'btn-tiles'); strip.append(renderTile(kt)); b.append(strip); }
         b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; session.localMove({ kind: 'kan', type: 'closed', tileKey: key }); } });
         bar.append(b);
       }
@@ -1534,7 +1530,8 @@ function renderActions(view, sess) {
     if (a.canAddKan && a.addKanOptions.length > 0) {
       for (const tid of a.addKanOptions) {
         const t = view.players.find((q) => q.seat === my)?.hand.find((h) => h.id === tid);
-        const b = el('button', 'btn kan-btn', `Kan+ (${t ? shortTag(t) : '?'})`);
+        const b = el('button', 'btn kan-btn', 'Kan+');
+        if (t) { const strip = el('span', 'btn-tiles'); strip.append(renderTile(t)); b.append(strip); }
         b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; session.localMove({ kind: 'kan', type: 'add', tileId: tid }); } });
         bar.append(b);
       }
