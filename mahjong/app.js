@@ -11,12 +11,12 @@ import {
   VARIANTS,
   variantByKey,
   tileName,
+  keyParts,
   tileSort,
   isHonor,
   isTerminal,
   buildDeck,
   newMatch,
-  nextHand,
   applyMove,
   viewFor,
   botChoose,
@@ -261,6 +261,7 @@ function renderTile(t, opts = {}) {
   if (opts.lastDraw) cls.push('last-draw');
   if (opts.riichi) cls.push('riichi-mark');
   const d = el('div', cls.join(' '));
+  if (t.key) d.dataset.key = t.key;
   d.append(buildFace(t));
   const idx = cornerIndex(t);
   if (idx) {
@@ -272,6 +273,28 @@ function renderTile(t, opts = {}) {
   if (opts.onClick) { d.style.cursor = 'pointer'; d.addEventListener('click', opts.onClick); }
   return d;
 }
+
+// Hovering a tile lights up every copy of it that is already face up — the
+// fastest way to see how many of what you are waiting for have already gone,
+// without hunting across four discard piles. A face-down tile carries no key,
+// so nothing concealed can ever light up.
+let matchKey = null;
+function setMatch(key) {
+  if (key === matchKey && (!key || document.querySelector('.tile.match'))) return;
+  matchKey = key;
+  for (const n of document.querySelectorAll('.tile.match')) n.classList.remove('match');
+  if (!key) return;
+  const esc = (window.CSS && CSS.escape) ? CSS.escape(key) : key;
+  for (const root of ['#table', '#hand']) {
+    const r = $(root);
+    if (r) for (const n of r.querySelectorAll(`.tile[data-key="${esc}"]`)) n.classList.add('match');
+  }
+}
+document.addEventListener('pointerover', (e) => {
+  const t = e.target && e.target.closest ? e.target.closest('.tile[data-key]') : null;
+  setMatch(t && t.closest('#table, #hand') ? t.dataset.key : null);
+});
+document.addEventListener('pointerout', (e) => { if (!e.relatedTarget) setMatch(null); });
 
 function renderMeld(meld) {
   const g = el('div', 'meld');
@@ -620,6 +643,25 @@ function saveRejoin(code, token) { try { sessionStorage.setItem(`mjg-rejoin-${co
 function loadRejoin(code) { try { return sessionStorage.getItem(`mjg-rejoin-${code}`); } catch {} return null; }
 function clearRejoin(code) { try { sessionStorage.removeItem(`mjg-rejoin-${code}`); } catch {} }
 
+// PeerJS refuses any JSON message of 16300 bytes or more: it logs the refusal
+// and drops it, so an oversized view strands a guest with a frozen board and no
+// error visible at either end. A late-hand table with four full ponds and the
+// ways list runs close to that, so measure what is about to go out and shed the
+// one part of it that is a luxury. Fewer rows of advice beats no game state.
+const WIRE_MAX = 15000;
+const wireBytes = (v) => new TextEncoder().encode(JSON.stringify(v)).length;
+
+function fitForWire(view) {
+  if (wireBytes(view) < WIRE_MAX) return view;
+  const all = view.outlook && view.outlook.routes;
+  if (!all || !all.length) return view;
+  for (const keep of [12, 6, 3, 1, 0]) {
+    const v = { ...view, outlook: { ...view.outlook, routes: all.slice(0, keep), dropped: all.length - keep } };
+    if (wireBytes(v) < WIRE_MAX) return v;
+  }
+  return view;
+}
+
 // ---------------------------------------------------------------- host session
 
 let session = null;
@@ -638,6 +680,7 @@ const kanMuteKey = (t) => `kan:${t ? t.key : '?'}`;
 const chiMuteKey = (combo, t) => `chi:${[...combo.map((x) => x.key), t ? t.key : '?'].sort().join('+')}`;
 let selectedTile = null;
 let handOrder = [];   // tile-id display order for my hand (drag to rearrange)
+let drawnPin = null;  // the drawn tile parked on the end until the discard lands
 let lastHandSeen = -1; // reset handOrder on a new hand (tile ids are reused each deal)
 let shownDiscardId = null; // the tile currently resting in the centre (fly it in only once)
 
@@ -786,10 +829,10 @@ class HostSession {
     if (!this.G) return;
     const wnames = this.watchers.map((x) => x.name);
     for (const [seat, conn] of this.conns) {
-      try { conn.send({ t: 'state', view: { ...viewFor(this.G, seat, this.code, viewOpts()), watchers: wnames } }); } catch {}
+      try { conn.send({ t: 'state', view: fitForWire({ ...viewFor(this.G, seat, this.code, viewOpts()), watchers: wnames }) }); } catch {}
     }
     for (const w of this.watchers) {
-      try { w.conn.send({ t: 'state', view: { ...viewFor(this.G, w.target, this.code, viewOpts()), watchers: wnames } }); } catch {}
+      try { w.conn.send({ t: 'state', view: fitForWire({ ...viewFor(this.G, w.target, this.code, viewOpts()), watchers: wnames }) }); } catch {}
     }
     pendingMove = false;
     selectedTile = null;
@@ -813,7 +856,7 @@ class HostSession {
         // leave them staring at buttons the engine will keep rejecting
         const c = this.conns.get(seat);
         try { c?.send({ t: 'err', error: res.error }); } catch {}
-        try { c?.send({ t: 'state', view: { ...viewFor(this.G, seat, this.code, viewOpts()), watchers: this.watchers.map((x) => x.name) } }); } catch {}
+        try { c?.send({ t: 'state', view: fitForWire({ ...viewFor(this.G, seat, this.code, viewOpts()), watchers: this.watchers.map((x) => x.name) }) }); } catch {}
       }
       return false;
     }
@@ -826,11 +869,7 @@ class HostSession {
 
   localMove(move) { this.move(0, move); }
 
-  localNext() {
-    if (!this.G || this.G.phase !== 'handEnd') return;
-    nextHand(this.G);
-    this.broadcast();
-  }
+  localNext() { this.move(0, { kind: 'next' }); }
 
   scheduleBots() {
     clearTimeout(this.botTimer);
@@ -965,9 +1004,7 @@ class GuestSession {
     try { this.conn.send({ t: 'move', move }); } catch {}
   }
 
-  localNext() {
-    // guest can't advance; just wait
-  }
+  localNext() { this.localMove({ kind: 'next' }); }
 
   destroy() {
     this.closed = true;
@@ -1046,7 +1083,7 @@ function renderGame(view, sess) {
 
   // a new hand reuses tile ids from the previous hand, so drop the old drag
   // order — otherwise the fresh hand inherits last hand's arrangement (unsorted)
-  if (view.handNum !== lastHandSeen) { handOrder = []; lastHandSeen = view.handNum; }
+  if (view.handNum !== lastHandSeen) { handOrder = []; drawnPin = null; lastHandSeen = view.handNum; }
 
   // topbar
   $('#room-chip').textContent = view.code;
@@ -1199,6 +1236,7 @@ function renderGame(view, sess) {
     const routes = $('#faan-routes');
     routes.replaceChildren();
     lastRoutes = o.routes || [];
+    waysDropped = o.dropped || 0;   // trimmed to fit down the wire (see fitForWire)
     waysUnit = o.unit;
     if (lastRoutes.length) {
       const r = lastRoutes[0];
@@ -1313,13 +1351,41 @@ function handleTileClick(id) {
   }
 }
 
+// Where one tile belongs in a hand somebody may have arranged by hand: beside
+// its own kind if any are already down, otherwise ahead of the first tile that
+// sorts after it. A tidy hand gets a properly sorted insert; a hand arranged by
+// hand keeps every other tile exactly where it was put.
+function slotFor(ordered, t) {
+  let twin = -1;
+  for (let i = 0; i < ordered.length; i++) if (ordered[i].key === t.key) twin = i;
+  if (twin >= 0) return twin + 1;
+  const i = ordered.findIndex((x) => tileSort(t, x) < 0);
+  return i < 0 ? ordered.length : i;
+}
+
 // Keep my hand in the order I've arranged it: known tiles hold their slot,
-// freshly dealt/drawn tiles are inserted sorted so the opening hand is tidy.
-function orderedHand(hand) {
+// freshly dealt tiles are inserted sorted so the opening hand is tidy.
+//
+// A tile drawn mid-hand is the exception. It parks on the end, where you can
+// see at a glance what you just picked up, and files itself away only once the
+// discard is made. Nothing else moves with it, so an arrangement you made
+// yourself survives the tidying.
+function orderedHand(hand, view) {
   const pos = new Map(handOrder.map((id, i) => [id, i]));
   const known = hand.filter((t) => pos.has(t.id)).sort((a, b) => pos.get(a.id) - pos.get(b.id));
   const fresh = hand.filter((t) => !pos.has(t.id)).sort(tileSort);
   const ordered = known.concat(fresh);
+
+  // turning up alongside a hand that is already arranged makes it a draw
+  if (known.length && fresh.length) drawnPin = fresh[fresh.length - 1].id;
+
+  // the turn is over (the view stops naming a draw): file it, then forget it
+  if (drawnPin !== null && !(view && view.lastDraw)) {
+    const i = ordered.findIndex((t) => t.id === drawnPin);
+    if (i >= 0) { const [t] = ordered.splice(i, 1); ordered.splice(slotFor(ordered, t), 0, t); }
+    drawnPin = null;
+  }
+
   handOrder = ordered.map((t) => t.id);
   return ordered;
 }
@@ -1329,7 +1395,7 @@ function orderedHand(hand) {
 function renderHand(view, me, sess) {
   const handEl = $('#hand');
   if (!me || !me.hand) { handEl.replaceChildren(); return; }
-  const ordered = orderedHand(me.hand);
+  const ordered = orderedHand(me.hand, view);
   const byId = new Map([...handEl.children].map((n) => [n.dataset.tid, n]));
   const desired = ordered.map((t) => {
     const isLastDraw = view.lastDraw && t.id === view.lastDraw.id;
@@ -1425,6 +1491,7 @@ function attachHandDrag(tile, tileId, sess) {
       const rest = handOrder.filter((id) => id !== tileId);
       rest.splice(idx, 0, tileId);
       handOrder = rest;
+      if (drawnPin === tileId) drawnPin = null; // placed by hand — leave it there
       if (lastView) renderGame(lastView, sess);
     };
 
@@ -1778,27 +1845,38 @@ function showHandEnd(view, sess) {
 
   // per-player score change: name | Δ this hand | new total
   scores.replaceChildren();
-  scores.append(heScoreRow('Player', 'This hand', 'Total', 'he-score-head'));
+  const readySeats = view.readyNext || [];
+  scores.append(heScoreRow('Player', 'This hand', 'Total', 'he-score-head', 'Ready'));
   for (const p of view.players) {
     const d = hr.delta ? hr.delta[p.seat] || 0 : 0;
     const nm = p.name + (hr.type === 'win' && p.seat === hr.winner ? ' 🏆' : '');
     const dStr = d > 0 ? `+${d}` : `${d}`;
-    scores.append(heScoreRow(nm, dStr, `${p.score}`, d > 0 ? 'up' : d < 0 ? 'down' : ''));
+    // a bot or an empty chair is nobody to wait for, so it reads as neither
+    const waited = !p.bot && p.connected;
+    const mark = !waited ? '—' : readySeats.includes(p.seat) ? '✓' : '…';
+    scores.append(heScoreRow(nm, dStr, `${p.score}`, d > 0 ? 'up' : d < 0 ? 'down' : '', mark));
   }
 
   const hide = $('#btn-he-hide');
   if (hide) hide.onclick = () => { scoreHidden = true; paintHandEnd(); };
 
+  // Everyone reads the score at their own pace, so everyone gets the button and
+  // the deal waits for the last of them.
   const btn = $('#btn-next-hand');
   const wait = $('#he-wait');
-  if (sess && sess.isHost) {
-    btn.classList.remove('hidden');
-    wait.classList.add('hidden');
-    btn.onclick = () => session && session.localNext();
-  } else {
-    btn.classList.add('hidden');
-    wait.classList.remove('hidden');
-  }
+  const ready = view.readyNext || [];
+  const iAmReady = ready.includes(view.mySeat);
+  const others = (view.waitingNext || []).filter((x) => x !== view.mySeat);
+
+  btn.classList.remove('hidden');
+  btn.disabled = iAmReady;
+  btn.textContent = iAmReady ? 'Ready ✓' : 'Ready for the next hand';
+  btn.onclick = () => { if (!iAmReady) session && session.localNext(); };
+
+  wait.classList.remove('hidden');
+  if (others.length) wait.textContent = `Waiting for ${others.map(nameOf).join(', ')}…`;
+  else if (iAmReady) wait.textContent = 'Dealing…';
+  else wait.textContent = 'Everyone else is ready.';
 }
 
 // ---------------------------------------------------------------- glossary
@@ -1849,7 +1927,7 @@ const GLOSSARY = {
   drop: { title: 'Drop',
     body: 'How many tiles in your hand this route has no use for. You would be discarding these over the coming turns.' },
   needs: { title: 'Needs',
-    body: 'What you would then have to draw or claim. A number in brackets is how many of that tile nobody has seen yet — when it is as low as the number you need, the route is a long shot.' },
+    body: 'What you would then have to draw or claim. One tile short, it turns into "wins on" and lists every tile that finishes the hand — a run open at both ends has two. A number in brackets is how many of that tile nobody has seen yet, shown when it is getting scarce.' },
   han: { title: 'Han',
     body: "Riichi's scoring unit. You need at least one han that is NOT dora — that is what a yaku is — before a finished hand can be declared at all. Han and fu together set the payout." },
   riichi: { title: 'Riichi \u00b7 1 han',
@@ -2212,9 +2290,40 @@ function routeLabel(r) {
   return wrap;
 }
 
+// A, B or C — the last separator reads as a choice, not another item, unless
+// the list was cut short and there is no real last item to point at.
+// routes travel as tile keys; the spelled-out name is built here
+const wantName = (w) => tileName({ key: w.k, ...keyParts(w.k) });
+
+function tileListEl(wrap, list, cap) {
+  const show = cap > 0 ? list.slice(0, cap) : list;
+  const cut = list.length - show.length;
+  show.forEach((w, i) => {
+    if (i) wrap.append(el('span', '', !cut && i === show.length - 1 ? ' or ' : ', '));
+    wrap.append(tileNameEl(wantName(w)));
+    if (w.left <= (w.count || 1)) wrap.append(el('span', '', ` (${w.left} left)`));
+  });
+  if (cut > 0) wrap.append(el('span', '', ` +${cut} more`));
+}
+
 function routeNeedEl(r, cap = 0) {
   const wrap = el('span', '');
   if (r.away > 0) { wrap.append(term('drop', `drop ${r.away}`)); if (r.wants.length) wrap.append(el('span', '', ' · ')); }
+  const short = r.wants.reduce((a, w) => a + w.count, 0);
+  // named tiles when the engine sent them, otherwise just how many there are
+  const wins = r.wins || [];
+  const winsN = r.winsN != null ? r.winsN : wins.length;
+
+  // One tile short. Name every tile that finishes the hand, not just the one
+  // the solver happened to trace: a 3-4 wins on 2 or 5, and being told only
+  // about the 5 costs you half your outs.
+  if (short === 1 && wins.length) {
+    wrap.append(term('needs', 'wins on'));
+    wrap.append(el('span', '', ' '));
+    tileListEl(wrap, wins, cap);
+    return wrap;
+  }
+
   if (r.wants.length) {
     const show = cap > 0 ? r.wants.slice(0, cap) : r.wants;
     const rest = r.wants.length - show.length;
@@ -2222,28 +2331,24 @@ function routeNeedEl(r, cap = 0) {
     wrap.append(el('span', '', ' '));
     show.forEach((w, i) => {
       if (i) wrap.append(el('span', '', ', '));
-      wrap.append(tileNameEl(w.name));
+      wrap.append(tileNameEl(wantName(w)));
       wrap.append(el('span', '', `\u00d7${w.count}${w.left <= w.count ? ` (${w.left} left)` : ''}`));
     });
     if (rest > 0) wrap.append(el('span', '', ` +${rest} more`));
+    // Further out there is no single answer to print — the plan above is one
+    // way to fill the shape. Say how much room there is to manoeuvre instead,
+    // and name the tiles when there are few enough to act on.
+    if (cap === 0 && winsN) {
+      wrap.append(el('span', '', ` · ${winsN} tile${winsN > 1 ? 's' : ''} help${winsN > 1 ? '' : 's'}`));
+      if (wins.length) { wrap.append(el('span', '', ': ')); tileListEl(wrap, wins, 0); }
+    }
   }
   if (!r.away && !r.wants.length) wrap.append(el('span', 'ready', 'ready'));
   return wrap;
 }
 
-function routeNeed(r, cap = 0) {
-  const bits = [];
-  if (r.away > 0) bits.push(`drop ${r.away}`);
-  if (r.wants.length) {
-    const show = cap > 0 ? r.wants.slice(0, cap) : r.wants;
-    const rest = r.wants.length - show.length;
-    const list = show.map((w) => `${w.name}\u00d7${w.count}${w.left <= w.count ? ` (${w.left} left)` : ''}`).join(', ');
-    bits.push(`needs ${list}${rest > 0 ? ` +${rest} more` : ''}`);
-  }
-  return bits.join(' · ') || 'ready';
-}
-
 let lastRoutes = [];
+let waysDropped = 0;
 let waysUnit = 'faan';
 
 // The full list, since the line under the hand only has room for the best one.
@@ -2263,8 +2368,9 @@ function paintWays() {
   const body = $('#ways-body');
   const intro = $('#ways-intro');
   body.replaceChildren();
+  const cut = waysDropped ? ` ${waysDropped} more are being left out to keep the table in sync.` : '';
   intro.textContent = lastRoutes.length
-    ? `Every shape that still gets you a declarable hand, easiest first. "Drop" is how many tiles in your hand have to go; "needs" is what you then have to draw, with the number still unseen when it is getting scarce.`
+    ? `Every shape that still gets you a declarable hand, easiest first. "Drop" is how many tiles in your hand have to go; "needs" is one way to fill what is left. One tile short, that becomes "wins on" — every tile that finishes it, with the number nobody has seen yet when it is getting scarce.${cut}`
     : 'Nothing from this hand can be declared any more.';
   for (const r of lastRoutes) {
     const row = el('div', 'ways-row');
@@ -2282,11 +2388,12 @@ function paintWays() {
 }
 
 // one row of the score table (name / delta / running total)
-function heScoreRow(name, delta, total, deltaCls) {
+function heScoreRow(name, delta, total, deltaCls, ready) {
   const row = el('div', 'he-score-row' + (deltaCls === 'he-score-head' ? ' he-score-head' : ''));
   row.append(el('span', 'he-pname', name));
   row.append(el('span', 'he-delta' + (deltaCls && deltaCls !== 'he-score-head' ? ' ' + deltaCls : ''), delta));
   row.append(el('span', 'he-ptotal', total));
+  row.append(el('span', `he-ready${ready === '✓' ? ' is-ready' : ready === '…' ? ' not-ready' : ''}`, ready || ''));
   return row;
 }
 
@@ -2364,6 +2471,7 @@ function leaveRoom() {
   pendingMove = false;
   selectedTile = null;
   handOrder = [];
+  drawnPin = null;
   seenFxSeq = 0;
   chatSeenN = 0;
   shownDiscardId = null;

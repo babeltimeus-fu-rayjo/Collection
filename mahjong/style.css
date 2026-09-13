@@ -352,6 +352,9 @@ body {
 .tile.highlight { outline: 2px solid #4db87a; }
 .tile.last-draw { outline: 2px solid #e8d5a3; }
 .tile.riichi-mark { box-shadow: inset 0 calc(-3 * var(--u)) 0 #cc2222, 0 1px 2px rgba(0,0,0,.3); }
+/* every copy of the tile under the pointer, wherever it is face up */
+.tile.match { outline: 2px solid #f0a63c; z-index: 2;
+  box-shadow: 0 0 0 3px rgba(240,166,60,.3), 0 1px 2px rgba(0,0,0,.3); }
 
 /* hand tiles — sized by --ts-hand */
 #hand {
@@ -479,7 +482,7 @@ body {
 
 /* the full list of ways to a Hong Kong win, in place under the hand — the page
    grows and scrolls rather than a panel covering the board you are reading */
-#ways-panel { width: 100%; max-width: 780px; margin: 6px auto 4px; text-align: left; }
+#ways-panel { width: 100%; max-width: 780px; margin: 6px auto 0; padding-bottom: 28px; text-align: left; }
 #ways-intro { font-size: 11px; color: #6f9a80; line-height: 1.5; margin-bottom: 6px; }
 #ways-body { display: flex; flex-direction: column; gap: 2px; }
 .ways-row {
@@ -549,7 +552,10 @@ body {
 .he-pay .he-val { color: #f0c674; }
 
 #he-scores { font-size: 13px; color: #8ab89a; border-top: 1px solid #2a6b45; padding-top: 8px; }
-.he-score-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: baseline; padding: 2px 0; }
+.he-score-row { display: grid; grid-template-columns: 1fr auto auto 3.5em; gap: 12px; align-items: baseline; padding: 2px 0; }
+.he-ready { text-align: right; color: #5a8a6a; }
+.he-ready.is-ready { color: #6fcf7f; font-weight: 700; }
+.he-ready.not-ready { color: #d8a05a; }
 .he-score-row.he-score-head { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #5a8a6a; padding-bottom: 4px; }
 .he-pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #cfe3d5; }
 .he-score-head .he-pname { color: #5a8a6a; }

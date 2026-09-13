@@ -222,6 +222,7 @@ export function newMatch(roster, variantKey) {
     fx: null,
     fxSeq: 0,
     handResult: null,
+    readyNext: [],
   };
   dealHand(G);
   return G;
@@ -502,7 +503,42 @@ export function applyMove(G, seat, move) {
   if (move.kind === 'tsumo') return doTsumo(G, p, move);
   if (move.kind === 'riichi') return doRiichi(G, p, move);
   if (move.kind === 'pass') return doPass(G, p, move);
+  if (move.kind === 'next') return doNext(G, p);
   return { ok: false, error: 'Unknown action' };
+}
+
+// Everyone still at the table has to finish reading the score before the next
+// hand is dealt — the deal wipes the board, and being the host is no reason to
+// take that away from the other three. A bot has nothing to read and a
+// disconnected seat cannot answer, so neither of those holds anybody up.
+export function waitingOnNext(G) {
+  if (G.phase !== 'handEnd') return [];
+  const ready = G.readyNext || [];
+  return G.players
+    .filter((p) => !p.bot && !p.botFor && p.connected && !ready.includes(p.seat))
+    .map((p) => p.seat);
+}
+
+// Deal once the last person we were waiting on has answered — or has left, which
+// is the same thing from the table's point of view. Without the second case a
+// player dropping out while everyone else has already pressed would strand the
+// hand: nobody left to press, and every remaining button already spent.
+function maybeDeal(G) {
+  if (G.phase !== 'handEnd') return false;
+  if (!(G.readyNext || []).length) return false;   // nobody has asked to move on
+  if (waitingOnNext(G).length) return false;
+  return nextHand(G);
+}
+
+function doNext(G, p) {
+  if (G.phase !== 'handEnd') return { ok: false, error: 'The hand is not over' };
+  if (!G.readyNext) G.readyNext = [];
+  if (!G.readyNext.includes(p.seat)) {
+    G.readyNext.push(p.seat);
+    addLog(G, `${p.name} is ready for the next hand.`);
+  }
+  maybeDeal(G);
+  return { ok: true };
 }
 
 function doDiscard(G, p, move) {
@@ -867,6 +903,7 @@ function resolveExhaustiveDraw(G) {
   }
   G.honba += 1;
   G.phase = 'handEnd';
+  G.readyNext = [];
 }
 
 // ---------------------------------------------------------------- win resolution
@@ -941,6 +978,7 @@ function resolveWin(G, winnerSeat, loserSeat, isTsumo) {
     G.honba = 0;
   }
   G.phase = 'handEnd';
+  G.readyNext = [];
 }
 
 function advanceDealer(G) {
@@ -965,6 +1003,7 @@ function jpTsumoPayments(total, isDealer) {
 
 export function nextHand(G) {
   if (G.phase !== 'handEnd') return false;
+  G.readyNext = [];
   G.handsPlayed += 1;
   if (G.handsPlayed >= G.maxHands || isGameEnd(G)) {
     endGame(G);
@@ -2263,7 +2302,7 @@ export function jpLockedHan(G, seat) {
 }
 
 // a tile key back into the shape tileName wants
-function keyParts(key) {
+export function keyParts(key) {
   if (key[0] === 'w') return { kind: 'wind', v: key.slice(1) };
   if (key[0] === 'd') return { kind: 'dragon', v: key.slice(1) };
   return { kind: key[0], v: Number(key.slice(1)) };
@@ -2383,6 +2422,44 @@ function jpRoutesFor(ctx) {
   return out;
 }
 
+// The traced plan names ONE way to fill a shape, which is not the same thing as
+// every tile that would fill it: a 3-4 waiting on 2 or 5 gets reported as
+// whichever the walk happened to reach first, and a learner reading it would
+// pass up half their own winning tiles. So ask the question directly — deal one
+// tile that is still out there, solve again, and see which routes came a tile
+// closer. For a route one short that set is exactly what wins; further out it
+// is what helps. Around 30 extra solves, ~20ms, and only ever for a seat that
+// is going to read the answer.
+function routeWins(routesFor, ctx, base) {
+  const mine = new Array(34).fill(0);
+  for (const t of ctx.hand) { const i = keyIdx(t.key); if (i >= 0) mine[i]++; }
+  const shortOf = (r) => r.wants.reduce((a, w) => a + w.count, 0);
+  const was = new Map(base.map((r) => [r.id, shortOf(r)]));
+
+  const wins = new Map();
+  for (let i = 0; i < 34; i++) {
+    const left = Math.max(0, Math.min(4, 4 - (ctx.seen[i] || 0)) - mine[i]);
+    if (left <= 0) continue;                    // nobody can draw what is all gone
+    const key = KEY_LIST[i], parts = keyParts(key);
+    for (const r of routesFor({ ...ctx, hand: [...ctx.hand, { key, ...parts }] })) {
+      if (was.get(r.id) !== shortOf(r) + 1) continue;
+      if (!wins.has(r.id)) wins.set(r.id, []);
+      wins.get(r.id).push({ k: key, left });
+    }
+  }
+  return wins;
+}
+
+// Only what the panel is actually going to print: the tiles when it will name
+// them, and otherwise just how many there are. Every route carrying its full
+// set of helpful tiles made the view several times bigger than everything else
+// in it put together — and the view has to fit down a data channel, which drops
+// what it cannot carry without telling anybody.
+function winsField(list, wants) {
+  const short = wants.reduce((a, w) => a + w.count, 0);
+  return { wins: (short === 1 || list.length <= 4) ? list : [], winsN: list.length };
+}
+
 export function jpOutlook(G, seat) {
   if (G.variant !== 'jp') return null;
   const locked = jpLockedHan(G, seat);
@@ -2397,9 +2474,9 @@ export function jpOutlook(G, seat) {
   }
   for (const d of G.dora) bump(d);
 
-  const shapes = jpRoutesFor({
-    hand: p.hand, melds: p.melds, seatWind: seatWind(G, seat), roundWind: G.roundWind, seen,
-  });
+  const ctx = { hand: p.hand, melds: p.melds, seatWind: seatWind(G, seat), roundWind: G.roundWind, seen };
+  const shapes = jpRoutesFor(ctx);
+  const wins = routeWins(jpRoutesFor, ctx, shapes);
 
   const routes = shapes
     .map((r) => {
@@ -2413,7 +2490,8 @@ export function jpOutlook(G, seat) {
     .sort((a, b) => a.effort - b.effort || a.away - b.away || b.han - a.han)
     .map((r) => ({
       parts: r.parts, faan: r.han, away: r.away, selfDraw: false, riichi: r.riichi, effort: r.effort,
-      wants: r.wants.map((w) => ({ name: tileName({ key: w.key, ...keyParts(w.key) }), count: w.count, left: w.left })),
+      wants: r.wants.map((w) => ({ k: w.key, count: w.count, left: w.left })),
+      ...winsField(wins.get(r.id) || [], r.wants),
     }));
 
   return { ...locked, routes };
@@ -2434,10 +2512,12 @@ export function hkOutlook(G, seat) {
   }
   for (const d of G.dora) bump(d);
 
-  const shapes = hkRoutesFor({
+  const ctx = {
     hand: p.hand, melds: p.melds, flowers: p.flowers,
     seatWind: seatWind(G, seat), roundWind: G.roundWind, seen,
-  });
+  };
+  const shapes = hkRoutesFor(ctx);
+  const wins = routeWins(hkRoutesFor, ctx, shapes);
 
   const routes = shapes
     .map((r) => (r.shape >= HK_MIN_FAAN
@@ -2450,7 +2530,8 @@ export function hkOutlook(G, seat) {
     .map((r) => ({
       parts: r.parts, faan: r.faan, away: r.away, selfDraw: r.selfDraw,
       effort: r.effort,
-      wants: r.wants.map((w) => ({ name: tileName({ key: w.key, ...keyParts(w.key) }), count: w.count, left: w.left })),
+      wants: r.wants.map((w) => ({ k: w.key, count: w.count, left: w.left })),
+      ...winsField(wins.get(r.id) || [], r.wants),
     }));
 
   return { ...locked, routes };
@@ -2536,6 +2617,8 @@ export function viewFor(G, seat, code, opts = {}) {
     honba: G.honba,
     outlook: G.variant === 'jp' ? jpOutlook(G, seat) : hkOutlook(G, seat),
     handResult: G.handResult,
+    readyNext: G.readyNext || [],
+    waitingNext: waitingOnNext(G),
     code,
     log: G.log.slice(-30),
     chatter: G.chatter,
@@ -2562,6 +2645,7 @@ export function markDisconnected(G, seat) {
   if (!p || !p.connected) return false;
   p.connected = false;
   addLog(G, `${p.name} disconnected.`);
+  maybeDeal(G);
   return true;
 }
 
@@ -2570,6 +2654,7 @@ export function markBotTakeover(G, seat) {
   if (!p) return false;
   p.botFor = true;
   addLog(G, `A bot takes over for ${p.name}.`);
+  maybeDeal(G);
   return true;
 }
 
@@ -2589,5 +2674,6 @@ export function markSeatResigned(G, seat) {
   p.connected = false;
   p.botFor = false;
   addLog(G, `${p.name} resigned their seat.`);
+  maybeDeal(G);
   return true;
 }
