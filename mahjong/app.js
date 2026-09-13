@@ -1102,8 +1102,13 @@ function renderGame(view, sess) {
   const doraEl = $('#dora-display');
   doraEl.replaceChildren();
   if (view.dora && view.dora.length > 0) {
-    doraEl.append(term('dora', 'Dora:'));
-    for (const d of view.dora) doraEl.append(renderTile(d));
+    // Label above, indicators in a row beneath. Inline, a second indicator (one
+    // turns up for every kan) wrapped onto its own line and read as a stray tile
+    // sitting in the middle of the table rather than as dora.
+    doraEl.append(term('dora', view.dora.length > 1 ? `Dora \u00d7${view.dora.length}` : 'Dora'));
+    const row = el('div', 'dora-tiles');
+    for (const d of view.dora) row.append(renderTile(d));
+    doraEl.append(row);
   }
   const sticksEl = $('#sticks-display');
   sticksEl.replaceChildren();

@@ -252,7 +252,8 @@ body {
 #round-wind-display { color: #e8d5a3; font-weight: 700; white-space: nowrap; min-height: 1.15em; }
 #wall-display { color: #cfe3d5; font-weight: 600; white-space: nowrap; min-height: 1.15em; }
 #sticks-display { white-space: nowrap; min-height: 1.15em; } /* reserved even when empty */
-#dora-display { display: flex; gap: 4px; align-items: center; justify-content: center; flex-wrap: wrap; }
+#dora-display { display: flex; flex-direction: column; gap: 3px; align-items: center; }
+.dora-tiles { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; max-width: 100%; }
 #dora-display:empty { display: none; }
 
 /* resting discard: reserve the tile's height so the slot never collapses */
