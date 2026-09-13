@@ -1164,7 +1164,7 @@ export const SCORING_GUIDE = [
     key: 'jp',
     name: 'Japanese Riichi',
     unit: 'han',
-    note: ' 13-tile hand: 4 sets + a pair. A yaku is a named pattern, and the rows below ARE the yaku — you must hold at least one of them to declare a win at all. A hand that is merely complete, with no pattern, cannot be won on: you keep playing. The cheapest yaku are usually Riichi (just declare it while concealed and tenpai), Menzen Tsumo (self-draw a concealed hand) and Tanyao (no terminals or honours), so a concealed hand is nearly always worth something. Dora are a bonus on top and never count as your yaku. The payout comes from han + fu, and the dealer pays and receives more.'.trim(),
+    note: '13-tile hand: 4 sets + a pair. To declare a win you need at least 1 han that is not dora — that is what a yaku is, and the rows below are the list. A complete hand with no yaku cannot be won on: you keep playing. Riichi, Menzen Tsumo and Tanyao are the easy ones. The payout comes from han + fu, and the dealer pays and receives more.',
     rows: [
       ['Riichi', '1', 'Declared while concealed and tenpai (1000 pt bet)'],
       ['Ippatsu', '1', 'Win within one go-around of your riichi'],
@@ -1904,7 +1904,39 @@ function suitReuse(mine, supply, base, allowRun, allowTrip) {
     memo.set(mk, res);
     return res;
   };
-  return go(0, 0, 0);
+  const at = (i, c2, c1, s, pr) => go(i, c2, c1)[s][pr];
+  // Walk the memo forward, picking any choice that still reaches the target, to
+  // recover ONE composition that achieves it. That is what turns "three away"
+  // into "needs East x3" — a distance never says what you are waiting for.
+  const trace = (sets, pair) => {
+    const used = new Array(9).fill(0);
+    let i = 0, c2 = 0, c1 = 0, s = sets, pr = pair;
+    while (i < 9) {
+      const maxRun = (allowRun && i <= 6) ? 4 : 0;
+      let picked = null;
+      for (let r = 0; r <= maxRun && !picked; r++) {
+        for (let t = 0; t <= (allowTrip ? 1 : 0) && !picked; t++) {
+          for (let q = 0; q <= 1 && !picked; q++) {
+            if (r + t > s || q > pr) continue;
+            const u = c2 + c1 + r + q * 2 + t * 3;
+            if (u > supply[base + i]) continue;
+            const rest = go(i + 1, c1, r)[s - r - t][pr - q];
+            if (rest <= NEG / 2) continue;
+            if (Math.min(u, mine[base + i]) + rest !== at(i, c2, c1, s, pr)) continue;
+            picked = { r, t, q, u };
+          }
+        }
+      }
+      if (!picked) break;
+      used[i] = picked.u;
+      s -= picked.r + picked.t;
+      pr -= picked.q;
+      const keep = c1;
+      c2 = keep; c1 = picked.r; i++;
+    }
+    return used;
+  };
+  return { table: go(0, 0, 0), trace };
 }
 
 function emptyHonorTable() {
@@ -1918,6 +1950,7 @@ function emptyHonorTable() {
 function honorReuse(mine, supply, base, allowTrip, honVal) {
   let cur = emptyHonorTable();
   cur[0][0][0][0] = 0;
+  const steps = [cur];
   for (let j = 0; j < HONORS_ORDER.length; j++) {
     const next = emptyHonorTable();
     const idx = base + j;
@@ -1942,8 +1975,36 @@ function honorReuse(mine, supply, base, allowTrip, honVal) {
       }
     }
     cur = next;
+    steps.push(cur);
   }
-  return cur;
+  // the same walk-back, one honour at a time
+  const trace = (sets, pair, hf, hu) => {
+    const used = new Array(HONORS_ORDER.length).fill(0);
+    let s = sets, p = pair, f = hf, u = hu;
+    for (let j = HONORS_ORDER.length - 1; j >= 0; j--) {
+      const target = steps[j + 1][s][p][f][u];
+      let done = false;
+      for (let t = 0; t <= (allowTrip ? 1 : 0) && !done; t++) {
+        for (let pr = 0; pr <= 1 && !done; pr++) {
+          if (t && pr) continue;
+          if (t > s || pr > p) continue;
+          const tiles = 3 * t + 2 * pr;
+          if (tiles > supply[base + j]) continue;
+          const pf = t ? Math.max(0, f - honVal[j]) : f;
+          const gain = Math.min(tiles, mine[base + j]);
+          for (const pu of (tiles > 0 ? [0, 1] : [u])) {
+            const prev = steps[j][s - t][p - pr][pf][pu];
+            if (prev <= NEG / 2 || prev + gain !== target) continue;
+            used[j] = tiles; s -= t; p -= pr; f = pf; u = pu; done = true;
+            break;
+          }
+        }
+      }
+      if (!done) break;
+    }
+    return used;
+  };
+  return { table: cur, trace };
 }
 
 const ZERO_SUIT = (() => { const t = emptySuitTable(); t[0][0] = 0; return t; })();
@@ -1952,26 +2013,34 @@ const ZERO_HONOR = (() => { const t = emptyHonorTable(); t[0][0][0][0] = 0; retu
 function convolveSuits(tables) {
   let cur = emptySuitTable();
   cur[0][0] = 0;
-  for (const t of tables) {
+  let splits = Array.from({ length: 5 }, () => [[], []]);
+  for (let k = 0; k < tables.length; k++) {
+    const t = tables[k];
     const next = emptySuitTable();
+    const nextSplit = Array.from({ length: 5 }, () => [null, null]);
     for (let s = 0; s < 5; s++) for (let p = 0; p < 2; p++) {
       if (cur[s][p] <= NEG / 2) continue;
       for (let s2 = 0; s + s2 < 5; s2++) for (let p2 = 0; p + p2 < 2; p2++) {
         const v = t[s2][p2];
         if (v <= NEG / 2) continue;
-        if (cur[s][p] + v > next[s + s2][p + p2]) next[s + s2][p + p2] = cur[s][p] + v;
+        if (cur[s][p] + v > next[s + s2][p + p2]) {
+          next[s + s2][p + p2] = cur[s][p] + v;
+          nextSplit[s + s2][p + p2] = [...(splits[s][p] || []), [s2, p2]];
+        }
       }
     }
     cur = next;
+    splits = nextSplit;
   }
-  return cur;
+  return { table: cur, splits };
 }
 
-// best reuse for a whole shape, plus the honour faan that came with it
-function shapeBest(suitPart, honorPart, need, requireHonor) {
-  let best = { reuse: NEG, hf: 0 };
+// best reuse for a whole shape, plus the honour faan and the arrangement that
+// produced it — the arrangement is what the trace functions turn into "needs"
+function shapeBest(suits, honorPart, need, requireHonor) {
+  let best = { reuse: NEG, hf: 0, suitSplit: null, honSets: 0, honPair: 0, hu: 0 };
   for (let s = 0; s <= need; s++) for (let p = 0; p < 2; p++) {
-    const a = suitPart[s][p];
+    const a = suits.table[s][p];
     if (a <= NEG / 2) continue;
     const s2 = need - s, p2 = 1 - p;
     for (let hf = 0; hf <= MAX_HF; hf++) for (let hu = 0; hu < 2; hu++) {
@@ -1980,7 +2049,9 @@ function shapeBest(suitPart, honorPart, need, requireHonor) {
       if (b <= NEG / 2) continue;
       const reuse = a + b;
       // more reuse first (closer), then more honour faan at the same distance
-      if (reuse > best.reuse || (reuse === best.reuse && hf > best.hf)) best = { reuse, hf };
+      if (reuse > best.reuse || (reuse === best.reuse && hf > best.hf)) {
+        best = { reuse, hf, suitSplit: suits.splits[s][p], honSets: s2, honPair: p2, hu };
+      }
     }
   }
   return best;
@@ -2033,6 +2104,7 @@ function hkRoutesFor(ctx) {
   }
   const honTab = {};
   for (const m of SET_MODES) honTab[m.id] = honorReuse(mine, supply, 27, m.trip, honVal);
+  const ZERO_TRACE = { table: ZERO_SUIT, trace: () => new Array(9).fill(0) };
 
   const FLUSH = [
     { id: 'any', name: null, val: 0, suits: SUITS_ORDER, honors: true, requireHonor: false },
@@ -2053,10 +2125,32 @@ function hkRoutesFor(ctx) {
     for (const m of SET_MODES) {
       if (m.id === 'sequences' && !allChiMelds) continue;
       if (m.id === 'triplets' && anyChiMeld) continue;
-      const suits = SUITS_ORDER.map((s) => (f.suits.includes(s) ? suitTab[`${s}:${m.id}`] : ZERO_SUIT));
-      const hon = f.honors ? honTab[m.id] : ZERO_HONOR;
-      const best = shapeBest(convolveSuits(suits), hon, need, f.requireHonor);
+      const parts_ = SUITS_ORDER.map((s) => (f.suits.includes(s) ? suitTab[`${s}:${m.id}`] : ZERO_TRACE));
+      const hon = f.honors ? honTab[m.id] : { table: ZERO_HONOR, trace: () => new Array(HONORS_ORDER.length).fill(0) };
+      const best = shapeBest(convolveSuits(parts_.map((x) => x.table)), hon.table, need, f.requireHonor);
       if (best.reuse <= NEG / 2) continue;
+
+      // what the arrangement actually asks for, beyond what is already held
+      const wants = [];
+      const noteWant = (idx, used) => {
+        const short = used - mine[idx];
+        if (short > 0) wants.push({ key: KEY_LIST[idx], count: short, left: Math.max(0, supply[idx] - mine[idx]) });
+      };
+      if (best.suitSplit) {
+        parts_.forEach((tab, si) => {
+          const [ss, sp] = best.suitSplit[si] || [0, 0];
+          const used = tab.trace(ss, sp);
+          used.forEach((u, vi) => noteWant(SUIT_BASE[SUITS_ORDER[si]] + vi, u));
+        });
+      }
+      hon.trace(best.honSets, best.honPair, best.hf, best.hu)
+        .forEach((u, hi) => noteWant(27 + hi, u));
+      wants.sort((a, b) => b.count - a.count || a.left - b.left);
+      // A route asking for three of a tile with three left is not the same work
+      // as one asking for a tile with eleven copies about. Scarcity is priced in
+      // so the ordering reflects effort rather than just the discard count.
+      const effort = (concealed - best.reuse)
+        + wants.reduce((a, w) => a + w.count * (4 / Math.max(1, w.left)), 0);
       const shape = f.val + m.val + best.hf + meldHon + flowerFaan;
       const parts = [];
       if (f.name) parts.push(f.name);
@@ -2065,7 +2159,11 @@ function hkRoutesFor(ctx) {
       const honFaan = best.hf + meldHon;
       if (honFaan > 0) parts.push(`${honFaan} from dragon/wind pungs`);
       if (flowerFaan > 0) parts.push(`${flowerFaan} flower${flowerFaan > 1 ? 's' : ''}`);
-      out.push({ id: `${f.id}|${m.id}`, parts, shape, away: concealed - best.reuse });
+      out.push({
+        id: `${f.id}|${m.id}`, parts, shape,
+        away: concealed - best.reuse,
+        wants, effort: Math.round(effort * 10) / 10,
+      });
     }
   }
   return out;
@@ -2075,6 +2173,13 @@ function hkRoutesFor(ctx) {
 // Everything above is shape arithmetic. This turns a live game into the question
 // it answers, and adds the one faan the shape can't know about: a self-draw is
 // always available, so a route one short of the minimum is still a route.
+// a tile key back into the shape tileName wants
+function keyParts(key) {
+  if (key[0] === 'w') return { kind: 'wind', v: key.slice(1) };
+  if (key[0] === 'd') return { kind: 'dragon', v: key.slice(1) };
+  return { kind: key[0], v: Number(key.slice(1)) };
+}
+
 export function hkOutlook(G, seat) {
   if (G.variant !== 'hk') return null;
   const locked = hkLockedFaan(G, seat);
@@ -2100,10 +2205,14 @@ export function hkOutlook(G, seat) {
       ? { ...r, faan: r.shape, selfDraw: false }
       : { ...r, faan: r.shape + 1, selfDraw: true }))
     .filter((r) => r.faan >= HK_MIN_FAAN)
-    // nearest first; at equal distance the bigger hand leads
-    .sort((a, b) => a.away - b.away || b.faan - a.faan)
-    .slice(0, 3)
-    .map((r) => ({ parts: r.parts, faan: r.faan, away: r.away, selfDraw: r.selfDraw }));
+    // easiest first — effort counts the discards AND how scarce the tiles it
+    // still wants are, so a route needing three of a nearly-exhausted tile sinks
+    .sort((a, b) => a.effort - b.effort || a.away - b.away || b.faan - a.faan)
+    .map((r) => ({
+      parts: r.parts, faan: r.faan, away: r.away, selfDraw: r.selfDraw,
+      effort: r.effort,
+      wants: r.wants.map((w) => ({ name: tileName({ key: w.key, ...keyParts(w.key) }), count: w.count, left: w.left })),
+    }));
 
   return { ...locked, routes };
 }

@@ -426,6 +426,20 @@ body {
 .claim-note { font-size: 12px; color: #5a8a6a; align-self: center; display: inline-flex; align-items: center; gap: 6px; }
 .claim-mute.undo { border-radius: 6px; border-left: none; background: #1a5a38; color: #c8e0d0; padding: 2px 8px; }
 
+/* the full list of ways to a Hong Kong win */
+#ways-intro { font-size: 12px; color: #8ab89a; line-height: 1.5; margin-bottom: 10px; }
+#ways-body { display: flex; flex-direction: column; gap: 2px; max-height: 46vh; overflow: auto; }
+.ways-row {
+  display: grid; grid-template-columns: 64px minmax(150px, 1fr) minmax(160px, 1.2fr);
+  gap: 10px; align-items: baseline; font-size: 12px;
+  padding: 5px 6px; border-radius: 6px; background: rgba(255,255,255,.03);
+}
+.ways-row:nth-child(odd) { background: rgba(255,255,255,.06); }
+.ways-faan { color: #e8d5a3; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ways-name { color: #cfe3d5; }
+.ways-need { color: #7fa38c; }
+@media (max-width: 620px) { .ways-row { grid-template-columns: 56px 1fr; } .ways-need { grid-column: 1 / -1; } }
+
 /* ================================================================ feed (history log) */
 /* a floating popup anchored above the 📜 button, styled like the settings drawer;
    hidden by default — toggle it with 📜 (common/feedtoggle.js) */

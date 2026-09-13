@@ -1164,27 +1164,33 @@ function renderGame(view, sess) {
     faanBar.classList.remove('hidden');
     const short = o.total < o.minToWin;
     const lock = $('#faan-locked');
-    lock.textContent = `Guaranteed ${o.total} faan`;
+    lock.textContent = `Current ${o.total} faan`;
     lock.classList.toggle('short', short);
     $('#faan-parts').textContent = o.parts.length
       ? `· ${o.parts.map((f) => f.name).join(', ')}${short ? ` · ${o.minToWin - o.total} more to win` : ''}`
       : `· nothing banked yet · ${o.minToWin} needed to win`;
 
-    // and the ways out: every shape that still reaches the minimum, nearest
-    // first, counting only tiles that are actually still available
+    // and the way out: the easiest shape that still reaches the minimum, with
+    // what it is actually waiting for. The rest are a click away.
     const routes = $('#faan-routes');
     routes.replaceChildren();
-    if (o.routes && o.routes.length) {
-      routes.append(el('span', '', `Ways to ${o.minToWin}+: `));
-      o.routes.slice(0, 2).forEach((r, i) => {
-        if (i) routes.append(el('span', '', '  ·  '));
-        const desc = `${r.parts.join(' + ') || 'any winning hand'}${r.selfDraw ? ' + self-draw' : ''}`;
-        routes.append(el('b', '', desc));
-        routes.append(el('span', '', ` → ${r.faan} faan `));
-        routes.append(r.away === 0 ? el('span', 'ready', '(ready)') : el('span', '', `(${r.away} away)`));
-      });
+    lastRoutes = o.routes || [];
+    if (lastRoutes.length) {
+      const r = lastRoutes[0];
+      routes.append(el('span', '', `Easiest way to ${o.minToWin}+: `));
+      routes.append(el('b', '', `${r.parts.join(' + ') || 'any winning hand'}${r.selfDraw ? ' + self-draw' : ''}`));
+      routes.append(el('span', '', ` → ${r.faan} faan · `));
+      routes.append(r.away === 0 && !r.wants.length
+        ? el('span', 'ready', 'ready')
+        : el('span', '', `${routeNeed(r, 3)}`));
+      if (lastRoutes.length > 1) {
+        const more = el('button', 'claim-mute undo', `all ${lastRoutes.length} ways`);
+        more.type = 'button';
+        more.addEventListener('click', showWays);
+        routes.append(el('span', '', ' '), more);
+      }
     } else {
-      routes.append(el('span', '', 'No hand from here reaches 3 faan — play for the draw'));
+      routes.append(el('span', '', `No hand from here reaches ${o.minToWin} faan — play for the draw`));
     }
   } else {
     faanBar.classList.add('hidden');
@@ -1708,6 +1714,41 @@ function showHandEnd(view, sess) {
   }
 }
 
+// "drop 3 · needs East Wind x3, Red Dragon x1" — the discards AND the draws,
+// because a distance on its own never says what you are waiting for, and three
+// of a tile with three left is not the same work as three of a fresh one
+function routeNeed(r, cap = 0) {
+  const bits = [];
+  if (r.away > 0) bits.push(`drop ${r.away}`);
+  if (r.wants.length) {
+    const show = cap > 0 ? r.wants.slice(0, cap) : r.wants;
+    const rest = r.wants.length - show.length;
+    const list = show.map((w) => `${w.name}\u00d7${w.count}${w.left <= w.count ? ` (${w.left} left)` : ''}`).join(', ');
+    bits.push(`needs ${list}${rest > 0 ? ` +${rest} more` : ''}`);
+  }
+  return bits.join(' · ') || 'ready';
+}
+
+let lastRoutes = [];
+
+// the full list, since the line under the hand only has room for the best one
+function showWays() {
+  const body = $('#ways-body');
+  const intro = $('#ways-intro');
+  body.replaceChildren();
+  intro.textContent = lastRoutes.length
+    ? 'Every shape that still reaches three faan, easiest first. "Drop" is how many tiles in your hand have to go; "needs" is what you then have to draw, with the number still unseen when it is getting scarce.'
+    : 'Nothing from this hand reaches three faan any more.';
+  for (const r of lastRoutes) {
+    const row = el('div', 'ways-row');
+    row.append(el('span', 'ways-faan', `${r.faan} faan`));
+    row.append(el('span', 'ways-name', `${r.parts.join(' + ') || 'any winning hand'}${r.selfDraw ? ' + self-draw' : ''}`));
+    row.append(el('span', 'ways-need', routeNeed(r)));
+    body.append(row);
+  }
+  $('#modal-ways').classList.remove('hidden');
+}
+
 // one row of the score table (name / delta / running total)
 function heScoreRow(name, delta, total, deltaCls) {
   const row = el('div', 'he-score-row' + (deltaCls === 'he-score-head' ? ' he-score-head' : ''));
@@ -1838,6 +1879,7 @@ for (const b of document.querySelectorAll('.btn-cheat')) {
   });
 }
 $('#btn-cheat-close')?.addEventListener('click', () => $('#modal-cheat').classList.add('hidden'));
+$('#btn-ways-close')?.addEventListener('click', () => $('#modal-ways').classList.add('hidden'));
 $('#modal-cheat')?.addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
 // NB: the hand-end modal is deliberately NOT dismissible by a backdrop click — it
 // holds the host's "Deal next hand" button, and nothing re-opens it during the
