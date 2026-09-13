@@ -1586,6 +1586,7 @@ const CHEAT_TERMS = {
 const GLOSSARY_SECTIONS = [
   ['The table', ['meld', 'concealed', 'pung', 'run', 'terminals', 'honours', 'tenpai', 'wall', 'dealer']],
   ['Calling a tile', ['chi', 'pon', 'kan', 'ron', 'tsumo', 'furiten']],
+  ['The dragons', ['dragons']],
   ['Keeping score', ['faan', 'han', 'fu', 'dora', 'uradora', 'yakuman', 'riichisticks', 'honba', 'current', 'drop', 'needs']],
   ['Hong Kong & Taiwanese hands', ['flowers', 'selfdraw', 'sequences', 'triplets', 'mixed', 'full', 'honors',
     'honourpung', 'seatwind', 'roundwind', 'dragonpung']],
@@ -1607,11 +1608,8 @@ function renderGlossary(into) {
       const row = el('div', 'gloss-row');
       row.append(el('div', 'gloss-term', g.title));
       const d = el('div', 'gloss-def', g.body);
-      if (g.tiles) {
-        const strip = el('div', 'gloss-tiles');
-        for (const t of g.tiles) strip.append(renderTile(t));
-        d.append(strip);
-      }
+      const ex = exampleEl(g);
+      if (ex) { ex.classList.add('gloss-tiles'); d.append(ex); }
       row.append(d);
       sec.append(row);
     }
@@ -1794,29 +1792,38 @@ const GLOSSARY = {
     body: "Hong Kong's scoring unit. Three is the minimum to declare a win at all — a complete hand worth less than that cannot be taken, so you keep playing. Above three, each faan roughly doubles the payout." },
   mixed: { title: 'Mixed flush · 3 faan',
     body: 'Every numbered tile in one suit, with any winds or dragons alongside. No tiles from the other two suits.',
+    links: { 'a win': 'ron' },
     tiles: [T_('p', 2), T_('p', 3), T_('p', 4), T_('p', 8), T_('p', 8), T_('p', 8), T_('wind', 'E'), T_('wind', 'E'), T_('wind', 'E')] },
   full: { title: 'Full flush · 6 faan',
     body: 'Every tile in a single suit, with no winds or dragons at all. Harder than a mixed flush, and worth double.',
+    links: { 'winds or dragons': 'honours', 'mixed flush': 'mixed' },
     tiles: [T_('m', 1), T_('m', 2), T_('m', 3), T_('m', 5), T_('m', 5), T_('m', 5), T_('m', 7), T_('m', 8), T_('m', 9)] },
   honors: { title: 'All honours · 10 faan',
     body: 'Nothing but winds and dragons — no numbered tiles anywhere in the hand. Rare, and paid accordingly.',
+    links: { 'winds and dragons': 'honours' },
     tiles: [T_('wind', 'E'), T_('wind', 'E'), T_('wind', 'E'), T_('dragon', 'R'), T_('dragon', 'R'), T_('dragon', 'R'), T_('dragon', 'G'), T_('dragon', 'G')] },
   sequences: { title: 'All sequences · 1 faan',
     body: 'Every set is a run of three consecutive tiles in one suit. No triplets anywhere except the pair.',
+    links: { runs: 'run', triplets: 'pung' },
     tiles: [T_('s', 3), T_('s', 4), T_('s', 5), T_('p', 6), T_('p', 7), T_('p', 8)] },
   triplets: { title: 'All triplets · 3 faan',
     body: 'Every set is three (or four) of the same tile. No runs anywhere.',
+    links: { triplet: 'pung', kan: 'kan', runs: 'run' },
     tiles: [T_('p', 5), T_('p', 5), T_('p', 5), T_('m', 9), T_('m', 9), T_('m', 9)] },
   honourpung: { title: 'Dragon and wind pungs · 1 faan each',
     body: 'Three of a dragon, of your own seat wind, or of the round wind. Your seat wind pays twice if it is also the round wind — East seat in the East round is two faan from one set.',
+    links: { dragon: 'dragons', 'seat wind': 'seatwind', 'round wind': 'roundwind' },
     tiles: [T_('dragon', 'R'), T_('dragon', 'R'), T_('dragon', 'R')] },
   dragonpung: { title: 'Dragon pung · 1 faan',
-    body: 'Three of Red, Green or White dragon. Already melded, so this one is banked.',
-    tiles: [T_('dragon', 'G'), T_('dragon', 'G'), T_('dragon', 'G')] },
+    body: 'Three of any one dragon — white, green or red. Already melded, so it is banked.',
+    links: { dragon: 'dragons', melded: 'meld' },
+    tiles: [T_('dragon', 'W'), T_('dragon', 'G'), T_('dragon', 'R')] },
   seatwind: { title: 'Seat wind · 1 faan', body: 'Three of the wind matching your own seat. Banked once melded.' },
   roundwind: { title: 'Round wind · 1 faan', body: 'Three of the wind the round is named for. It stacks with seat wind when they are the same tile.' },
   flowers: { title: 'Flowers · 1 faan each',
     body: 'Flower and season tiles never sit in your hand: they are set aside the moment you draw one and replaced with a fresh tile. Free faan, and nothing can take them away.',
+    links: { 'seat wind': 'seatwind' },
+    links: { melded: 'meld' },
     tiles: [T_('flower', 1), T_('flower', 6)] },
   selfdraw: { title: 'Self-draw · 1 faan',
     body: 'Winning on a tile you drew yourself rather than one somebody discarded. Always available, which is why a shape worth two faan is still a route to three.' },
@@ -1830,36 +1837,49 @@ const GLOSSARY = {
     body: 'Declare when your hand is concealed and one tile from winning. It costs a 1000-point stick and locks your discards, and it is itself the yaku — which is why almost any concealed hand still has a way home.' },
   tanyao: { title: 'Tanyao \u00b7 1 han',
     body: 'No terminals and no honours: every tile between 2 and 8. The easiest yaku to steer into, and one of the few that survives opening your hand.',
+    links: { 'self-draw': 'tsumo' },
+    links: { concealed: 'concealed', tenpai: 'tenpai', yaku: 'han' },
+    links: { yaku: 'han', dora: 'dora', fu: 'fu' },
     tiles: [T_('m', 3), T_('m', 4), T_('m', 5), T_('p', 7), T_('p', 7), T_('p', 7)] },
   pinfu: { title: 'Pinfu \u00b7 1 han',
     body: 'Every set is a run, with a concealed hand. Lost the moment you claim a tile from anyone.',
+    links: { runs: 'run', concealed: 'concealed', claim: 'meld' },
     tiles: [T_('s', 2), T_('s', 3), T_('s', 4), T_('p', 6), T_('p', 7), T_('p', 8)] },
   toitoi: { title: 'Toitoi \u00b7 2 han',
     body: 'Every set is a triplet or a kan. Unlike most of the cheap yaku, this one survives claiming tiles.',
+    links: { triplet: 'pung', kan: 'kan', yaku: 'han' },
     tiles: [T_('m', 2), T_('m', 2), T_('m', 2), T_('s', 6), T_('s', 6), T_('s', 6)] },
   honitsu: { title: 'Honitsu \u00b7 3 han concealed, 2 open',
     body: 'One suit plus any winds and dragons — the shape Hong Kong calls a mixed flush.',
+    links: { 'winds and dragons': 'honours', 'mixed flush': 'mixed' },
     tiles: [T_('p', 2), T_('p', 3), T_('p', 4), T_('p', 9), T_('p', 9), T_('dragon', 'R'), T_('dragon', 'R'), T_('dragon', 'R')] },
   chinitsu: { title: 'Chinitsu \u00b7 6 han concealed, 5 open',
     body: 'A single suit and nothing else — no winds, no dragons.',
+    links: { winds: 'honours', dragons: 'dragons' },
     tiles: [T_('s', 1), T_('s', 2), T_('s', 3), T_('s', 5), T_('s', 5), T_('s', 7), T_('s', 8), T_('s', 9)] },
-  yakuhai: { title: 'Yakuhai \u00b7 1 han each',
-    body: 'A triplet of a dragon, of your seat wind, or of the round wind. It stacks: a triplet that is both your seat wind and the round wind is two han.',
-    tiles: [T_('dragon', 'G'), T_('dragon', 'G'), T_('dragon', 'G')] },
+  yakuhai: { title: 'Yakuhai · 1 han each',
+    body: 'A triplet of any dragon — white, green or red — or of your seat wind, or of the round wind. It stacks: a triplet that is both your seat wind and the round wind is two han.',
+    links: { triplet: 'pung', dragon: 'dragons', 'seat wind': 'seatwind', 'round wind': 'roundwind', han: 'han' },
+    tiles: [T_('dragon', 'W'), T_('dragon', 'W'), T_('dragon', 'W'), T_('dragon', 'G'), T_('dragon', 'G'), T_('dragon', 'G'), T_('dragon', 'R'), T_('dragon', 'R'), T_('dragon', 'R')] },
   chiitoitsu: { title: 'Chiitoitsu \u00b7 2 han',
     body: 'Seven different pairs instead of four sets and a pair. Concealed only.',
+    links: { pairs: 'pung', Concealed: 'concealed' },
     tiles: [T_('m', 3), T_('m', 3), T_('p', 7), T_('p', 7), T_('s', 1), T_('s', 1), T_('wind', 'W'), T_('wind', 'W')] },
   kokushi: { title: 'Kokushi musou \u00b7 yakuman',
     body: 'One of each terminal and honour \u2014 thirteen distinct tiles \u2014 plus a second copy of any one of them. Concealed only, and worth the maximum.',
+    links: { terminal: 'terminals', honour: 'honours', Concealed: 'concealed' },
     tiles: [T_('m', 1), T_('m', 9), T_('p', 1), T_('p', 9), T_('s', 1), T_('s', 9), T_('dragon', 'R')] },
   chi: { title: 'Chi',
     body: 'Claim a discard to finish a run of three, and only from the player on your left. The set is turned face up, which costs you every concealed-only yaku.',
+    links: { run: 'run', 'opens your hand': 'concealed' },
     tiles: [T_('s', 4), T_('s', 5), T_('s', 6)] },
   pon: { title: 'Pon',
     body: 'Claim a discard to finish a triplet, from anyone at the table. Outranks Chi when two people want the same tile.',
+    links: { triplet: 'pung', Chi: 'chi' },
     tiles: [T_('p', 8), T_('p', 8), T_('p', 8)] },
   kan: { title: 'Kan',
     body: 'A fourth copy of a tile you already have three of. You draw a replacement, and in Riichi it flips another dora indicator.',
+    links: { dora: 'dora', Riichi: 'riichi' },
     tiles: [T_('m', 5), T_('m', 5), T_('m', 5), T_('m', 5)] },
   ron: { title: 'Ron',
     body: 'Win on a tile somebody else discarded. Beats every other claim, and the discarder alone pays.' },
@@ -1867,15 +1887,36 @@ const GLOSSARY = {
     body: 'Win on the tile you drew yourself. Everyone pays — which is what makes a self-draw worth roughly three times a win on a discard.' },
   furiten: { title: 'Furiten',
     body: 'A Riichi rule: if any tile that would complete your hand is sitting in your own discards, you cannot win by Ron. You may still win by self-draw.' },
-  dora: { title: 'Dora \u00b7 +1 han each',
-    body: 'A bonus tile, worked out from the INDICATOR shown in the centre — the indicator itself is worth nothing. The dora is the tile one step AFTER it: 3 Pin points at 4 Pin, 9 wraps round to 1, winds run E-S-W-N-E and dragons run Haku-Hatsu-Chun-Haku. Every copy you hold is +1 han, so a kan of the right tile is four. Each kan anyone calls flips another indicator, and after a riichi the tiles underneath (ura-dora) count as well. Dora is never a yaku: a hand with nothing else still cannot be declared.',
-    tiles: [T_('p', 3), T_('p', 4)] },
+  dora: { title: 'Dora · +1 han each',
+    body: 'The tile shown in the centre is the indicator, and is worth nothing itself. The dora is whatever comes one step after it, as below. Every copy of that tile in your hand is +1 han, so a kan of the right one is four. Each kan anybody calls turns up another indicator, and if you win after declaring riichi the tiles hidden underneath count as well. Dora is never a yaku: a hand with nothing else cannot be declared.',
+    links: { Riichi: 'riichi', Ron: 'ron', 'self-draw': 'selfdraw' },
+    links: { 'self-draw': 'selfdraw' },
+    links: { 'claim': 'meld' },
+    links: { han: 'han', kan: 'kan', riichi: 'riichi', 'hidden underneath': 'uradora', yaku: 'han' },
+    pairsCaption: 'indicator → the dora it points at',
+    pairs: [
+      { from: T_('p', 3), to: T_('p', 4), note: 'next in the suit' },
+      { from: T_('s', 9), to: T_('s', 1), note: 'nine wraps to one' },
+      { from: T_('wind', 'N'), to: T_('wind', 'E'), note: 'winds cycle' },
+      { from: T_('dragon', 'W'), to: T_('dragon', 'G'), note: 'so do dragons' },
+    ] },
+  dragons: { title: 'The three dragons',
+    body: 'White, green and red. A triplet of any one of them pays in every ruleset here, and for dora they cycle in this order — red leading back round to white.',
+    links: { triplet: 'pung', dora: 'dora' },
+    pairsCaption: 'the cycle',
+    pairs: [
+      { from: T_('dragon', 'W'), to: T_('dragon', 'G'), note: 'white → green' },
+      { from: T_('dragon', 'G'), to: T_('dragon', 'R'), note: 'green → red' },
+      { from: T_('dragon', 'R'), to: T_('dragon', 'W'), note: 'red → white' },
+    ] },
   uradora: { title: 'Ura-dora',
     body: 'A second set of dora indicators, hidden under the first and revealed only if you win after declaring riichi. Pure luck, and often the difference between a modest hand and a big one.' },
   ippatsu: { title: 'Ippatsu \u00b7 1 han',
     body: 'Win within one go-around of declaring riichi, before your next discard. Any claim by anybody in between cancels it.' },
   iipeiko: { title: 'Iipeiko \u00b7 1 han',
     body: 'Two identical runs — same three tiles, same suit, twice. Concealed hands only.',
+    links: { dora: 'dora', riichi: 'riichi' },
+    links: { riichi: 'riichi', claim: 'meld' },
     tiles: [T_('s', 3), T_('s', 4), T_('s', 5), T_('s', 3), T_('s', 4), T_('s', 5)] },
   concealed: { title: 'Concealed hand',
     body: 'A hand with no sets claimed from anyone. Drawing everything yourself keeps it concealed; one Chi, Pon or open Kan opens it and costs you riichi, pinfu, seven pairs and the rest of the concealed-only yaku.' },
@@ -1893,15 +1934,25 @@ const GLOSSARY = {
     body: 'A set turned face up because you claimed it from someone. It is locked — those tiles can never be rearranged or discarded — and it opens your hand.' },
   pung: { title: 'Pung (triplet)',
     body: 'Three identical tiles. Four of them is a kan.',
+    links: { 'exhaustive draw': 'wall' },
+    links: { riichi: 'riichi' },
+    links: { dealer: 'dealer', draw: 'wall' },
+    links: { riichi: 'riichi', 'exhaustive draw': 'wall' },
+    links: { claimed: 'chi', 'opens your hand': 'concealed' },
+    links: { Chi: 'chi', Pon: 'pon', Kan: 'kan', riichi: 'riichi', pinfu: 'pinfu', 'seven pairs': 'chiitoitsu', yaku: 'han' },
+    links: { han: 'han', triplets: 'pung', honours: 'honours', terminals: 'terminals', concealed: 'concealed', kan: 'kan' },
     tiles: [T_('s', 7), T_('s', 7), T_('s', 7)] },
   run: { title: 'Run (sequence)',
     body: 'Three consecutive tiles in one suit. Winds and dragons have no order, so they can never form a run.',
+    links: { 'Winds and dragons': 'honours' },
     tiles: [T_('m', 4), T_('m', 5), T_('m', 6)] },
   terminals: { title: 'Terminals',
     body: 'The 1s and 9s of each suit. Awkward to use — a 1 can only ever sit in a 1-2-3 — which is why hands that avoid them (tanyao) or collect them (kokushi) both score.',
+    links: { tanyao: 'tanyao', kokushi: 'kokushi' },
     tiles: [T_('m', 1), T_('m', 9), T_('p', 1), T_('s', 9)] },
   honours: { title: 'Honours',
     body: 'The four winds and three dragons. They never form runs, so they are only useful in pairs and triplets — and the valuable ones pay a han each.',
+    links: { winds: 'roundwind', dragons: 'dragons', runs: 'run', han: 'han' },
     tiles: [T_('wind', 'E'), T_('wind', 'S'), T_('dragon', 'R'), T_('dragon', 'G'), T_('dragon', 'W')] },
   yakuman: { title: 'Yakuman',
     body: 'A limit hand — the maximum payout, worth more than any pile of han. Kokushi musou is the one this game implements.' },
@@ -1911,32 +1962,145 @@ const GLOSSARY = {
     body: "What this hand is worth right now whatever happens next: flowers, a declared riichi, and dragon or wind triplets you have already melded. A triplet still hidden in your hand doesn't count — discard out of it and it's gone." },
 };
 
-let tipEl = null;
-function hideTip() { if (tipEl) tipEl.classList.add('hidden'); }
-function showTip(anchor, key) {
-  const g = GLOSSARY[key];
-  if (!g) return;
-  if (!tipEl) { tipEl = el('div', 'tip hidden'); document.body.append(tipEl); }
-  tipEl.replaceChildren();
-  tipEl.append(el('div', 'tip-title', g.title));
-  tipEl.append(el('div', 'tip-body', g.body));
+// ---- the notes themselves -------------------------------------------------
+//
+// A note can raise as many terms as it explains, so they stack: hover a word in
+// one note and the next opens beside it, as deep as you care to follow. Notes
+// take the pointer (you have to be able to reach into them), which means
+// closing is on a short delay — otherwise the gap between a word and its note
+// would slam it shut on the way across.
+
+const tips = [];
+let closeTimer = null;
+
+function tipAt(depth) {
+  while (tips.length <= depth) {
+    const t = el('div', 'tip hidden');
+    t.dataset.depth = String(tips.length);
+    t.addEventListener('mouseenter', cancelClose);
+    t.addEventListener('mouseleave', () => scheduleClose(Number(t.dataset.depth)));
+    document.body.append(t);
+    tips.push(t);
+  }
+  return tips[depth];
+}
+
+function closeFrom(depth) { for (let i = depth; i < tips.length; i++) tips[i].classList.add('hidden'); }
+function hideTip() { clearTimeout(closeTimer); closeFrom(0); }
+function cancelClose() { clearTimeout(closeTimer); }
+function scheduleClose(depth) {
+  clearTimeout(closeTimer);
+  closeTimer = setTimeout(() => closeFrom(depth), 220);
+}
+
+// A flat row of tiles can only say "here is the shape". Some terms need to show
+// a RELATION — this tile means that one — so pairs render as labelled arrows.
+// It is also how the dragon order explains itself to somebody who has no idea
+// the tiles are called Haku, Hatsu and Chun.
+function exampleEl(g) {
+  if (g.pairs) {
+    const box = el('div', 'ex-pairs');
+    if (g.pairsCaption) box.append(el('div', 'ex-caption', g.pairsCaption));
+    const row = el('div', 'ex-pair-row');
+    for (const pr of g.pairs) {
+      const cell = el('div', 'ex-pair');
+      const t = el('div', 'ex-pair-tiles');
+      t.append(renderTile(pr.from), el('span', 'ex-arrow', '\u2192'), renderTile(pr.to));
+      cell.append(t);
+      if (pr.note) cell.append(el('div', 'ex-note', pr.note));
+      row.append(cell);
+    }
+    box.append(row);
+    return box;
+  }
   if (g.tiles) {
     const row = el('div', 'tip-tiles');
     for (const t of g.tiles) row.append(renderTile(t));
-    tipEl.append(row);
+    return row;
   }
-  tipEl.classList.remove('hidden');
-  // above the word where there's room, below it when there isn't, and clamped to
-  // the viewport either way — terms near the bottom of a long list would
-  // otherwise explain themselves somewhere you can't see
+  return null;
+}
+
+const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// wrap the phrases a note points at, so the reader can keep pulling the thread
+function bodyEl(g, depth) {
+  const div = el('div', 'tip-body');
+  const map = g.links;
+  if (!map) { div.textContent = g.body; return div; }
+  const phrases = Object.keys(map).sort((a, b) => b.length - a.length);
+  const re = new RegExp(`(${phrases.map(escapeRe).join('|')})`, 'gi');
+  let last = 0, m;
+  while ((m = re.exec(g.body)) !== null) {
+    if (m.index > last) div.append(document.createTextNode(g.body.slice(last, m.index)));
+    const hit = phrases.find((x) => x.toLowerCase() === m[0].toLowerCase());
+    div.append(term(map[hit], m[0], depth + 1));
+    last = m.index + m[0].length;
+  }
+  if (last < g.body.length) div.append(document.createTextNode(g.body.slice(last)));
+  return div;
+}
+
+function showTip(anchor, key, depth = 0) {
+  const g = GLOSSARY[key];
+  if (!g) return;
+  cancelClose();
+  closeFrom(depth + 1);
+  const tip = tipAt(depth);
+  tip.replaceChildren();
+  tip.append(el('div', 'tip-title', g.title));
+  tip.append(bodyEl(g, depth));
+  const ex = exampleEl(g);
+  if (ex) tip.append(ex);
+  tip.classList.remove('hidden');
+
+  // Try the natural spots in order and take the first that lands on screen
+  // without covering a note already open — a third-level note that doubles back
+  // onto the first is worse than useless, since the first is what you were
+  // reading.
   const r = anchor.getBoundingClientRect();
-  const box = tipEl.getBoundingClientRect();
-  const left = Math.max(8, Math.min(window.innerWidth - box.width - 8, r.left + r.width / 2 - box.width / 2));
-  let top = r.top - box.height - 8;
-  if (top < 8) top = r.bottom + 8;
-  if (top + box.height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - box.height - 8);
-  tipEl.style.left = `${Math.round(left)}px`;
-  tipEl.style.top = `${Math.round(top)}px`;
+  const box = tip.getBoundingClientRect();
+  const W = window.innerWidth, H = window.innerHeight;
+  const clampX = (x) => Math.max(8, Math.min(W - box.width - 8, x));
+  const clampY = (y) => Math.max(8, Math.min(H - box.height - 8, y));
+  const open = tips.slice(0, depth)
+    .filter((t) => !t.classList.contains('hidden'))
+    .map((t) => t.getBoundingClientRect());
+  const hits = (x, y) => open.some((o) =>
+    !(x + box.width <= o.left || x >= o.right || y + box.height <= o.top || y >= o.bottom));
+
+  const mid = r.left + r.width / 2 - box.width / 2;
+  const spots = depth === 0
+    ? [[mid, r.top - box.height - 8], [mid, r.bottom + 8]]
+    : (() => {
+      const pr = tips[depth - 1].getBoundingClientRect();
+      return [
+        [pr.right + 8, r.top - 12],
+        [pr.left - box.width - 8, r.top - 12],
+        [pr.left + 20, pr.bottom + 8],
+        [pr.left + 20, pr.top - box.height - 8],
+      ];
+    })();
+
+  let pick = null;
+  for (const [x, y] of spots) {
+    const cx = clampX(x), cy = clampY(y);
+    if (!hits(cx, cy)) { pick = [cx, cy]; break; }
+  }
+  if (!pick) pick = [clampX(spots[0][0]), clampY(spots[0][1])];
+  tip.style.left = `${Math.round(pick[0])}px`;
+  tip.style.top = `${Math.round(pick[1])}px`;
+}
+
+function bindTerm(node, key, depth) {
+  node.classList.add('term');
+  node.tabIndex = 0;
+  node.addEventListener('mouseenter', () => showTip(node, key, depth));
+  node.addEventListener('focus', () => showTip(node, key, depth));
+  node.addEventListener('mouseleave', () => scheduleClose(depth));
+  node.addEventListener('blur', () => scheduleClose(depth));
+  // touch: tap a word to hold its note open, tap away to drop it
+  node.addEventListener('click', (e) => { e.stopPropagation(); showTip(node, key, depth); });
 }
 
 // attach the hover note to anything already marked up with data-term — lets the
@@ -1945,32 +2109,19 @@ function wireTerms(root) {
   for (const n of root.querySelectorAll('[data-term]')) {
     if (n.dataset.wired) continue;
     n.dataset.wired = '1';
-    n.classList.add('term');
-    n.tabIndex = 0;
-    const key = n.dataset.term;
-    n.addEventListener('mouseenter', () => showTip(n, key));
-    n.addEventListener('focus', () => showTip(n, key));
-    n.addEventListener('mouseleave', hideTip);
-    n.addEventListener('blur', hideTip);
-    n.addEventListener('click', (e) => { e.stopPropagation(); showTip(n, key); });
+    bindTerm(n, n.dataset.term, 0);
   }
 }
 
 // a term that explains itself
-function term(key, text) {
+function term(key, text, depth = 0) {
   const sp = el('span', 'term', text);
   sp.dataset.term = key;
   sp.dataset.wired = '1';
-  sp.tabIndex = 0;
-  sp.addEventListener('mouseenter', () => showTip(sp, key));
-  sp.addEventListener('focus', () => showTip(sp, key));
-  sp.addEventListener('mouseleave', hideTip);
-  sp.addEventListener('blur', hideTip);
-  // touch: tap the word to hold the note open, tap anywhere else to drop it
-  sp.addEventListener('click', (e) => { e.stopPropagation(); showTip(sp, key); });
+  bindTerm(sp, key, depth);
   return sp;
 }
-document.addEventListener('click', hideTip);
+document.addEventListener('click', (e) => { if (!e.target.closest || !e.target.closest('.tip')) hideTip(); });
 window.addEventListener('scroll', hideTip, { passive: true });
 // the static panels carry their terms in the markup
 wireTerms(document);

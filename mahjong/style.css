@@ -433,7 +433,7 @@ body {
 .gloss-term { color: #e8d5a3; font-weight: 700; font-size: 12px; }
 .gloss-def { color: #b9d3c3; font-size: 12px; line-height: 1.55; }
 .gloss-tiles { display: flex; gap: 2px; margin-top: 6px; flex-wrap: wrap; }
-.gloss-tiles .tile { --u: .55px; }
+.gloss-tiles .tile, .gloss-def .tile { --u: .55px; }
 @media (max-width: 620px) { .gloss-row { grid-template-columns: 1fr; gap: 2px; } }
 
 /* a term of art that explains itself: dotted underline, note on hover or focus */
@@ -443,7 +443,9 @@ body {
   /* above .modal (100) and the flash banner (150), below toasts (200) — the
      terms it explains live INSIDE those panels, so anything lower renders
      behind the thing you are reading */
-  position: fixed; z-index: 170; max-width: 320px; pointer-events: none;
+  /* the note takes the pointer so its own terms can be reached; closing runs on
+     a short delay so crossing the gap from word to note doesn't slam it shut */
+  position: fixed; z-index: 170; max-width: 320px; pointer-events: auto;
   background: #0b2a1b; border: 1px solid #2a6b45; border-radius: 10px;
   padding: 9px 11px; box-shadow: 0 10px 28px rgba(0,0,0,.6);
   font-size: 12px; line-height: 1.5; text-align: left;
@@ -451,6 +453,17 @@ body {
 .tip-title { color: #e8d5a3; font-weight: 700; margin-bottom: 3px; }
 .tip-body { color: #b9d3c3; }
 .tip-tiles { display: flex; gap: 2px; margin-top: 8px; flex-wrap: wrap; }
+/* one size for every example tile in a note, flat strip or arrow pair alike —
+   these sit outside #screen-game, so they get no --ts-* to scale from */
+.tip .tile { --u: .62px; }
+/* "this tile means that one" — a relation needs an arrow, not a row of tiles */
+.ex-pairs { margin-top: 8px; }
+.ex-caption { font-size: 10px; color: #7fa38c; letter-spacing: .04em; margin-bottom: 5px; }
+.ex-pair-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.ex-pair { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.ex-pair-tiles { display: flex; align-items: center; gap: 4px; }
+.ex-arrow { color: #7fa38c; font-size: 12px; }
+.ex-note { font-size: 10px; color: #6f9a80; white-space: nowrap; }
 .tip-tiles .tile { --u: .62px; }
 
 /* the full list of ways to a Hong Kong win, in place under the hand — the page
