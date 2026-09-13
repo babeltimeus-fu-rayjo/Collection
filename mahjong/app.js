@@ -1097,7 +1097,7 @@ function renderGame(view, sess) {
   // center info: round (prevailing wind + hand number) and tiles left in the wall
   const roundName = { E: 'East', S: 'South', W: 'West', N: 'North' }[view.roundWind] || view.roundWind;
   $('#round-wind-display').textContent = `${roundName} ${view.handNum}`;
-  $('#wall-display').textContent = `${view.wallCount} left`;
+  $('#wall-display').replaceChildren(term('wall', `${view.wallCount} left`));
 
   // whose turn it is: only ever announce MY turn in the centre. For opponents the
   // gold halo around their quadrant is the cue, so no label is shown.
@@ -1112,13 +1112,16 @@ function renderGame(view, sess) {
   const doraEl = $('#dora-display');
   doraEl.replaceChildren();
   if (view.dora && view.dora.length > 0) {
-    doraEl.append(el('span', '', 'Dora: '));
+    doraEl.append(term('dora', 'Dora:'));
     for (const d of view.dora) doraEl.append(renderTile(d));
   }
   const sticksEl = $('#sticks-display');
-  sticksEl.textContent = '';
-  if (view.riichiSticks > 0) sticksEl.textContent = `${view.riichiSticks} riichi`;
-  if (view.honba > 0) sticksEl.textContent += ` ${view.honba} honba`;
+  sticksEl.replaceChildren();
+  if (view.riichiSticks > 0) sticksEl.append(term('riichisticks', `${view.riichiSticks} riichi`));
+  if (view.honba > 0) {
+    if (view.riichiSticks > 0) sticksEl.append(el('span', '', ' '));
+    sticksEl.append(term('honba', `${view.honba} honba`));
+  }
 
   // the just-discarded tile rests in the centre until it's claimed or the next
   // player draws (view.lastDiscard is cleared on both); fly it in only once
@@ -1575,7 +1578,46 @@ const CHEAT_TERMS = {
   Riichi: 'riichi', Tanyao: 'tanyao', Pinfu: 'pinfu', Toitoi: 'toitoi',
   Chiitoitsu: 'chiitoitsu', Honitsu: 'honitsu', Chinitsu: 'chinitsu',
   'Kokushi Musou': 'kokushi', Dora: 'dora', 'Haku / Hatsu / Chun': 'yakuhai',
+  Ippatsu: 'ippatsu', Iipeiko: 'iipeiko', 'Concealed hand': 'concealed',
 };
+
+// Hovering only helps if you already know which word to point at, so the panel
+// also carries the whole vocabulary, grouped and spelled out.
+const GLOSSARY_SECTIONS = [
+  ['The table', ['meld', 'concealed', 'pung', 'run', 'terminals', 'honours', 'tenpai', 'wall', 'dealer']],
+  ['Calling a tile', ['chi', 'pon', 'kan', 'ron', 'tsumo', 'furiten']],
+  ['Keeping score', ['faan', 'han', 'fu', 'dora', 'uradora', 'yakuman', 'riichisticks', 'honba', 'current', 'drop', 'needs']],
+  ['Hong Kong & Taiwanese hands', ['flowers', 'selfdraw', 'sequences', 'triplets', 'mixed', 'full', 'honors',
+    'honourpung', 'seatwind', 'roundwind', 'dragonpung']],
+  ['Riichi yaku', ['riichi', 'ippatsu', 'tanyao', 'pinfu', 'iipeiko', 'toitoi', 'chiitoitsu',
+    'honitsu', 'chinitsu', 'kokushi', 'yakuhai']],
+];
+
+function renderGlossary(into) {
+  const sec = el('div', 'cheat-sec');
+  const head = el('div', 'cheat-head');
+  head.append(el('span', 'cheat-name', 'Glossary'));
+  sec.append(head);
+  sec.append(el('div', 'cheat-note', 'Every term this game uses, in plain words. The same notes appear on hover wherever a term shows up.'));
+  for (const [heading, keys] of GLOSSARY_SECTIONS) {
+    sec.append(el('div', 'gloss-head', heading));
+    for (const k of keys) {
+      const g = GLOSSARY[k];
+      if (!g) continue;
+      const row = el('div', 'gloss-row');
+      row.append(el('div', 'gloss-term', g.title));
+      const d = el('div', 'gloss-def', g.body);
+      if (g.tiles) {
+        const strip = el('div', 'gloss-tiles');
+        for (const t of g.tiles) strip.append(renderTile(t));
+        d.append(strip);
+      }
+      row.append(d);
+      sec.append(row);
+    }
+  }
+  into.append(sec);
+}
 
 function renderCheatsheet() {
   const body = $('#cheat-body');
@@ -1608,6 +1650,7 @@ function renderCheatsheet() {
     sec.append(rows);
     body.append(sec);
   }
+  renderGlossary(body);
   wireTerms(body);
 }
 
@@ -1825,7 +1868,45 @@ const GLOSSARY = {
   furiten: { title: 'Furiten',
     body: 'A Riichi rule: if any tile that would complete your hand is sitting in your own discards, you cannot win by Ron. You may still win by self-draw.' },
   dora: { title: 'Dora \u00b7 +1 han each',
-    body: 'Bonus tiles marked by the indicator in the centre. They add han but are never a yaku: a hand with nothing but dora still cannot be declared.' },
+    body: 'A bonus tile, worked out from the INDICATOR shown in the centre — the indicator itself is worth nothing. The dora is the tile one step AFTER it: 3 Pin points at 4 Pin, 9 wraps round to 1, winds run E-S-W-N-E and dragons run Haku-Hatsu-Chun-Haku. Every copy you hold is +1 han, so a kan of the right tile is four. Each kan anyone calls flips another indicator, and after a riichi the tiles underneath (ura-dora) count as well. Dora is never a yaku: a hand with nothing else still cannot be declared.',
+    tiles: [T_('p', 3), T_('p', 4)] },
+  uradora: { title: 'Ura-dora',
+    body: 'A second set of dora indicators, hidden under the first and revealed only if you win after declaring riichi. Pure luck, and often the difference between a modest hand and a big one.' },
+  ippatsu: { title: 'Ippatsu \u00b7 1 han',
+    body: 'Win within one go-around of declaring riichi, before your next discard. Any claim by anybody in between cancels it.' },
+  iipeiko: { title: 'Iipeiko \u00b7 1 han',
+    body: 'Two identical runs — same three tiles, same suit, twice. Concealed hands only.',
+    tiles: [T_('s', 3), T_('s', 4), T_('s', 5), T_('s', 3), T_('s', 4), T_('s', 5)] },
+  concealed: { title: 'Concealed hand',
+    body: 'A hand with no sets claimed from anyone. Drawing everything yourself keeps it concealed; one Chi, Pon or open Kan opens it and costs you riichi, pinfu, seven pairs and the rest of the concealed-only yaku.' },
+  fu: { title: 'Fu',
+    body: "Riichi's second scoring axis, counted alongside han: a base 20, plus points for triplets (more for honours and terminals, more again if concealed), for a kan, for an awkward wait, and for a pair of value tiles. Han doubles the score, fu sets what is being doubled." },
+  tenpai: { title: 'Tenpai',
+    body: 'One tile away from a complete hand. You must be tenpai to declare riichi, and at an exhaustive draw players who are tenpai collect from those who are not.' },
+  honba: { title: 'Honba',
+    body: "A counter that rises each time a hand ends without a fresh dealer — a dealer win or a draw. Every honba adds 300 points to the next hand's payout, so a long dealer streak gets progressively more expensive." },
+  riichisticks: { title: 'Riichi sticks',
+    body: 'The 1000 points each player stakes when declaring riichi. They sit on the table and go, in full, to whoever wins the next hand — so an unclaimed stick rolls over and sweetens the pot.' },
+  wall: { title: 'The wall',
+    body: 'Tiles left to draw. When it runs out the hand ends in an exhaustive draw with nobody winning, so the count is also a clock: the lower it goes, the less time your hand has to come together.' },
+  meld: { title: 'Meld',
+    body: 'A set turned face up because you claimed it from someone. It is locked — those tiles can never be rearranged or discarded — and it opens your hand.' },
+  pung: { title: 'Pung (triplet)',
+    body: 'Three identical tiles. Four of them is a kan.',
+    tiles: [T_('s', 7), T_('s', 7), T_('s', 7)] },
+  run: { title: 'Run (sequence)',
+    body: 'Three consecutive tiles in one suit. Winds and dragons have no order, so they can never form a run.',
+    tiles: [T_('m', 4), T_('m', 5), T_('m', 6)] },
+  terminals: { title: 'Terminals',
+    body: 'The 1s and 9s of each suit. Awkward to use — a 1 can only ever sit in a 1-2-3 — which is why hands that avoid them (tanyao) or collect them (kokushi) both score.',
+    tiles: [T_('m', 1), T_('m', 9), T_('p', 1), T_('s', 9)] },
+  honours: { title: 'Honours',
+    body: 'The four winds and three dragons. They never form runs, so they are only useful in pairs and triplets — and the valuable ones pay a han each.',
+    tiles: [T_('wind', 'E'), T_('wind', 'S'), T_('dragon', 'R'), T_('dragon', 'G'), T_('dragon', 'W')] },
+  yakuman: { title: 'Yakuman',
+    body: 'A limit hand — the maximum payout, worth more than any pile of han. Kokushi musou is the one this game implements.' },
+  dealer: { title: 'Dealer (East)',
+    body: 'The dealer wins and pays about half again as much as anyone else, and keeps the deal by winning — each repeat adding a honba. The seat rotates otherwise.' },
   current: { title: 'Current score',
     body: "What this hand is worth right now whatever happens next: flowers, a declared riichi, and dragon or wind triplets you have already melded. A triplet still hidden in your hand doesn't count — discard out of it and it's gone." },
 };

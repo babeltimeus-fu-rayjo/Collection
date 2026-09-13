@@ -252,7 +252,7 @@ body {
 #round-wind-display { color: #e8d5a3; font-weight: 700; white-space: nowrap; min-height: 1.15em; }
 #wall-display { color: #cfe3d5; font-weight: 600; white-space: nowrap; min-height: 1.15em; }
 #sticks-display { white-space: nowrap; min-height: 1.15em; } /* reserved even when empty */
-#dora-display { display: flex; gap: 4px; align-items: center; justify-content: center; }
+#dora-display { display: flex; gap: 4px; align-items: center; justify-content: center; flex-wrap: wrap; }
 #dora-display:empty { display: none; }
 
 /* resting discard: reserve the tile's height so the slot never collapses */
@@ -425,6 +425,16 @@ body {
 .claim-mute:hover { background: rgba(0,0,0,.45); color: #fff; }
 .claim-note { font-size: 12px; color: #5a8a6a; align-self: center; display: inline-flex; align-items: center; gap: 6px; }
 .claim-mute.undo { border-radius: 6px; border-left: none; background: #1a5a38; color: #c8e0d0; padding: 2px 8px; }
+
+/* the written-out glossary at the foot of Hands & scoring */
+.gloss-head { color: #8ab89a; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; margin: 12px 0 4px; }
+.gloss-row { display: grid; grid-template-columns: minmax(140px, 200px) 1fr; gap: 12px; padding: 5px 6px; border-radius: 6px; align-items: start; }
+.gloss-row:nth-child(odd) { background: rgba(255,255,255,.04); }
+.gloss-term { color: #e8d5a3; font-weight: 700; font-size: 12px; }
+.gloss-def { color: #b9d3c3; font-size: 12px; line-height: 1.55; }
+.gloss-tiles { display: flex; gap: 2px; margin-top: 6px; flex-wrap: wrap; }
+.gloss-tiles .tile { --u: .55px; }
+@media (max-width: 620px) { .gloss-row { grid-template-columns: 1fr; gap: 2px; } }
 
 /* a term of art that explains itself: dotted underline, note on hover or focus */
 .term { border-bottom: 1px dotted currentColor; cursor: help; outline: none; }
