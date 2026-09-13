@@ -1305,10 +1305,9 @@ function scoreHK(G, winnerSeat, loserSeat, isTsumo) {
 // all, which is what makes the floor worth showing.
 export const HK_MIN_FAAN = 3;
 
-export function hkLockedFaan(G, seat) {
-  if (G.variant !== 'hk') return null;
-  const p = playerBySeat(G, seat);
-  const sw = seatWind(G, seat);
+function hkLockedFaan(pos) {
+  if (pos.variant !== 'hk') return null;
+  const p = pos, sw = pos.seatWind;
   const parts = [];
 
   if (p.flowers.length > 0) {
@@ -1319,7 +1318,7 @@ export function hkLockedFaan(G, seat) {
     if (!t) continue;
     // seat wind and round wind score separately, so the same pung can pay twice
     if (t.kind === 'wind' && t.v === sw) parts.push({ term: 'seatwind', name: 'Seat wind', val: 1 });
-    if (t.kind === 'wind' && t.v === G.roundWind) parts.push({ term: 'roundwind', name: 'Round wind', val: 1 });
+    if (t.kind === 'wind' && t.v === pos.roundWind) parts.push({ term: 'roundwind', name: 'Round wind', val: 1 });
     if (t.kind === 'dragon') {
       parts.push({ term: 'dragonpung', name: DRAGON_WORD[t.v], val: 1 });
     }
@@ -2272,17 +2271,16 @@ function kokushiRoute(mine, supply, concealed) {
   return { away: concealed - reuse, wants };
 }
 
-export function jpLockedHan(G, seat) {
-  if (G.variant !== 'jp') return null;
-  const p = playerBySeat(G, seat);
-  const sw = seatWind(G, seat);
+function jpLockedHan(pos) {
+  if (pos.variant !== 'jp') return null;
+  const p = pos, sw = pos.seatWind;
   const parts = [];
   if (p.riichi) parts.push({ term: 'riichi', name: 'Riichi', val: 1 });
   for (const m of p.melds) {
     const t = m.tiles[0];
     if (!t) continue;
     if (t.kind === 'wind' && t.v === sw) parts.push({ term: 'seatwind', name: 'Seat wind', val: 1 });
-    if (t.kind === 'wind' && t.v === G.roundWind) parts.push({ term: 'roundwind', name: 'Round wind', val: 1 });
+    if (t.kind === 'wind' && t.v === pos.roundWind) parts.push({ term: 'roundwind', name: 'Round wind', val: 1 });
     if (t.kind === 'dragon') {
       parts.push({ term: 'dragonpung', name: DRAGON_WORD[t.v], val: 1 });
     }
@@ -2290,7 +2288,7 @@ export function jpLockedHan(G, seat) {
   // dora sitting inside a declared meld can't be discarded away either. Dora is
   // never a yaku, so it is listed but doesn't count toward the minimum.
   let melded = 0;
-  for (const ind of G.dora) {
+  for (const ind of pos.dora) {
     const dk = doraKey(ind);
     for (const m of p.melds) melded += m.tiles.filter((t) => t.key === dk).length;
   }
@@ -2460,23 +2458,65 @@ function winsField(list, wants) {
   return { wins: (short === 1 || list.length <= 4) ? list : [], winsN: list.length };
 }
 
-export function jpOutlook(G, seat) {
-  if (G.variant !== 'jp') return null;
-  const locked = jpLockedHan(G, seat);
-  const p = playerBySeat(G, seat);
-  const closed = p.melds.every((m) => !m.open);
-
+// Every tile anyone at the table can see. A route needing a fourth Chun when
+// three are already face up is not a route.
+function seenFrom(pos) {
   const seen = new Array(34).fill(0);
   const bump = (t) => { const i = keyIdx(t.key); if (i >= 0) seen[i]++; };
-  for (const q of G.players) {
+  for (const q of pos.players) {
     for (const t of q.discards) bump(t);
     for (const m of q.melds) for (const t of m.tiles) bump(t);
   }
-  for (const d of G.dora) bump(d);
+  for (const d of pos.dora) bump(d);
+  return seen;
+}
 
-  const ctx = { hand: p.hand, melds: p.melds, seatWind: seatWind(G, seat), roundWind: G.roundWind, seen };
+// routeWins is around thirty extra solves. The line under the hand only ever
+// prints it when a route is one tile from home; the full panel wants it always.
+// So pay for it when somebody is going to read it, and skip it otherwise.
+function winsFor(routesFor, ctx, shapes, opts = {}) {
+  const oneAway = shapes.some((r) => r.wants.reduce((a, w) => a + w.count, 0) === 1);
+  if (!opts.deep && !oneAway) return new Map();
+  return routeWins(routesFor, ctx, shapes);
+}
+
+// What the outlook actually needs, lifted out of the private game state: your
+// own tiles, what everyone has face up, the dora and the two winds. All of it
+// is in the view every player already receives, so this can be built at either
+// end — and it is built at the receiving end, because the host has no business
+// solving four people's hands and posting them the answers.
+export function positionFromView(view) {
+  const me = view.players && view.players.find((q) => q.seat === view.mySeat);
+  if (!me || !me.hand || me.hand.some((t) => !t)) return null;   // not a hand I can read
+  return {
+    variant: view.variant,
+    hand: me.hand,
+    melds: me.melds || [],
+    flowers: me.flowers || [],
+    riichi: me.riichi,
+    seatWind: WINDS[((view.mySeat - view.dealer) % 4 + 4) % 4],
+    roundWind: view.roundWind,
+    dora: view.dora || [],
+    players: view.players,
+  };
+}
+
+export function outlookFor(pos, opts = {}) {
+  if (!pos) return null;
+  if (pos.variant === 'jp') return jpOutlook(pos, opts);
+  if (pos.variant === 'hk') return hkOutlook(pos, opts);
+  return null;
+}
+
+function jpOutlook(pos, opts) {
+  if (pos.variant !== 'jp') return null;
+  const locked = jpLockedHan(pos);
+  const p = pos;
+  const closed = p.melds.every((m) => !m.open);
+
+  const ctx = { hand: p.hand, melds: p.melds, seatWind: pos.seatWind, roundWind: pos.roundWind, seen: seenFrom(pos) };
   const shapes = jpRoutesFor(ctx);
-  const wins = routeWins(jpRoutesFor, ctx, shapes);
+  const wins = winsFor(jpRoutesFor, ctx, shapes, opts);
 
   const routes = shapes
     .map((r) => {
@@ -2497,27 +2537,17 @@ export function jpOutlook(G, seat) {
   return { ...locked, routes };
 }
 
-export function hkOutlook(G, seat) {
-  if (G.variant !== 'hk') return null;
-  const locked = hkLockedFaan(G, seat);
-  const p = playerBySeat(G, seat);
-
-  // every tile anyone can see that isn't in my hand — a route needing a fourth
-  // Red Dragon when three are already on the table is not a route
-  const seen = new Array(34).fill(0);
-  const bump = (t) => { const i = keyIdx(t.key); if (i >= 0) seen[i]++; };
-  for (const q of G.players) {
-    for (const t of q.discards) bump(t);
-    for (const m of q.melds) for (const t of m.tiles) bump(t);
-  }
-  for (const d of G.dora) bump(d);
+function hkOutlook(pos, opts) {
+  if (pos.variant !== 'hk') return null;
+  const locked = hkLockedFaan(pos);
+  const p = pos;
 
   const ctx = {
     hand: p.hand, melds: p.melds, flowers: p.flowers,
-    seatWind: seatWind(G, seat), roundWind: G.roundWind, seen,
+    seatWind: pos.seatWind, roundWind: pos.roundWind, seen: seenFrom(pos),
   };
   const shapes = hkRoutesFor(ctx);
-  const wins = routeWins(hkRoutesFor, ctx, shapes);
+  const wins = winsFor(hkRoutesFor, ctx, shapes, opts);
 
   const routes = shapes
     .map((r) => (r.shape >= HK_MIN_FAAN
@@ -2615,7 +2645,6 @@ export function viewFor(G, seat, code, opts = {}) {
     actions,
     riichiSticks: G.riichiSticks,
     honba: G.honba,
-    outlook: G.variant === 'jp' ? jpOutlook(G, seat) : hkOutlook(G, seat),
     handResult: G.handResult,
     readyNext: G.readyNext || [],
     waitingNext: waitingOnNext(G),

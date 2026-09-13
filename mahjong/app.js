@@ -19,6 +19,8 @@ import {
   newMatch,
   applyMove,
   viewFor,
+  positionFromView,
+  outlookFor,
   botChoose,
   turnSeat,
   playerBySeat,
@@ -645,19 +647,17 @@ function clearRejoin(code) { try { sessionStorage.removeItem(`mjg-rejoin-${code}
 
 // PeerJS refuses any JSON message of 16300 bytes or more: it logs the refusal
 // and drops it, so an oversized view strands a guest with a frozen board and no
-// error visible at either end. A late-hand table with four full ponds and the
-// ways list runs close to that, so measure what is about to go out and shed the
-// one part of it that is a luxury. Fewer rows of advice beats no game state.
-const WIRE_MAX = 15000;
-const wireBytes = (v) => new TextEncoder().encode(JSON.stringify(v)).length;
+// error visible at either end. Nothing sent now comes near that — the advice a
+// player reads is worked out on their own machine rather than shipped to them —
+// but four full ponds late in a hand are not nothing, so say so loudly if it
+// ever creeps back up rather than letting a table quietly stop.
+const WIRE_WARN = 15000;
+let warnedWire = false;
 
-function fitForWire(view) {
-  if (wireBytes(view) < WIRE_MAX) return view;
-  const all = view.outlook && view.outlook.routes;
-  if (!all || !all.length) return view;
-  for (const keep of [12, 6, 3, 1, 0]) {
-    const v = { ...view, outlook: { ...view.outlook, routes: all.slice(0, keep), dropped: all.length - keep } };
-    if (wireBytes(v) < WIRE_MAX) return v;
+function wireCheck(view) {
+  if (!warnedWire && new TextEncoder().encode(JSON.stringify(view)).length >= WIRE_WARN) {
+    warnedWire = true;
+    console.warn('[mahjong] state message is approaching the 16300-byte limit PeerJS drops at');
   }
   return view;
 }
@@ -829,10 +829,10 @@ class HostSession {
     if (!this.G) return;
     const wnames = this.watchers.map((x) => x.name);
     for (const [seat, conn] of this.conns) {
-      try { conn.send({ t: 'state', view: fitForWire({ ...viewFor(this.G, seat, this.code, viewOpts()), watchers: wnames }) }); } catch {}
+      try { conn.send({ t: 'state', view: wireCheck({ ...viewFor(this.G, seat, this.code, viewOpts()), watchers: wnames }) }); } catch {}
     }
     for (const w of this.watchers) {
-      try { w.conn.send({ t: 'state', view: fitForWire({ ...viewFor(this.G, w.target, this.code, viewOpts()), watchers: wnames }) }); } catch {}
+      try { w.conn.send({ t: 'state', view: wireCheck({ ...viewFor(this.G, w.target, this.code, viewOpts()), watchers: wnames }) }); } catch {}
     }
     pendingMove = false;
     selectedTile = null;
@@ -856,7 +856,7 @@ class HostSession {
         // leave them staring at buttons the engine will keep rejecting
         const c = this.conns.get(seat);
         try { c?.send({ t: 'err', error: res.error }); } catch {}
-        try { c?.send({ t: 'state', view: fitForWire({ ...viewFor(this.G, seat, this.code, viewOpts()), watchers: this.watchers.map((x) => x.name) }) }); } catch {}
+        try { c?.send({ t: 'state', view: wireCheck({ ...viewFor(this.G, seat, this.code, viewOpts()), watchers: this.watchers.map((x) => x.name) }) }); } catch {}
       }
       return false;
     }
@@ -1211,8 +1211,9 @@ function renderGame(view, sess) {
   // every phase so it is there while you choose a discard, and it names the
   // pieces so the number is checkable rather than magic.
   const faanBar = $('#faan-bar');
-  if (view.outlook) {
-    const o = view.outlook;
+  const outlook = outlookOf(view);
+  if (outlook) {
+    const o = outlook;
     faanBar.classList.remove('hidden');
     const short = o.yakuHan < o.minToWin;
     const lock = $('#faan-locked');
@@ -1236,7 +1237,6 @@ function renderGame(view, sess) {
     const routes = $('#faan-routes');
     routes.replaceChildren();
     lastRoutes = o.routes || [];
-    waysDropped = o.dropped || 0;   // trimmed to fit down the wire (see fitForWire)
     waysUnit = o.unit;
     if (lastRoutes.length) {
       const r = lastRoutes[0];
@@ -2348,7 +2348,22 @@ function routeNeedEl(r, cap = 0) {
 }
 
 let lastRoutes = [];
-let waysDropped = 0;
+
+// The outlook is derived entirely from the view, so it is worked out here rather
+// than sent — see positionFromView. renderGame also runs for purely local
+// repaints (picking a tile up, muting a call), and re-solving the hand for those
+// would cost tens of milliseconds for an identical answer, so key the result on
+// the view object itself: a new one means new state, the same one means nothing
+// the solver cares about has moved.
+let outlookView = null, outlookDeep = false, outlookCache = null;
+function outlookOf(view) {
+  const deep = waysOpen;          // the full panel wants every route's tiles
+  if (view === outlookView && deep === outlookDeep) return outlookCache;
+  outlookView = view;
+  outlookDeep = deep;
+  outlookCache = outlookFor(positionFromView(view), { deep });
+  return outlookCache;
+}
 let waysUnit = 'faan';
 
 // The full list, since the line under the hand only has room for the best one.
@@ -2368,9 +2383,8 @@ function paintWays() {
   const body = $('#ways-body');
   const intro = $('#ways-intro');
   body.replaceChildren();
-  const cut = waysDropped ? ` ${waysDropped} more are being left out to keep the table in sync.` : '';
   intro.textContent = lastRoutes.length
-    ? `Every shape that still gets you a declarable hand, easiest first. "Drop" is how many tiles in your hand have to go; "needs" is one way to fill what is left. One tile short, that becomes "wins on" — every tile that finishes it, with the number nobody has seen yet when it is getting scarce.${cut}`
+    ? `Every shape that still gets you a declarable hand, easiest first. "Drop" is how many tiles in your hand have to go; "needs" is one way to fill what is left. One tile short, that becomes "wins on" — every tile that finishes it, with the number nobody has seen yet when it is getting scarce.`
     : 'Nothing from this hand can be declared any more.';
   for (const r of lastRoutes) {
     const row = el('div', 'ways-row');
