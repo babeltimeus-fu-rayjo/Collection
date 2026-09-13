@@ -27,6 +27,9 @@ export function variantByKey(key) {
 const SUITS = ['m', 'p', 's'];
 const HONOR_WINDS = ['E', 'S', 'W', 'N'];
 const HONOR_DRAGONS = ['R', 'G', 'W'];
+// Haku -> Hatsu -> Chun -> Haku: the order a dora indicator walks, which is not
+// the order above (see doraKey)
+const DRAGON_DORA_ORDER = ['W', 'G', 'R'];
 
 function tileKey(kind, v) {
   if (kind === 'wind') return `w${v}`;
@@ -1401,8 +1404,12 @@ function doraKey(indicator) {
     return `w${HONOR_WINDS[(idx + 1) % 4]}`;
   }
   if (k.startsWith('d')) {
-    const idx = HONOR_DRAGONS.indexOf(k[1]);
-    return `d${HONOR_DRAGONS[(idx + 1) % 3]}`;
+    // NOT the order HONOR_DRAGONS happens to be declared in. The dora cycle for
+    // dragons runs Haku -> Hatsu -> Chun -> Haku; reading it off an array that
+    // starts at Chun ran it backwards, so a White indicator pointed at Red
+    // instead of Green.
+    const idx = DRAGON_DORA_ORDER.indexOf(k[1]);
+    return `d${DRAGON_DORA_ORDER[(idx + 1) % DRAGON_DORA_ORDER.length]}`;
   }
   return '';
 }
