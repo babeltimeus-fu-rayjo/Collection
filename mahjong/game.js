@@ -25,8 +25,13 @@ export function variantByKey(key) {
 // ---------------------------------------------------------------- tiles
 
 const SUITS = ['m', 'p', 's'];
-// one set of English suit names, used everywhere a suit is spelled out
-export const SUIT_WORD = { m: 'Characters', p: 'Circles', s: 'Bamboo' };
+// The suits go by their own names — Man, Pin, Sou — not by translations of
+// them, and one map feeds every place a suit is spelled out so the two sets can
+// never appear side by side again. What they mean is a hover away in the
+// glossary, and the Rules panel introduces both.
+export const SUIT_WORD = { m: 'Man', p: 'Pin', s: 'Sou' };
+// likewise the three dragons, glossed as colours wherever they are introduced
+export const DRAGON_WORD = { R: 'Chun', G: 'Hatsu', W: 'Haku' };
 const HONOR_WINDS = ['E', 'S', 'W', 'N'];
 const HONOR_DRAGONS = ['R', 'G', 'W'];
 // Haku -> Hatsu -> Chun -> Haku: the order a dora indicator walks, which is not
@@ -43,12 +48,8 @@ function tileKey(kind, v) {
 export function tileName(t) {
   if (!t) return '?';
   if (t.kind === 'wind') return { E: 'East', S: 'South', W: 'West', N: 'North' }[t.v] + ' Wind';
-  if (t.kind === 'dragon') return { R: 'Red', G: 'Green', W: 'White' }[t.v] + ' Dragon';
+  if (t.kind === 'dragon') return DRAGON_WORD[t.v];
   if (t.kind === 'flower') return t.v <= 4 ? `Flower ${t.v}` : `Season ${t.v - 4}`;
-  // Characters / Circles / Bamboo throughout — the same words the Rules panel
-  // uses. Man / Pin / Sou name the same three suits in Japanese, and mixing the
-  // two sets on one screen is how "full flush in characters ... needs 9 Pin"
-  // ended up in front of somebody trying to learn the game.
   return `${t.v} ${SUIT_WORD[t.kind]}`;
 }
 
@@ -1159,7 +1160,7 @@ export const SCORING_GUIDE = [
       ['Concealed hand', '1', 'Win on a discard with no open melds'],
       ['Seat wind', '1', 'Triplet (or kan) of your own seat wind'],
       ['Round wind', '1', 'Triplet (or kan) of the prevailing round wind'],
-      ['Dragon triplet', '1 each', 'Triplet of Red, Green or White dragon'],
+      ['Dragon triplet', '1 each', 'Triplet of Haku, Hatsu or Chun (white, green, red)'],
       ['All sequences', '1', 'Every set is a run'],
       ['All triplets', '3', 'Every set is a triplet or kan'],
       ['Mixed flush', '3', 'One suit plus honours'],
@@ -1180,7 +1181,7 @@ export const SCORING_GUIDE = [
       ['Tanyao', '1', 'No terminals (1 or 9) and no honours'],
       ['Seat wind', '1', 'Triplet of your seat wind'],
       ['Round wind', '1', 'Triplet of the round wind'],
-      ['Haku / Hatsu / Chun', '1 each', 'Triplet of White / Green / Red dragon'],
+      ['Haku / Hatsu / Chun', '1 each', 'Triplet of the white, green or red dragon'],
       ['Pinfu', '1', 'All sequences, concealed'],
       ['Iipeiko', '1', 'Two identical sequences, concealed'],
       ['Toitoi', '2', 'Every set is a triplet or kan'],
@@ -1201,7 +1202,7 @@ export const SCORING_GUIDE = [
       ['Concealed hand', '1', 'No open melds'],
       ['Seat wind', '1', 'Triplet (or kan) of your own seat wind'],
       ['Round wind', '1', 'Triplet (or kan) of the prevailing round wind'],
-      ['Dragon triplet', '1 each', 'Triplet of Red, Green or White dragon'],
+      ['Dragon triplet', '1 each', 'Triplet of Haku, Hatsu or Chun (white, green, red)'],
       ['All triplets', '4', 'Every set is a triplet or kan'],
       ['Mixed flush', '4', 'One suit plus honours'],
       ['Full flush', '8', 'A single suit, no honours'],
@@ -1240,7 +1241,7 @@ function scoreHK(G, winnerSeat, loserSeat, isTsumo) {
   // dragon triplets
   for (const d of HONOR_DRAGONS) {
     if (hasTripletOf(hand, melds, 'dragon', d)) {
-      faan.push({ name: `${d === 'R' ? 'Red' : d === 'G' ? 'Green' : 'White'} dragon`, val: 1 });
+      faan.push({ name: `${DRAGON_WORD[d]} (dragon)`, val: 1 });
     }
   }
 
@@ -1294,7 +1295,7 @@ export function hkLockedFaan(G, seat) {
     if (t.kind === 'wind' && t.v === sw) parts.push({ term: 'seatwind', name: 'Seat wind', val: 1 });
     if (t.kind === 'wind' && t.v === G.roundWind) parts.push({ term: 'roundwind', name: 'Round wind', val: 1 });
     if (t.kind === 'dragon') {
-      parts.push({ term: 'dragonpung', name: `${t.v === 'R' ? 'Red' : t.v === 'G' ? 'Green' : 'White'} dragon`, val: 1 });
+      parts.push({ term: 'dragonpung', name: DRAGON_WORD[t.v], val: 1 });
     }
   }
   const total = parts.reduce((a, f) => a + f.val, 0);
@@ -1500,7 +1501,7 @@ function scoreTW(G, winnerSeat, loserSeat, isTsumo) {
   // dragons
   for (const d of HONOR_DRAGONS) {
     if (hasTripletOf(hand, melds, 'dragon', d)) {
-      tai.push({ name: `${d === 'R' ? 'Red' : d === 'G' ? 'Green' : 'White'} dragon`, val: 1 });
+      tai.push({ name: `${DRAGON_WORD[d]} (dragon)`, val: 1 });
     }
   }
 
@@ -2243,7 +2244,7 @@ export function jpLockedHan(G, seat) {
     if (t.kind === 'wind' && t.v === sw) parts.push({ term: 'seatwind', name: 'Seat wind', val: 1 });
     if (t.kind === 'wind' && t.v === G.roundWind) parts.push({ term: 'roundwind', name: 'Round wind', val: 1 });
     if (t.kind === 'dragon') {
-      parts.push({ term: 'dragonpung', name: `${t.v === 'R' ? 'Chun' : t.v === 'G' ? 'Hatsu' : 'Haku'}`, val: 1 });
+      parts.push({ term: 'dragonpung', name: DRAGON_WORD[t.v], val: 1 });
     }
   }
   // dora sitting inside a declared meld can't be discarded away either. Dora is
