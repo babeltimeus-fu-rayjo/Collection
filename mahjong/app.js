@@ -34,6 +34,7 @@ import '../common/feedtoggle.js';
 import '../common/version.js';
 
 const cfg = initSettings('mjg', [
+  { key: 'stepBots', label: 'Step bots (click to continue)', def: false, bool: true, section: 'Testing', host: true, hint: 'Bots stop before every action and wait for you to click the table. Use it to watch one move at a time and judge whether they are playing well. Your own hand and the action buttons still work normally — click the felt, not a tile, to let the next bot go.' },
   { key: 'revealBots', label: "Reveal bots' hands", def: false, bool: true, section: 'Testing', host: true, hint: 'Turn the bots\' concealed tiles face up while the hand is still being played, so you can see what they are holding. Only the host builds views, so this reveals them to everyone at the table.' },
   { key: 'botDelay', label: 'Bot thinking delay', def: [1200, 800], section: 'Host pacing', host: true },
   { key: 'claimTimeout', label: 'Claim timeout (0 = off)', def: 0, section: 'Host pacing', host: true, hint: 'Auto-pass a player who hasn\'t responded to a claim after this long. 0 waits indefinitely (the default).' },
@@ -50,6 +51,22 @@ const cfg = initSettings('mjg', [
 // the testing drawer's "Reveal bots' hands" lives here, and it is read fresh on
 // every broadcast, so the switch takes effect on the next state the host sends.
 const viewOpts = () => ({ revealBots: cfg.on('revealBots') });
+
+// Bots are holding for a click (see scheduleBots). The prompt is hidden the
+// moment they are released, and never shows unless a bot really is waiting.
+function paintStep() {
+  const el_ = $('#step-peek');
+  if (el_) el_.classList.toggle('hidden', !(session && session.isHost && session.stepPending));
+}
+
+// A click on the table lets the next bot act. Your own controls are exempt —
+// discarding shouldn't double as the nudge, or the bot would move the instant
+// you played and you'd never see the board in between.
+document.addEventListener('click', (e) => {
+  if (!session || !session.isHost || !session.stepPending) return;
+  if (e.target.closest && e.target.closest('#hand, #action-bar, #chat, #feed, .topbar, #size-popover, #cfg-drawer, #cfg-gear, .modal')) return;
+  session.step();
+});
 
 // Settings are stored, not observed, so a toggle would otherwise sit unseen
 // until somebody moved. Re-broadcast when the drawer changes, so ticking the box
@@ -638,6 +655,7 @@ class HostSession {
     this.selectedVariant = 'tw';
     this.botTimer = null;
     this.claimTimer = null;
+    this.stepPending = false;
 
     peer.on('connection', (conn) => {
       conn.on('open', () => {
@@ -785,7 +803,10 @@ class HostSession {
     if (!this.G) return false;
     const res = applyMove(this.G, seat, move);
     if (!res.ok) {
-      if (seat === 0) { pendingMove = false; toast(res.error); if (lastView) renderGame(lastView, this); }
+      // Re-render from the engine, NOT from lastView: if the two had drifted
+      // apart, repainting the stale view would leave the board insisting it is
+      // still your turn and every retry would be refused the same way.
+      if (seat === 0) { pendingMove = false; toast(res.error); renderGame(viewFor(this.G, 0, this.code, viewOpts()), this); }
       else { try { this.conns.get(seat)?.send({ t: 'err', error: res.error }); } catch {} }
       return false;
     }
@@ -806,11 +827,29 @@ class HostSession {
 
   scheduleBots() {
     clearTimeout(this.botTimer);
-    if (!this.G || this.G.phase === 'over' || this.G.phase === 'handEnd') return;
+    this.stepPending = false;
+    if (!this.G || this.G.phase === 'over' || this.G.phase === 'handEnd') { paintStep(); return; }
+    // stepping: don't set a timer at all, just mark that a bot is holding and
+    // wait to be nudged. Only advertise it when a bot actually HAS something to
+    // do, so the prompt never appears while the table is waiting on you.
+    if (cfg.on('stepBots')) {
+      this.stepPending = this.G.players.some((p) => (p.bot || p.botFor) && botChoose(this.G, p.seat));
+      paintStep();
+      return;
+    }
+    paintStep();
     // never act before a just-discarded tile has finished flying
     const flyWait = Math.max(0, (this.botNotBefore || 0) - Date.now());
     const delay = Math.max(cfg.range('botDelay'), flyWait);
     this.botTimer = setTimeout(() => this.tickBots(), delay);
+  }
+
+  // one click, one bot action
+  step() {
+    if (!this.stepPending) return;
+    this.stepPending = false;
+    paintStep();
+    this.tickBots();
   }
 
   tickBots() {
@@ -848,6 +887,10 @@ class HostSession {
   destroy() {
     clearTimeout(this.botTimer);
     clearTimeout(this.claimTimer);
+    // drop the game too: any handler still holding a reference to this session
+    // (a DOM node that outlived the room) then becomes a no-op instead of
+    // driving a finished game's engine
+    this.G = null;
     try { this.peer.destroy(); } catch {}
   }
 }
@@ -1173,16 +1216,19 @@ function renderGame(view, sess) {
   paintChatBubbles();
 }
 
-function handleTileClick(id, sess) {
-  if (pendingMove) return;
+// Hand tiles are reused across renders (and tile ids repeat from game to game),
+// so a tile element can outlive the session that built it. Always act through
+// the session that is live NOW rather than the one captured at bind time.
+function handleTileClick(id) {
+  if (!session || pendingMove) return;
   if (selectedTile === id) {
     // tap again = discard
     pendingMove = true;
     selectedTile = null;
-    sess.localMove({ kind: 'discard', tileId: id });
+    session.localMove({ kind: 'discard', tileId: id });
   } else {
     selectedTile = id;
-    if (lastView) renderGame(lastView, sess);
+    if (lastView) renderGame(lastView, session);
   }
 }
 
@@ -1288,7 +1334,7 @@ function attachHandDrag(tile, tileId, sess) {
       tile.removeEventListener('pointerup', done);
       tile.removeEventListener('pointercancel', done);
       if (!dragging) {
-        if (lastView && lastView.phase === 'discard' && lastView.turn === lastView.mySeat) handleTileClick(tileId, sess);
+        if (lastView && lastView.phase === 'discard' && lastView.turn === lastView.mySeat) handleTileClick(tileId);
         return;
       }
       tile.classList.remove('dragging');
@@ -1319,19 +1365,19 @@ function renderActions(view, sess) {
     const blocked = new Set(opts.blockedOpts || []);
     if (opts.options.includes('ron')) {
       const b = el('button', 'btn ron', 'Ron');
-      b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; sess.localMove({ kind: 'ron' }); } });
+      b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; session.localMove({ kind: 'ron' }); } });
       bar.append(b);
     }
     if (opts.options.includes('kan')) {
       const b = el('button', 'btn kan-btn', 'Kan');
       if (blocked.has('kan')) { b.disabled = true; b.title = 'A player may still Ron — wait for them to pass'; }
-      else b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; sess.localMove({ kind: 'kan' }); } });
+      else b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; session.localMove({ kind: 'kan' }); } });
       bar.append(b);
     }
     if (opts.options.includes('pon')) {
       const b = el('button', 'btn pon-btn', 'Pon');
       if (blocked.has('pon')) { b.disabled = true; b.title = 'A player may still Ron — wait for them to pass'; }
-      else b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; sess.localMove({ kind: 'pon' }); } });
+      else b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; session.localMove({ kind: 'pon' }); } });
       bar.append(b);
     }
     if (opts.options.includes('chi')) {
@@ -1340,13 +1386,13 @@ function renderActions(view, sess) {
         const b = el('button', 'btn chi-btn', label);
         if (blocked.has('chi')) { b.disabled = true; b.title = 'A player may Pon or Ron — wait for them to pass'; }
         else b.addEventListener('click', () => {
-          if (!pendingMove) { pendingMove = true; sess.localMove({ kind: 'chi', tile1: combo[0].id, tile2: combo[1].id }); }
+          if (!pendingMove) { pendingMove = true; session.localMove({ kind: 'chi', tile1: combo[0].id, tile2: combo[1].id }); }
         });
         bar.append(b);
       }
     }
     const pass = el('button', 'btn secondary', 'Pass');
-    pass.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; sess.localMove({ kind: 'pass' }); } });
+    pass.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; session.localMove({ kind: 'pass' }); } });
     bar.append(pass);
     if (blocked.size) {
       const hint = el('span', '', 'Higher-priority calls pending…');
@@ -1361,7 +1407,7 @@ function renderActions(view, sess) {
     const a = view.actions;
     if (a.canTsumo) {
       const b = el('button', 'btn tsumo', 'Tsumo');
-      b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; sess.localMove({ kind: 'tsumo' }); } });
+      b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; session.localMove({ kind: 'tsumo' }); } });
       bar.append(b);
     }
     if (a.canRiichi) {
@@ -1369,7 +1415,7 @@ function renderActions(view, sess) {
       b.addEventListener('click', () => {
         if (!pendingMove && selectedTile && a.riichiDiscards.includes(selectedTile)) {
           pendingMove = true;
-          sess.localMove({ kind: 'riichi', tileId: selectedTile });
+          session.localMove({ kind: 'riichi', tileId: selectedTile });
         } else {
           toast('Select a tile to discard with Riichi');
         }
@@ -1379,7 +1425,7 @@ function renderActions(view, sess) {
     if (a.canClosedKan && a.closedKanKeys.length > 0) {
       for (const key of a.closedKanKeys) {
         const b = el('button', 'btn kan-btn', `Kan (${key})`);
-        b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; sess.localMove({ kind: 'kan', type: 'closed', tileKey: key }); } });
+        b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; session.localMove({ kind: 'kan', type: 'closed', tileKey: key }); } });
         bar.append(b);
       }
     }
@@ -1387,7 +1433,7 @@ function renderActions(view, sess) {
       for (const tid of a.addKanOptions) {
         const t = view.players.find((q) => q.seat === my)?.hand.find((h) => h.id === tid);
         const b = el('button', 'btn kan-btn', `Kan+ (${t ? shortTag(t) : '?'})`);
-        b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; sess.localMove({ kind: 'kan', type: 'add', tileId: tid }); } });
+        b.addEventListener('click', () => { if (!pendingMove) { pendingMove = true; session.localMove({ kind: 'kan', type: 'add', tileId: tid }); } });
         bar.append(b);
       }
     }
@@ -1575,7 +1621,7 @@ function showHandEnd(view, sess) {
   if (sess && sess.isHost) {
     btn.classList.remove('hidden');
     wait.classList.add('hidden');
-    btn.onclick = () => sess.localNext();
+    btn.onclick = () => session && session.localNext();
   } else {
     btn.classList.add('hidden');
     wait.classList.remove('hidden');
@@ -1661,11 +1707,26 @@ async function joinRoom() {
 function leaveRoom() {
   if (session) { session.destroy(); session = null; }
   lastView = null;
+  lastSess = null;
   pendingMove = false;
   selectedTile = null;
   handOrder = [];
   seenFxSeq = 0;
   chatSeenN = 0;
+  shownDiscardId = null;
+  // the hand-end sequence, so the next room starts from a clean slate rather
+  // than inheriting a hidden score panel or a spent reveal timer
+  clearTimeout(handEndTimer);
+  handEndKey = null;
+  handEndReady = false;
+  scoreHidden = false;
+  hideHandEnd();
+  paintStep();
+  // and the board itself: hand tiles are reused by tile id, which repeat every
+  // game, so leaving them in place would carry this room's click handlers into
+  // the next one
+  $('#hand').replaceChildren();
+  $('#action-bar').replaceChildren();
   clearChatBubbles();
   showScreen('home');
   setHomeStatus('');
@@ -1732,3 +1793,4 @@ if (params.get('room')) {
 // handle window scroll/resize for bubbles
 window.addEventListener('scroll', paintChatBubbles, { passive: true });
 window.addEventListener('resize', paintChatBubbles);
+

@@ -468,12 +468,18 @@ body {
 
 /* the score panel can be tucked away to study the board; this says how to bring
    it back, and never eats a click itself */
-#he-peek {
+#he-peek, #step-peek {
   position: fixed; left: 50%; transform: translateX(-50%); top: 50px; z-index: 75;
   background: rgba(10,26,18,.92); border: 1px solid #2a6b45; color: #e8d5a3;
   padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 600;
   box-shadow: 0 4px 16px rgba(0,0,0,.5); pointer-events: none;
 }
+
+/* the bots-are-holding prompt sits low, out of the board's way, and pulses
+   gently so it reads as a live state rather than a label */
+#step-peek { top: auto; bottom: 14px; border-color: #3a6b8a; color: #cfe3f2; animation: stepPulse 2s ease-in-out infinite; }
+@keyframes stepPulse { 0%, 100% { opacity: .7; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { #step-peek { animation: none; } }
 
 /* ================================================================ chat */
 /* sits clear of the page scrollbar (macOS overlay scrollbars float over content) */
