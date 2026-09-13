@@ -1734,6 +1734,39 @@ export function botChoose(G, seat) {
   return null;
 }
 
+// Every tile anyone at the table can legally see, minus this player's own hand.
+// Bots read the same board a human does — discards and melds, never a concealed
+// hand — so nothing here is a peek.
+function visibleCounts(G, exceptSeat) {
+  const seen = new Array(34).fill(0);
+  const bump = (t) => { const i = keyIdx(t.key); if (i >= 0) seen[i]++; };
+  for (const q of G.players) {
+    for (const t of q.discards) bump(t);
+    for (const m of q.melds) for (const t of m.tiles) bump(t);
+  }
+  for (const d of G.dora) bump(d);
+  return seen;
+}
+
+// The best hand this player could still DECLARE, given these concealed tiles:
+// nearest first, then biggest. Self-draw is always available, so a shape one
+// short of the minimum still counts.
+function bestDeclarableHK(G, p, hand, seen) {
+  const routes = hkRoutesFor({
+    hand, melds: p.melds, flowers: p.flowers,
+    seatWind: seatWind(G, p.seat), roundWind: G.roundWind, seen,
+  });
+  let best = null;
+  for (const r of routes) {
+    const faan = r.shape >= HK_MIN_FAAN ? r.shape : r.shape + 1;
+    if (faan < HK_MIN_FAAN) continue;
+    if (!best || r.away < best.away || (r.away === best.away && faan > best.faan)) {
+      best = { away: r.away, faan };
+    }
+  }
+  return best;
+}
+
 function botPickDiscard(G, p) {
   // simple strategy: discard isolated honor/terminal tiles first,
   // then isolated number tiles, then the tile furthest from a set
@@ -1773,6 +1806,27 @@ function botPickDiscard(G, p) {
     }
     return { tile: t, score };
   });
+
+  // Hong Kong needs three faan, not merely a complete hand. Shape alone builds
+  // tidy all-sequence hands that can never be declared, so each candidate
+  // discard is judged by the best DECLARABLE hand left afterwards: how far away
+  // it is first, then what it pays, and only then the shape heuristic above as a
+  // tie-break. One solve per distinct tile, so a turn costs a handful of ms.
+  if (G.variant === 'hk') {
+    const seen = visibleCounts(G, p.seat);
+    const byKey = new Map();
+    for (const s of scored) {
+      let ev = byKey.get(s.tile.key);
+      if (ev === undefined) {
+        ev = bestDeclarableHK(G, p, hand.filter((h) => h.id !== s.tile.id), seen);
+        byKey.set(s.tile.key, ev);
+      }
+      s.away = ev ? ev.away : 99;
+      s.faan = ev ? ev.faan : 0;
+    }
+    scored.sort((a, b) => a.away - b.away || b.faan - a.faan || a.score - b.score);
+    return scored[0].tile;
+  }
 
   // sort ascending (worst first), discard the least useful
   scored.sort((a, b) => a.score - b.score);
