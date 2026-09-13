@@ -37,6 +37,17 @@ async function init() {
     'position:fixed;right:76px;bottom:16px;font:10px/1 "SF Mono",Menlo,Consolas,monospace;' +
     'color:rgba(255,255,255,.3);z-index:1;pointer-events:none;user-select:none;';
   document.body.append(el);
+
+  // The build stamp belongs on the pages you read, not on the table you play at.
+  // Every game in the collection shows its home and lobby as #screen-home /
+  // #screen-lobby and the table as #screen-game, so one rule covers all of them:
+  // hide while the table is up. The collection index has no #screen-game, so the
+  // stamp simply stays.
+  const table = document.querySelector('#screen-game');
+  if (!table) return;
+  const sync = () => { el.hidden = !table.classList.contains('hidden'); };
+  new MutationObserver(sync).observe(table, { attributes: true, attributeFilter: ['class'] });
+  sync();
 }
 
 init();

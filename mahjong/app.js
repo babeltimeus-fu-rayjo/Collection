@@ -1184,14 +1184,15 @@ function renderGame(view, sess) {
         ? el('span', 'ready', 'ready')
         : el('span', '', `${routeNeed(r, 3)}`));
       if (lastRoutes.length > 1) {
-        const more = el('button', 'claim-mute undo', `all ${lastRoutes.length} ways`);
+        const more = el('button', 'claim-mute undo', waysOpen ? 'hide' : `all ${lastRoutes.length} ways`);
         more.type = 'button';
-        more.addEventListener('click', showWays);
+        more.addEventListener('click', toggleWays);
         routes.append(el('span', '', ' '), more);
       }
     } else {
       routes.append(el('span', '', `No hand from here reaches ${o.minToWin} faan — play for the draw`));
     }
+    paintWays();
   } else {
     faanBar.classList.add('hidden');
   }
@@ -1731,8 +1732,20 @@ function routeNeed(r, cap = 0) {
 
 let lastRoutes = [];
 
-// the full list, since the line under the hand only has room for the best one
-function showWays() {
+// The full list, since the line under the hand only has room for the best one.
+// It opens in place rather than over the board — you want to read it WHILE
+// looking at your tiles, and the page can scroll if it runs long.
+let waysOpen = false;
+function toggleWays() {
+  waysOpen = !waysOpen;
+  paintWays();
+  if (lastView) renderGame(lastView, session);   // so the button relabels
+}
+function paintWays() {
+  const panel = $('#ways-panel');
+  if (!panel) return;
+  panel.classList.toggle('hidden', !waysOpen || !lastRoutes.length);
+  if (!waysOpen || !lastRoutes.length) return;
   const body = $('#ways-body');
   const intro = $('#ways-intro');
   body.replaceChildren();
@@ -1746,7 +1759,6 @@ function showWays() {
     row.append(el('span', 'ways-need', routeNeed(r)));
     body.append(row);
   }
-  $('#modal-ways').classList.remove('hidden');
 }
 
 // one row of the score table (name / delta / running total)
@@ -1835,6 +1847,8 @@ function leaveRoom() {
   seenFxSeq = 0;
   chatSeenN = 0;
   shownDiscardId = null;
+  lastRoutes = [];
+  waysOpen = false;
   // the hand-end sequence, so the next room starts from a clean slate rather
   // than inheriting a hidden score panel or a spent reveal timer
   clearTimeout(handEndTimer);
@@ -1879,7 +1893,6 @@ for (const b of document.querySelectorAll('.btn-cheat')) {
   });
 }
 $('#btn-cheat-close')?.addEventListener('click', () => $('#modal-cheat').classList.add('hidden'));
-$('#btn-ways-close')?.addEventListener('click', () => $('#modal-ways').classList.add('hidden'));
 $('#modal-cheat')?.addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
 // NB: the hand-end modal is deliberately NOT dismissible by a backdrop click — it
 // holds the host's "Deal next hand" button, and nothing re-opens it during the
