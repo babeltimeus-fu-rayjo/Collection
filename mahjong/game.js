@@ -1231,6 +1231,37 @@ function scoreHK(G, winnerSeat, loserSeat, isTsumo) {
   return { faan, total, points, summary: `${total} faan (${points} pts)`, yaku: faan };
 }
 
+// ---- Hong Kong: what a hand is already worth, whatever happens next.
+//
+// Only two things can't be taken away mid-hand: flowers, which are set aside the
+// moment they're drawn, and the honour pungs inside a declared meld, which can't
+// be broken up. Everything else in scoreHK — the flushes, all-triplets, the
+// triplets still sitting concealed — survives only as long as you don't discard
+// out of it, so none of it belongs in a floor. HK needs three faan to win at
+// all, which is what makes the floor worth showing.
+export function hkLockedFaan(G, seat) {
+  if (G.variant !== 'hk') return null;
+  const p = playerBySeat(G, seat);
+  const sw = seatWind(G, seat);
+  const parts = [];
+
+  if (p.flowers.length > 0) {
+    parts.push({ name: `${p.flowers.length} flower${p.flowers.length > 1 ? 's' : ''}`, val: p.flowers.length });
+  }
+  for (const m of p.melds) {
+    const t = m.tiles[0];
+    if (!t) continue;
+    // seat wind and round wind score separately, so the same pung can pay twice
+    if (t.kind === 'wind' && t.v === sw) parts.push({ name: 'Seat wind', val: 1 });
+    if (t.kind === 'wind' && t.v === G.roundWind) parts.push({ name: 'Round wind', val: 1 });
+    if (t.kind === 'dragon') {
+      parts.push({ name: `${t.v === 'R' ? 'Red' : t.v === 'G' ? 'Green' : 'White'} dragon`, val: 1 });
+    }
+  }
+  const total = parts.reduce((a, f) => a + f.val, 0);
+  return { total, parts, minToWin: 3 };
+}
+
 function hkFaanToPoints(faan) {
   if (faan < 3) return 0; // minimum 3 faan
   if (faan <= 3) return 8;
@@ -1795,6 +1826,7 @@ export function viewFor(G, seat, code, opts = {}) {
     actions,
     riichiSticks: G.riichiSticks,
     honba: G.honba,
+    outlook: hkLockedFaan(G, seat),
     handResult: G.handResult,
     code,
     log: G.log.slice(-30),

@@ -1143,6 +1143,24 @@ function renderGame(view, sess) {
     }
   }
 
+  // Hong Kong only: the faan already banked, under the action bar. Shown for
+  // every phase so it is there while you choose a discard, and it names the
+  // pieces so the number is checkable rather than magic.
+  const faanBar = $('#faan-bar');
+  if (view.variant === 'hk' && view.outlook) {
+    const o = view.outlook;
+    faanBar.classList.remove('hidden');
+    const short = o.total < o.minToWin;
+    const lock = $('#faan-locked');
+    lock.textContent = `Guaranteed ${o.total} faan`;
+    lock.classList.toggle('short', short);
+    $('#faan-parts').textContent = o.parts.length
+      ? `· ${o.parts.map((f) => f.name).join(', ')}${short ? ` · ${o.minToWin - o.total} more to win` : ''}`
+      : `· nothing banked yet · ${o.minToWin} needed to win`;
+  } else {
+    faanBar.classList.add('hidden');
+  }
+
   // my played: flowers first, then melds (sets)
   const myPlayed = $('#my-played');
   myPlayed.replaceChildren();
