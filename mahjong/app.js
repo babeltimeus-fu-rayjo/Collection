@@ -807,7 +807,14 @@ class HostSession {
       // apart, repainting the stale view would leave the board insisting it is
       // still your turn and every retry would be refused the same way.
       if (seat === 0) { pendingMove = false; toast(res.error); renderGame(viewFor(this.G, 0, this.code, viewOpts()), this); }
-      else { try { this.conns.get(seat)?.send({ t: 'err', error: res.error }); } catch {} }
+      else {
+        // same reasoning for a guest: send the reason, then the real state, so a
+        // claim that was refused because the window had already closed doesn't
+        // leave them staring at buttons the engine will keep rejecting
+        const c = this.conns.get(seat);
+        try { c?.send({ t: 'err', error: res.error }); } catch {}
+        try { c?.send({ t: 'state', view: { ...viewFor(this.G, seat, this.code, viewOpts()), watchers: this.watchers.map((x) => x.name) } }); } catch {}
+      }
       return false;
     }
     // hold the next bot action until the discard has finished flying (+ the
@@ -936,10 +943,20 @@ class GuestSession {
     }
     if (msg.t === 'lobby') renderLobby(this, msg);
     if (msg.t === 'state') {
+      // Authoritative state has landed, so whatever I was waiting on is done.
+      // Without this the flag latches on my first move and every later click is
+      // silently swallowed — one move per guest, then a frozen table.
+      pendingMove = false;
+      selectedTile = null;
       showScreen('game');
       renderGame(msg.view, this);
     }
-    if (msg.t === 'err') toast(msg.error);
+    if (msg.t === 'err') {
+      // a refused move must unlock too, or the retry can never be sent
+      pendingMove = false;
+      toast(msg.error);
+      if (lastView) renderGame(lastView, this);
+    }
     if (msg.t === 'chat') addChatMsg(msg.msg, msg.msg.seat === this.seat);
     if (msg.t === 'chatlog') { for (const m of msg.items) addChatMsg(m, m.seat === this.seat); }
   }
