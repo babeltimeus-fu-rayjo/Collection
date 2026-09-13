@@ -1277,16 +1277,16 @@ export function hkLockedFaan(G, seat) {
   const parts = [];
 
   if (p.flowers.length > 0) {
-    parts.push({ name: `${p.flowers.length} flower${p.flowers.length > 1 ? 's' : ''}`, val: p.flowers.length });
+    parts.push({ term: 'flowers', name: `${p.flowers.length} flower${p.flowers.length > 1 ? 's' : ''}`, val: p.flowers.length });
   }
   for (const m of p.melds) {
     const t = m.tiles[0];
     if (!t) continue;
     // seat wind and round wind score separately, so the same pung can pay twice
-    if (t.kind === 'wind' && t.v === sw) parts.push({ name: 'Seat wind', val: 1 });
-    if (t.kind === 'wind' && t.v === G.roundWind) parts.push({ name: 'Round wind', val: 1 });
+    if (t.kind === 'wind' && t.v === sw) parts.push({ term: 'seatwind', name: 'Seat wind', val: 1 });
+    if (t.kind === 'wind' && t.v === G.roundWind) parts.push({ term: 'roundwind', name: 'Round wind', val: 1 });
     if (t.kind === 'dragon') {
-      parts.push({ name: `${t.v === 'R' ? 'Red' : t.v === 'G' ? 'Green' : 'White'} dragon`, val: 1 });
+      parts.push({ term: 'dragonpung', name: `${t.v === 'R' ? 'Red' : t.v === 'G' ? 'Green' : 'White'} dragon`, val: 1 });
     }
   }
   const total = parts.reduce((a, f) => a + f.val, 0);
@@ -2153,12 +2153,12 @@ function hkRoutesFor(ctx) {
         + wants.reduce((a, w) => a + w.count * (4 / Math.max(1, w.left)), 0);
       const shape = f.val + m.val + best.hf + meldHon + flowerFaan;
       const parts = [];
-      if (f.name) parts.push(f.name);
-      if (m.name) parts.push(m.name);
+      if (f.name) parts.push({ term: f.id.split(':')[0], text: f.name });
+      if (m.name) parts.push({ term: m.id, text: m.name });
       // faan, not pungs: an East pung in the East round is worth two on its own
       const honFaan = best.hf + meldHon;
-      if (honFaan > 0) parts.push(`${honFaan} from dragon/wind pungs`);
-      if (flowerFaan > 0) parts.push(`${flowerFaan} flower${flowerFaan > 1 ? 's' : ''}`);
+      if (honFaan > 0) parts.push({ term: 'honourpung', text: `${honFaan} from dragon/wind pungs` });
+      if (flowerFaan > 0) parts.push({ term: 'flowers', text: `${flowerFaan} flower${flowerFaan > 1 ? 's' : ''}` });
       out.push({
         id: `${f.id}|${m.id}`, parts, shape,
         away: concealed - best.reuse,

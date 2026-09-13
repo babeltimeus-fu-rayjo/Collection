@@ -1164,11 +1164,20 @@ function renderGame(view, sess) {
     faanBar.classList.remove('hidden');
     const short = o.total < o.minToWin;
     const lock = $('#faan-locked');
-    lock.textContent = `Current ${o.total} faan`;
+    lock.replaceChildren(term('current', `Current ${o.total} faan`));
     lock.classList.toggle('short', short);
-    $('#faan-parts').textContent = o.parts.length
-      ? `· ${o.parts.map((f) => f.name).join(', ')}${short ? ` · ${o.minToWin - o.total} more to win` : ''}`
-      : `· nothing banked yet · ${o.minToWin} needed to win`;
+    const pieces = $('#faan-parts');
+    pieces.replaceChildren();
+    if (o.parts.length) {
+      pieces.append(el('span', '', '· '));
+      o.parts.forEach((f, i) => {
+        if (i) pieces.append(el('span', '', ', '));
+        pieces.append(f.term ? term(f.term, f.name) : el('span', '', f.name));
+      });
+      if (short) pieces.append(el('span', '', ` · ${o.minToWin - o.total} more to win`));
+    } else {
+      pieces.append(el('span', '', `· nothing banked yet · ${o.minToWin} needed to win`));
+    }
 
     // and the way out: the easiest shape that still reaches the minimum, with
     // what it is actually waiting for. The rest are a click away.
@@ -1178,11 +1187,13 @@ function renderGame(view, sess) {
     if (lastRoutes.length) {
       const r = lastRoutes[0];
       routes.append(el('span', '', `Easiest way to ${o.minToWin}+: `));
-      routes.append(el('b', '', `${r.parts.join(' + ') || 'any winning hand'}${r.selfDraw ? ' + self-draw' : ''}`));
-      routes.append(el('span', '', ` → ${r.faan} faan · `));
-      routes.append(r.away === 0 && !r.wants.length
-        ? el('span', 'ready', 'ready')
-        : el('span', '', `${routeNeed(r, 3)}`));
+      const b = el('b', '');
+      b.append(routeLabel(r));
+      routes.append(b);
+      routes.append(el('span', '', ' → '));
+      routes.append(term('faan', `${r.faan} faan`));
+      routes.append(el('span', '', ' · '));
+      routes.append(routeNeedEl(r, 3));
       if (lastRoutes.length > 1) {
         const more = el('button', 'claim-mute undo', waysOpen ? 'hide' : `all ${lastRoutes.length} ways`);
         more.type = 'button';
@@ -1715,9 +1726,120 @@ function showHandEnd(view, sess) {
   }
 }
 
+// ---------------------------------------------------------------- glossary
+// The faan line is dense with terms of art, and it exists for people still
+// learning the game — so every one of them explains itself on hover, with real
+// tiles where a sentence alone wouldn't land.
+const T_ = (kind, v) => ({ kind, v, key: kind === 'wind' ? `w${v}` : kind === 'dragon' ? `d${v}` : `${kind}${v}` });
+const GLOSSARY = {
+  faan: { title: 'Faan',
+    body: "Hong Kong's scoring unit. Three is the minimum to declare a win at all — a complete hand worth less than that cannot be taken, so you keep playing. Above three, each faan roughly doubles the payout." },
+  mixed: { title: 'Mixed flush · 3 faan',
+    body: 'Every numbered tile in one suit, with any winds or dragons alongside. No tiles from the other two suits.',
+    tiles: [T_('p', 2), T_('p', 3), T_('p', 4), T_('p', 8), T_('p', 8), T_('p', 8), T_('wind', 'E'), T_('wind', 'E'), T_('wind', 'E')] },
+  full: { title: 'Full flush · 6 faan',
+    body: 'Every tile in a single suit, with no winds or dragons at all. Harder than a mixed flush, and worth double.',
+    tiles: [T_('m', 1), T_('m', 2), T_('m', 3), T_('m', 5), T_('m', 5), T_('m', 5), T_('m', 7), T_('m', 8), T_('m', 9)] },
+  honors: { title: 'All honours · 10 faan',
+    body: 'Nothing but winds and dragons — no numbered tiles anywhere in the hand. Rare, and paid accordingly.',
+    tiles: [T_('wind', 'E'), T_('wind', 'E'), T_('wind', 'E'), T_('dragon', 'R'), T_('dragon', 'R'), T_('dragon', 'R'), T_('dragon', 'G'), T_('dragon', 'G')] },
+  sequences: { title: 'All sequences · 1 faan',
+    body: 'Every set is a run of three consecutive tiles in one suit. No triplets anywhere except the pair.',
+    tiles: [T_('s', 3), T_('s', 4), T_('s', 5), T_('p', 6), T_('p', 7), T_('p', 8)] },
+  triplets: { title: 'All triplets · 3 faan',
+    body: 'Every set is three (or four) of the same tile. No runs anywhere.',
+    tiles: [T_('p', 5), T_('p', 5), T_('p', 5), T_('m', 9), T_('m', 9), T_('m', 9)] },
+  honourpung: { title: 'Dragon and wind pungs · 1 faan each',
+    body: 'Three of a dragon, of your own seat wind, or of the round wind. Your seat wind pays twice if it is also the round wind — East seat in the East round is two faan from one set.',
+    tiles: [T_('dragon', 'R'), T_('dragon', 'R'), T_('dragon', 'R')] },
+  dragonpung: { title: 'Dragon pung · 1 faan',
+    body: 'Three of Red, Green or White dragon. Already melded, so this one is banked.',
+    tiles: [T_('dragon', 'G'), T_('dragon', 'G'), T_('dragon', 'G')] },
+  seatwind: { title: 'Seat wind · 1 faan', body: 'Three of the wind matching your own seat. Banked once melded.' },
+  roundwind: { title: 'Round wind · 1 faan', body: 'Three of the wind the round is named for. It stacks with seat wind when they are the same tile.' },
+  flowers: { title: 'Flowers · 1 faan each',
+    body: 'Flower and season tiles never sit in your hand: they are set aside the moment you draw one and replaced with a fresh tile. Free faan, and nothing can take them away.',
+    tiles: [T_('flower', 1), T_('flower', 6)] },
+  selfdraw: { title: 'Self-draw · 1 faan',
+    body: 'Winning on a tile you drew yourself rather than one somebody discarded. Always available, which is why a shape worth two faan is still a route to three.' },
+  drop: { title: 'Drop',
+    body: 'How many tiles in your hand this route has no use for. You would be discarding these over the coming turns.' },
+  needs: { title: 'Needs',
+    body: 'What you would then have to draw or claim. A number in brackets is how many of that tile nobody has seen yet — when it is as low as the number you need, the route is a long shot.' },
+  current: { title: 'Current faan',
+    body: "What this hand is worth right now whatever happens next: flowers, and dragon or wind pungs you have already melded. A triplet still hidden in your hand doesn't count — discard out of it and it's gone." },
+};
+
+let tipEl = null;
+function hideTip() { if (tipEl) tipEl.classList.add('hidden'); }
+function showTip(anchor, key) {
+  const g = GLOSSARY[key];
+  if (!g) return;
+  if (!tipEl) { tipEl = el('div', 'tip hidden'); document.body.append(tipEl); }
+  tipEl.replaceChildren();
+  tipEl.append(el('div', 'tip-title', g.title));
+  tipEl.append(el('div', 'tip-body', g.body));
+  if (g.tiles) {
+    const row = el('div', 'tip-tiles');
+    for (const t of g.tiles) row.append(renderTile(t));
+    tipEl.append(row);
+  }
+  tipEl.classList.remove('hidden');
+  // above the word where there's room, below it when there isn't, and clamped to
+  // the viewport either way — terms near the bottom of a long list would
+  // otherwise explain themselves somewhere you can't see
+  const r = anchor.getBoundingClientRect();
+  const box = tipEl.getBoundingClientRect();
+  const left = Math.max(8, Math.min(window.innerWidth - box.width - 8, r.left + r.width / 2 - box.width / 2));
+  let top = r.top - box.height - 8;
+  if (top < 8) top = r.bottom + 8;
+  if (top + box.height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - box.height - 8);
+  tipEl.style.left = `${Math.round(left)}px`;
+  tipEl.style.top = `${Math.round(top)}px`;
+}
+
+// a term that explains itself
+function term(key, text) {
+  const sp = el('span', 'term', text);
+  sp.tabIndex = 0;
+  sp.addEventListener('mouseenter', () => showTip(sp, key));
+  sp.addEventListener('focus', () => showTip(sp, key));
+  sp.addEventListener('mouseleave', hideTip);
+  sp.addEventListener('blur', hideTip);
+  // touch: tap the word to hold the note open, tap anywhere else to drop it
+  sp.addEventListener('click', (e) => { e.stopPropagation(); showTip(sp, key); });
+  return sp;
+}
+document.addEventListener('click', hideTip);
+window.addEventListener('scroll', hideTip, { passive: true });
+
 // "drop 3 · needs East Wind x3, Red Dragon x1" — the discards AND the draws,
 // because a distance on its own never says what you are waiting for, and three
 // of a tile with three left is not the same work as three of a fresh one
+function routeLabel(r) {
+  const wrap = el('span', '');
+  const bits = r.parts.length ? r.parts : [{ term: null, text: 'any winning hand' }];
+  bits.forEach((b, i) => {
+    if (i) wrap.append(el('span', '', ' + '));
+    wrap.append(b.term ? term(b.term, b.text) : el('span', '', b.text));
+  });
+  if (r.selfDraw) { wrap.append(el('span', '', ' + ')); wrap.append(term('selfdraw', 'self-draw')); }
+  return wrap;
+}
+
+function routeNeedEl(r, cap = 0) {
+  const wrap = el('span', '');
+  if (r.away > 0) { wrap.append(term('drop', `drop ${r.away}`)); if (r.wants.length) wrap.append(el('span', '', ' · ')); }
+  if (r.wants.length) {
+    const show = cap > 0 ? r.wants.slice(0, cap) : r.wants;
+    const rest = r.wants.length - show.length;
+    const list = show.map((w) => `${w.name}\u00d7${w.count}${w.left <= w.count ? ` (${w.left} left)` : ''}`).join(', ');
+    wrap.append(term('needs', `needs ${list}${rest > 0 ? ` +${rest} more` : ''}`));
+  }
+  if (!r.away && !r.wants.length) wrap.append(el('span', 'ready', 'ready'));
+  return wrap;
+}
+
 function routeNeed(r, cap = 0) {
   const bits = [];
   if (r.away > 0) bits.push(`drop ${r.away}`);
@@ -1754,9 +1876,15 @@ function paintWays() {
     : 'Nothing from this hand reaches three faan any more.';
   for (const r of lastRoutes) {
     const row = el('div', 'ways-row');
-    row.append(el('span', 'ways-faan', `${r.faan} faan`));
-    row.append(el('span', 'ways-name', `${r.parts.join(' + ') || 'any winning hand'}${r.selfDraw ? ' + self-draw' : ''}`));
-    row.append(el('span', 'ways-need', routeNeed(r)));
+    const f = el('span', 'ways-faan');
+    f.append(term('faan', `${r.faan} faan`));
+    row.append(f);
+    const nm = el('span', 'ways-name');
+    nm.append(routeLabel(r));
+    row.append(nm);
+    const nd = el('span', 'ways-need');
+    nd.append(routeNeedEl(r));
+    row.append(nd);
     body.append(row);
   }
 }
