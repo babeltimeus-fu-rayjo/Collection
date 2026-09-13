@@ -417,7 +417,8 @@ function canRon(G, seat) {
   // JP furiten check
   if (G.variant === 'jp' && p.furiten) return false;
   const testHand = [...p.hand, G.lastDiscard];
-  return isWinningHand(testHand, G.variant, p.melds);
+  if (!isWinningHand(testHand, G.variant, p.melds)) return false;
+  return meetsWinMinimum(G, seat, G.lastDiscardSeat, false);
 }
 
 function canTsumo(G, seat) {
@@ -426,7 +427,35 @@ function canTsumo(G, seat) {
   // concealed hand shrinks by 3 for every meld — a melded player still has the
   // one extra (just-drawn) tile, so compare against that adjusted size
   if (p.hand.length !== handSize(G.variant) + 1 - 3 * p.melds.length) return false;
-  return isWinningHand(p.hand, G.variant, p.melds);
+  if (!isWinningHand(p.hand, G.variant, p.melds)) return false;
+  return meetsWinMinimum(G, seat, null, true);
+}
+
+// What a win would be worth if it were declared right now — scored, but not
+// committed. For a ron the winning tile isn't in the hand yet, so it is lent to
+// the hand for the duration of the scoring and taken straight back out. None of
+// the scorers mutate G, so this is safe to ask speculatively.
+function wouldScore(G, seat, loserSeat, isTsumo) {
+  const p = playerBySeat(G, seat);
+  const lent = isTsumo ? null : G.lastDiscard;
+  if (lent) p.hand.push(lent);
+  try {
+    return scoreHand(G, seat, loserSeat, isTsumo);
+  } finally {
+    if (lent) p.hand.pop();
+  }
+}
+
+// A hand shaped like a win isn't necessarily one you're allowed to declare.
+// Hong Kong has a three-faan minimum and Riichi needs a yaku — without this a
+// player could stop the hand with something worth nothing, which is exactly what
+// scoring it at 0 points was telling us. Taiwanese has no floor.
+function meetsWinMinimum(G, seat, loserSeat, isTsumo) {
+  if (G.variant === 'tw') return true;
+  const s = wouldScore(G, seat, loserSeat, isTsumo);
+  if (G.variant === 'hk') return (s.total || 0) >= HK_MIN_FAAN;
+  // Riichi: dora are a bonus on top of a yaku, never a yaku by themselves
+  return (s.yaku || []).some((y) => !/^Dora/.test(y.name));
 }
 
 function canRiichi(G, seat) {
@@ -1239,6 +1268,8 @@ function scoreHK(G, winnerSeat, loserSeat, isTsumo) {
 // triplets still sitting concealed — survives only as long as you don't discard
 // out of it, so none of it belongs in a floor. HK needs three faan to win at
 // all, which is what makes the floor worth showing.
+export const HK_MIN_FAAN = 3;
+
 export function hkLockedFaan(G, seat) {
   if (G.variant !== 'hk') return null;
   const p = playerBySeat(G, seat);
@@ -1259,11 +1290,11 @@ export function hkLockedFaan(G, seat) {
     }
   }
   const total = parts.reduce((a, f) => a + f.val, 0);
-  return { total, parts, minToWin: 3 };
+  return { total, parts, minToWin: HK_MIN_FAAN };
 }
 
 function hkFaanToPoints(faan) {
-  if (faan < 3) return 0; // minimum 3 faan
+  if (faan < HK_MIN_FAAN) return 0; // below the minimum — not a declarable win
   if (faan <= 3) return 8;
   if (faan === 4) return 16;
   if (faan === 5) return 32;
