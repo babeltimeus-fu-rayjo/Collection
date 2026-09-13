@@ -1818,7 +1818,7 @@ const GLOSSARY = {
     tiles: [T_('dragon', 'R'), T_('dragon', 'R'), T_('dragon', 'R')] },
   dragonpung: { title: 'Dragon pung · 1 faan',
     body: 'Three of any one dragon — Haku, Hatsu or Chun. Already melded, so it is banked.',
-    links: { dragon: 'dragons', melded: 'meld' },
+    links: { Haku: 'dragons', Hatsu: 'dragons', Chun: 'dragons', melded: 'meld' },
     tiles: [T_('dragon', 'W'), T_('dragon', 'G'), T_('dragon', 'R')] },
   seatwind: { title: 'Seat wind · 1 faan', body: 'Three of the wind matching your own seat. Banked once melded.' },
   roundwind: { title: 'Round wind · 1 faan', body: 'Three of the wind the round is named for. It stacks with seat wind when they are the same tile.' },
@@ -1861,7 +1861,7 @@ const GLOSSARY = {
     tiles: [T_('s', 1), T_('s', 2), T_('s', 3), T_('s', 5), T_('s', 5), T_('s', 7), T_('s', 8), T_('s', 9)] },
   yakuhai: { title: 'Yakuhai · 1 han each',
     body: 'A triplet of any dragon — Haku, Hatsu or Chun — or of your seat wind, or of the round wind. It stacks: a triplet that is both your seat wind and the round wind is two han.',
-    links: { triplet: 'pung', dragon: 'dragons', 'seat wind': 'seatwind', 'round wind': 'roundwind', han: 'han' },
+    links: { triplet: 'pung', Haku: 'dragons', Hatsu: 'dragons', Chun: 'dragons', 'seat wind': 'seatwind', 'round wind': 'roundwind', han: 'han' },
     tiles: [T_('dragon', 'W'), T_('dragon', 'W'), T_('dragon', 'W'), T_('dragon', 'G'), T_('dragon', 'G'), T_('dragon', 'G'), T_('dragon', 'R'), T_('dragon', 'R'), T_('dragon', 'R')] },
   chiitoitsu: { title: 'Chiitoitsu \u00b7 2 han',
     body: 'Seven different pairs instead of four sets and a pair. Concealed only.',
@@ -1912,13 +1912,16 @@ const GLOSSARY = {
       { label: '', wraps: true, tiles: [T_('dragon', 'W'), T_('dragon', 'G'), T_('dragon', 'R'), T_('dragon', 'W')] },
     ] },
   man: { title: 'Man — the character suit',
-    body: 'Numbered 1 to 9, each marked with 萬. Called characters in English. Four copies of every tile, as in all three suits.',
+    body: 'Numbered 1 to 9, each marked with 萬. Called characters in English. Four copies of every tile, as in Pin and Sou.',
+    links: { Pin: 'pin', Sou: 'sou' },
     tiles: [T_('m', 1), T_('m', 5), T_('m', 9)] },
   pin: { title: 'Pin — the circle suit',
-    body: 'Numbered 1 to 9, drawn as rings of dots. Called circles or dots in English.',
+    body: 'Numbered 1 to 9, drawn as rings of dots. Called circles or dots in English. The other two suits are Man and Sou.',
+    links: { Man: 'man', Sou: 'sou' },
     tiles: [T_('p', 1), T_('p', 5), T_('p', 9)] },
   sou: { title: 'Sou — the bamboo suit',
-    body: 'Numbered 1 to 9, drawn as bamboo stalks. Called bamboo or sticks in English.',
+    body: 'Numbered 1 to 9, drawn as bamboo stalks. Called bamboo or sticks in English. The other two suits are Man and Pin.',
+    links: { Man: 'man', Pin: 'pin' },
     tiles: [T_('s', 1), T_('s', 5), T_('s', 9)] },
   uradora: { title: 'Ura-dora',
     body: 'A second set of dora indicators, hidden under the first and revealed only if you win after declaring riichi. Pure luck, and often the difference between a modest hand and a big one.' },
@@ -1963,7 +1966,7 @@ const GLOSSARY = {
     tiles: [T_('m', 1), T_('m', 9), T_('p', 1), T_('s', 9)] },
   honours: { title: 'Honours',
     body: 'The four winds and the three dragons — Haku, Hatsu and Chun. They never form runs, so they are only useful in pairs and triplets, and the valuable ones pay a han each.',
-    links: { winds: 'roundwind', dragons: 'dragons', runs: 'run', han: 'han' },
+    links: { winds: 'roundwind', Haku: 'dragons', Hatsu: 'dragons', Chun: 'dragons', runs: 'run', han: 'han' },
     tiles: [T_('wind', 'E'), T_('wind', 'S'), T_('dragon', 'R'), T_('dragon', 'G'), T_('dragon', 'W')] },
   yakuman: { title: 'Yakuman',
     body: 'A limit hand — the maximum payout, worth more than any pile of han. Kokushi musou is the one this game implements.' },
@@ -2156,6 +2159,25 @@ window.addEventListener('scroll', hideTip, { passive: true });
 // the static panels carry their terms in the markup
 wireTerms(document);
 
+const SUIT_TERM = { Man: 'man', Pin: 'pin', Sou: 'sou' };
+
+// "5 Pin" names a suit and "Chun" names a dragon — both are terms in their own
+// right, so a tile name in a needs list opens its own note like anything else.
+function tileNameEl(name, depth = 0) {
+  const wrap = el('span', '');
+  const suit = name.match(/^(.*\s)(Man|Pin|Sou)$/);
+  if (suit) {
+    wrap.append(document.createTextNode(suit[1]));
+    wrap.append(term(SUIT_TERM[suit[2]], suit[2], depth));
+    return wrap;
+  }
+  if (SUIT_TERM[name]) { wrap.append(term(SUIT_TERM[name], name, depth)); return wrap; }
+  if (['Haku', 'Hatsu', 'Chun'].includes(name)) { wrap.append(term('dragons', name, depth)); return wrap; }
+  if (/^(East|South|West|North) Wind$/.test(name)) { wrap.append(term('honours', name, depth)); return wrap; }
+  wrap.textContent = name;
+  return wrap;
+}
+
 // "drop 3 · needs East Wind x3, Red Dragon x1" — the discards AND the draws,
 // because a distance on its own never says what you are waiting for, and three
 // of a tile with three left is not the same work as three of a fresh one
@@ -2179,8 +2201,14 @@ function routeNeedEl(r, cap = 0) {
   if (r.wants.length) {
     const show = cap > 0 ? r.wants.slice(0, cap) : r.wants;
     const rest = r.wants.length - show.length;
-    const list = show.map((w) => `${w.name}\u00d7${w.count}${w.left <= w.count ? ` (${w.left} left)` : ''}`).join(', ');
-    wrap.append(term('needs', `needs ${list}${rest > 0 ? ` +${rest} more` : ''}`));
+    wrap.append(term('needs', 'needs'));
+    wrap.append(el('span', '', ' '));
+    show.forEach((w, i) => {
+      if (i) wrap.append(el('span', '', ', '));
+      wrap.append(tileNameEl(w.name));
+      wrap.append(el('span', '', `\u00d7${w.count}${w.left <= w.count ? ` (${w.left} left)` : ''}`));
+    });
+    if (rest > 0) wrap.append(el('span', '', ` +${rest} more`));
   }
   if (!r.away && !r.wants.length) wrap.append(el('span', 'ready', 'ready'));
   return wrap;

@@ -247,10 +247,7 @@ function dealHand(G) {
   // dora (JP only): flip first indicator
   G.dora = [];
   G.uraDora = [];
-  if (G.variant === 'jp') {
-    G.dora.push(G.deadWall[4]);
-    G.uraDora.push(G.deadWall[5]);
-  }
+  if (G.variant === 'jp') revealDora(G, 'Opening');
 
   // deal hands
   const hs = handSize(G.variant);
@@ -616,11 +613,7 @@ function doKan(G, p, move) {
       p.melds.push({ type: 'kan', tiles, open: false });
       addLog(G, `${p.name} declares a closed kan of ${tileName(tiles[0])}.`);
       say(G, p.seat, 'Kan!', 'claim');
-      // JP: new dora indicator
-      if (G.variant === 'jp' && G.dora.length < 5) {
-        G.dora.push(G.deadWall[4 + (G.dora.length) * 2]);
-        G.uraDora.push(G.deadWall[5 + (G.uraDora.length) * 2]);
-      }
+      revealDora(G, `${p.name}'s kan turns up a new`);
       // draw replacement from dead wall
       const rep = drawTileFor(G, p, true);
       if (rep) G.lastDraw = rep;
@@ -639,10 +632,7 @@ function doKan(G, p, move) {
       meld.tiles.push(tile);
       addLog(G, `${p.name} upgrades a pon to kan with ${tileName(tile)}.`);
       say(G, p.seat, 'Kan!', 'claim');
-      if (G.variant === 'jp' && G.dora.length < 5) {
-        G.dora.push(G.deadWall[4 + (G.dora.length) * 2]);
-        G.uraDora.push(G.deadWall[5 + (G.uraDora.length) * 2]);
-      }
+      revealDora(G, `${p.name}'s kan turns up a new`);
       const rep = drawTileFor(G, p, true);
       if (rep) G.lastDraw = rep;
       G.kanThisTurn = true;
@@ -776,10 +766,7 @@ function resolveClaims(G) {
     G.lastDiscard = null; // taken off the table into the meld
     addLog(G, `${p.name} calls Kan on ${tileName(tile)}!`);
     say(G, p.seat, 'Kan!', 'claim');
-    if (G.variant === 'jp' && G.dora.length < 5) {
-      G.dora.push(G.deadWall[4 + (G.dora.length) * 2]);
-      G.uraDora.push(G.deadWall[5 + (G.uraDora.length) * 2]);
-    }
+    revealDora(G, `${p.name}'s kan turns up a new`);
     const rep = drawTileFor(G, p, true);
     if (rep) G.lastDraw = rep;
     G.turn = p.seat;
@@ -1395,6 +1382,20 @@ function scoreJP(G, winnerSeat, loserSeat, isTsumo) {
   const fu = calculateFu(G, hand, melds, isTsumo, isConcealed, winnerSeat);
   const points = jpHanFuToPoints(totalHan, fu, winnerSeat === G.dealer);
   return { yaku, han: totalHan, fu, points, summary: `${totalHan} han ${fu} fu (${points} pts)` };
+}
+
+// Turn up an indicator and put it in the log with what it actually points at —
+// an indicator that appears silently in the middle of the table explains
+// nothing, and the tile it names is never the tile it is.
+function revealDora(G, why) {
+  if (G.variant !== 'jp' || G.dora.length >= 5) return;
+  const ind = G.deadWall[4 + G.dora.length * 2];
+  const ura = G.deadWall[5 + G.uraDora.length * 2];
+  if (!ind) return;
+  G.dora.push(ind);
+  if (ura) G.uraDora.push(ura);
+  const dk = doraKey(ind);
+  addLog(G, `${why} dora indicator ${tileName(ind)} — so ${tileName({ key: dk, ...keyParts(dk) })} is dora.`);
 }
 
 function doraKey(indicator) {
