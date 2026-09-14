@@ -230,3 +230,72 @@ export const MILITARY_LOSS = -1;
 
 // Science: three of a kind squared, plus seven for every complete set.
 export const SCIENCE_SET_BONUS = 7;
+
+// ---------------------------------------------------------------- Cities
+//
+// ⚠ COSTS ARE NOT YET VERIFIED. Everything else here — the names, the Ages, the
+// points, the shields and the effects — comes from the Cities rulebook. The
+// resource costs came from a third-party implementation and are visibly filler:
+// every Age II card costing papyrus+textile and every Age III card costing
+// glass+papyrus+textile is not how the real cards are printed. Five cards
+// (Villa, Smugglers' Wharf, Hidden Cache, Tribute, Treasury) are not described
+// individually in the rulebook either, so their effects are a guess as well.
+// All of it is one table to correct against the physical cards.
+//
+// Structure IS right: 27 black cards, nine per Age, and a game shuffles as many
+// into each Age deck as there are players (seven of them at an eight-player
+// table). New effect keys, all handled in game.js:
+//   mask           copy a science symbol from a neighbour, scored at the end
+//   loss           every OTHER player pays this many coins, or takes the debt
+//   perLoss        every other player pays per something they own
+//   diplo          take a diplomacy token: sit out one conflict
+//   nbCoins        each of your neighbours also takes this from the bank
+//   rebate         one coin off the first resource bought from that side
+//   produceMissing produces any resource your city does not already make
+//   freeStages     wonder stages stop costing resources
+
+export const CITY_CARDS = [
+  // ---- Age I
+  { n: 'Pigeon Loft',          c: 'black', age: 1, cost: 'CG',  mask: 1 },
+  { n: 'Militia',              c: 'black', age: 1, cost: 'CT',  shield: 2 },
+  { n: 'Hideout',              c: 'black', age: 1, cost: 'CT',  vp: 2, loss: 1 },
+  { n: 'Gambling Den',         c: 'black', age: 1, cost: '',    coins: 6, nbCoins: 1 },
+  { n: 'Clandestine Dock West', c: 'black', age: 1, cost: 'T',  rebate: { with: 'left' } },
+  { n: 'Clandestine Dock East', c: 'black', age: 1, cost: 'T',  rebate: { with: 'right' } },
+  { n: 'Secret Warehouse',     c: 'black', age: 1, cost: 'G',   produceMissing: true },
+  { n: 'Black Market',         c: 'black', age: 1, cost: 'P',   produceMissing: true },
+  { n: 'Architect Cabinet',    c: 'black', age: 1, cost: 'T',   freeStages: true },
+
+  // ---- Age II
+  { n: 'Spy Ring',             c: 'black', age: 2, cost: 'GT',  mask: 2 },
+  { n: 'Mercenaries',          c: 'black', age: 2, cost: 'PT',  shield: 3 },
+  { n: 'Lair',                 c: 'black', age: 2, cost: 'PT',  vp: 3, loss: 2 },
+  { n: 'Gambling House',       c: 'black', age: 2, cost: 'PT',  coins: 9, nbCoins: 2 },
+  { n: 'Residence',            c: 'black', age: 2, cost: 'PT',  vp: 3, diplo: 1 },
+  { n: 'Sepulcher',            c: 'black', age: 2, cost: 'PT',  vp: 2, perLoss: { of: 'victory', coins: 1 } },
+  { n: 'Villa',                c: 'black', age: 2, cost: 'PT',  vp: 4, diplo: 1 },
+  { n: "Smugglers' Wharf",     c: 'black', age: 2, cost: 'GT',  rebate: { with: 'both' } },
+  { n: 'Hidden Cache',         c: 'black', age: 2, cost: 'GT',  produceMissing: true },
+
+  // ---- Age III
+  { n: 'Torture Chamber',      c: 'black', age: 3, cost: 'GPT', mask: 3 },
+  { n: 'Contingent',           c: 'black', age: 3, cost: 'GPT', shield: 5 },
+  { n: 'Brotherhood',          c: 'black', age: 3, cost: 'GPT', vp: 4, loss: 3 },
+  { n: 'Consulate',            c: 'black', age: 3, cost: 'GPT', vp: 4, diplo: 1 },
+  { n: 'Embassy',              c: 'black', age: 3, cost: 'GPT', vp: 5, diplo: 1 },
+  { n: 'Cenotaph',             c: 'black', age: 3, cost: 'GPT', vp: 3, perLoss: { of: 'victory', coins: 1 } },
+  { n: "Builders' Union",      c: 'black', age: 3, cost: 'GPT', vp: 4, perLoss: { of: 'stage', coins: 1 } },
+  { n: 'Tribute',              c: 'black', age: 3, cost: 'GPT', vp: 5, loss: 2 },
+  { n: 'Treasury',             c: 'black', age: 3, cost: 'GPT', vp: 4, coins: 9 },
+];
+
+// The three guilds Cities adds. They join the same pile, and the number drawn
+// is unchanged — still player count plus two.
+export const CITY_GUILDS = [
+  { n: 'Counterfeiters Guild', c: 'purple', cost: 'GPT', vp: 5, loss: 3 },
+  { n: 'Guild Of Shadows',     c: 'purple', cost: 'GPT', per: { vp: 1, of: 'black', from: 'neighbours' } },
+  { n: 'Mourners Guild',       c: 'purple', cost: 'GPT', per: { vp: 1, of: 'victory', from: 'neighbours' } },
+];
+
+// Debt is measured in victory points, one per coin you could not pay.
+export const DEBT_VP = -1;

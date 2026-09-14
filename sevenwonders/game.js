@@ -16,7 +16,7 @@
 
 import {
   RAW, MANUFACTURED, RESOURCES, RES_NAME, COLOUR_NAME,
-  BASE_AGES, GUILDS, WONDERS,
+  BASE_AGES, GUILDS, WONDERS, CITY_CARDS, CITY_GUILDS, DEBT_VP,
   START_COINS, START_COINS_LEADERS, CARDS_PER_AGE,
   MILITARY_WIN, MILITARY_LOSS, SCIENCE_SET_BONUS,
 } from './cards.js';
@@ -38,8 +38,7 @@ export function canStart(n, opts = {}) {
   const { min, max } = seatLimit(opts);
   if (n < min) return `Needs at least ${min} players.`;
   if (n > max) return n === 8 ? 'Eight players needs the Cities expansion.' : `At most ${max} players.`;
-  if (opts.teams && n % 2 !== 0) return 'Team play needs an even number of players.';
-  if (opts.teams && n < 4) return 'Team play needs at least four players.';
+  if (opts.teams && (n % 2 !== 0 || n < 4)) return 'Team play is for 4, 6 or 8 players, in pairs.';
   return null;
 }
 
@@ -76,26 +75,49 @@ function say(G, seat, text) {
 // Seat order is a circle, and almost every rule in the game is phrased in terms
 // of the two people you can see. Age II passes the other way, which is the only
 // thing that ever changes about the table.
+// Your partner sits beside you — which side depends on whether you are the odd
+// or even half of the pair.
+export function partnerOf(G, seat) {
+  if (!G.opts.teams) return null;
+  const mine = playerBySeat(G, seat);
+  const other = G.players.find((q) => q.seat !== seat && q.team === mine.team);
+  return other ? other.seat : null;
+}
+
 export function leftOf(G, seat) { return (seat + G.nPlayers - 1) % G.nPlayers; }
 export function rightOf(G, seat) { return (seat + 1) % G.nPlayers; }
 export function passDir(age) { return age === 2 ? 'right' : 'left'; }
 
 // ---------------------------------------------------------------- the deck
 
+// Eight players is not "the seven-player game plus one". The rulebook says to
+// prepare a SEVEN-player game — every base card, nine guilds — and add seven
+// black cards to each Age, which comes to 56 and deals seven each. So the card
+// thresholds and the guild count are driven by this, capped at seven, while the
+// number of people the cards are dealt to is not.
+const deckScale = (nPlayers) => Math.min(nPlayers, 7);
+
 // Build one Age. A card row lists the player counts that each add a copy, so a
 // 5-player game takes every copy whose threshold it has reached.
 function buildAge(age, nPlayers, opts, rnd) {
-  const rows = BASE_AGES[age - 1];
+  const scale = deckScale(nPlayers);
   const out = [];
-  for (const row of rows) {
+  for (const row of BASE_AGES[age - 1]) {
     for (const threshold of row.at) {
-      if (threshold <= nPlayers) out.push({ ...row, age });
+      if (threshold <= scale) out.push({ ...row, age });
     }
   }
   if (age === 3) {
-    // guilds: player count + 2, drawn at random from the ten
-    const guilds = shuffle(GUILDS.slice(), rnd).slice(0, nPlayers + 2);
-    for (const g of guilds) out.push({ ...g, age: 3 });
+    // guilds: player count + 2, drawn at random — Cities adds three to the pile
+    // but not to the number drawn
+    const pool = opts.cities ? GUILDS.concat(CITY_GUILDS) : GUILDS;
+    for (const g of shuffle(pool.slice(), rnd).slice(0, scale + 2)) out.push({ ...g, age: 3 });
+  }
+  if (opts.cities) {
+    // as many black cards as there are players, drawn blind; the rest of the
+    // black cards sit out the whole game
+    const black = CITY_CARDS.filter((c) => c.age === age);
+    for (const b of shuffle(black.slice(), rnd).slice(0, scale)) out.push({ ...b });
   }
   return out.map((c, i) => ({ ...c, id: `a${age}-${i}` }));
 }
@@ -125,6 +147,21 @@ function generators(p, { sellableOnly = false } = {}) {
     add(c.give, c.c === 'brown' || c.c === 'grey', c.n);
   }
   for (const s of p.stagesBuilt) if (s.give) add(s.give, false, 'wonder stage');
+
+  // Cities: a warehouse makes whatever your city cannot. "Cannot" means your
+  // brown and grey cards and the board itself — the ones above — so this has to
+  // be worked out after them, and it is yours alone to use.
+  const missingCount = p.built.filter((c) => c.produceMissing).length;
+  if (missingCount) {
+    const own = new Set();
+    if (p.wonderRes) own.add(p.wonderRes);
+    for (const c of p.built) {
+      if (!c.give || (c.c !== 'brown' && c.c !== 'grey')) continue;
+      for (const o of c.give.split('/')) for (const ch of o) own.add(ch);
+    }
+    const missing = RESOURCES.split('').filter((r) => !own.has(r));
+    if (missing.length) for (let i = 0; i < missingCount; i++) gens.push({ opts: missing, n: 1, sellable: false, why: 'warehouse' });
+  }
   return sellableOnly ? gens.filter((g) => g.sellable) : gens;
 }
 
@@ -180,7 +217,20 @@ export function payFor(G, seat, cost, extraGens = []) {
       supplies.push({ opts: g.opts, cap: g.n, from: side, price: (r) => tradePrice(me, side, r) });
     }
   }
-  return minCostAssign(supplies, need, totalNeed);
+  const bill = minCostAssign(supplies, need, totalNeed);
+  if (!bill) return null;
+
+  // Cities: a clandestine dock takes a coin off the FIRST resource bought from
+  // its side each turn. Applied to the finished bill rather than inside the
+  // flow — exact whenever the cheapest plan already buys from that side, which
+  // is the case that matters, and never makes a card look cheaper than it is.
+  for (const side of ['left', 'right']) {
+    const has = me.built.some((c) => c.rebate && (c.rebate.with === 'both' || c.rebate.with === side));
+    if (!has || !bill[side]) continue;
+    bill[side] -= 1;
+    bill.coins -= 1;
+  }
+  return bill;
 }
 
 // Successive shortest paths. The graph is tiny — a few dozen supplies against
@@ -275,7 +325,7 @@ export function newMatch(roster, opts = {}) {
         ? o.sideMode : (Math.random() < 0.5 ? 'A' : 'B');
       return {
         seat: r.seat, name: r.name, bot: !!r.bot, botFor: false, connected: r.connected !== false,
-        team: o.teams ? r.seat % 2 : null,
+        team: o.teams ? Math.floor(r.seat / 2) : null,
         wonder: board.n, side, wonderRes: board.res,
         stages: board.sides[side].map((s) => ({ ...s })),
         stagesBuilt: [],
@@ -284,6 +334,7 @@ export function newMatch(roster, opts = {}) {
         shields: 0,
         tokens: [],            // military results, one entry per resolution
         debt: 0,
+        diplo: 0,          // Cities: unspent diplomacy tokens
         freeAgeUsed: {},       // Olympia: the one free build per age
         hand: [],
       };
@@ -297,12 +348,6 @@ export function newMatch(roster, opts = {}) {
     chatter: [], chatSeq: 0,
     fx: null, fxSeq: 0,
   };
-  // Teams sit alternately so partners are never neighbours — the whole point is
-  // that you help your partner by starving the people between you.
-  if (o.teams) {
-    const teamCount = 2;
-    G.players.forEach((p, i) => { p.team = i % teamCount; });
-  }
   dealAge(G);
   addLog(G, `Age I begins. Cards pass to the left.`);
   return G;
@@ -310,10 +355,11 @@ export function newMatch(roster, opts = {}) {
 
 function dealAge(G) {
   const deck = shuffle(buildAge(G.age, G.nPlayers, G.opts));
-  G.hands = {};
-  for (const p of G.players) {
-    p.hand = deck.splice(0, CARDS_PER_AGE);
-  }
+  // The deck is built to divide exactly: 7 each in the base game, 8 with Cities
+  // (which is why Cities plays seven cards an Age rather than six), and 7 again
+  // at an eight-player table, which uses the seven-player deck.
+  G.handSize = Math.floor(deck.length / G.nPlayers);
+  for (const p of G.players) p.hand = deck.splice(0, G.handSize);
   G.turn = 1;
   G.phase = 'play';
   G.picks = {};
@@ -342,7 +388,8 @@ export function optionsFor(G, seat) {
   if (!p) return [];
   const unlocked = chainUnlocks(p);
   const stage = nextStage(p);
-  const stagePay = stage ? payFor(G, seat, stage.cost) : null;
+  const freeStages = p.built.some((c) => c.freeStages);   // Cities: Architect Cabinet
+  const stagePay = stage ? (freeStages ? { coins: 0, left: 0, right: 0 } : payFor(G, seat, stage.cost)) : null;
 
   return p.hand.map((card) => {
     const dup = alreadyBuilt(p, card.n);
@@ -442,12 +489,31 @@ function resolveTurn(G) {
     }
   }
 
+  // Cities: losses land after everyone has played and paid for their trades, so
+  // the money you just earned this turn is money you can be made to lose.
+  for (const pick of picks) {
+    if (pick.how !== 'play') continue;
+    const p = playerBySeat(G, pick.seat);
+    const card = (p.built[p.built.length - 1] || {});
+    if (!card.loss && !card.perLoss) continue;
+    for (const q of G.players) {
+      if (q.seat === p.seat) continue;         // never the player who played it
+      const owed = card.loss ? card.loss : countOwned(q, card.perLoss.of) * card.perLoss.coins;
+      if (owed <= 0) continue;
+      const paid = Math.min(q.coins, owed);
+      q.coins -= paid;
+      const short = owed - paid;
+      if (short > 0) q.debt += short;          // one debt token per coin unpaid
+      if (owed) addLog(G, `${q.name} loses ${owed} to ${card.n}${short ? ` (${short} as debt)` : ''}.`);
+    }
+  }
+
   G.revealed = shown;
   G.picks = {};
   bumpFx(G, { kind: 'reveal', plays: shown });
 
   // shields and immediate coins are settled; now pass the hands on
-  if (G.turn >= CARDS_PER_AGE - 1) return endAge(G);
+  if (G.turn >= G.handSize - 1) return endAge(G);
   passHands(G);
   G.turn += 1;
 }
@@ -455,6 +521,14 @@ function resolveTurn(G) {
 function applyImmediate(G, p, thing) {
   if (thing.shield) p.shields += thing.shield;
   if (thing.coins) p.coins += thing.coins;
+  if (thing.diplo) p.diplo += thing.diplo;
+  if (thing.nbCoins) {
+    // a gambling den pays the house AND the people either side of it
+    for (const s of [leftOf(G, p.seat), rightOf(G, p.seat)]) {
+      const q = playerBySeat(G, s);
+      if (q && q.seat !== p.seat) q.coins += thing.nbCoins;
+    }
+  }
   if (thing.per && thing.per.coins) {
     const n = countFor(G, p.seat, thing.per);
     p.coins += n * thing.per.coins;
@@ -474,6 +548,9 @@ function passHands(G) {
 
 // ---------------------------------------------------------------- end of an age
 
+// exported so a test can resolve a conflict without playing six turns first
+export function forceEndAge(G) { return endAge(G); }
+
 function endAge(G) {
   // the last card of the age goes in the bin unread
   for (const p of G.players) {
@@ -482,13 +559,52 @@ function endAge(G) {
   }
 
   const win = MILITARY_WIN[G.age];
-  const results = [];
-  for (const p of G.players) {
-    for (const side of ['left', 'right']) {
-      const other = playerBySeat(G, side === 'left' ? leftOf(G, p.seat) : rightOf(G, p.seat));
-      if (!other || other.seat === p.seat) continue;
-      if (p.shields > other.shields) { p.tokens.push(win); results.push(`${p.name} beats ${other.name}`); }
-      else if (p.shields < other.shields) p.tokens.push(MILITARY_LOSS);
+
+  // Diplomacy removes you from the table for one conflict: you take nothing,
+  // and the two cities either side of you are treated as neighbours and fight
+  // each other instead. So the conflict is fought around the circle of players
+  // who are actually PRESENT, which is the whole rule in one line. A token must
+  // be spent whenever you hold one, even when you would have won.
+  const fight = (a, b, tokens) => {
+    if (a.shields > b.shields) for (let i = 0; i < tokens; i++) a.tokens.push(win);
+    else if (a.shields < b.shields) for (let i = 0; i < tokens; i++) a.tokens.push(MILITARY_LOSS);
+  };
+  const spend = (p) => { if (p.diplo > 0) { p.diplo -= 1; return true; } return false; };
+
+  if (G.opts.teams) {
+    // In team play a diplomat cannot simply leave — the seating is what pairs
+    // everyone up, and removing a body would hand their partner two opponents.
+    // So they stay and the single border they have pays one token instead of
+    // two, for both sides of it.
+    const quiet = new Set();
+    for (const p of G.players) if (spend(p)) { quiet.add(p.seat); addLog(G, `${p.name} opens negotiations.`); }
+    for (const p of G.players) {
+      const b = playerBySeat(G, rightOf(G, p.seat));
+      if (!b || b.seat === p.seat || b.team === p.team) continue;   // partners never fight
+      const tokens = (quiet.has(p.seat) || quiet.has(b.seat)) ? 1 : 2;
+      fight(p, b, tokens);
+      fight(b, p, tokens);
+    }
+  } else {
+    // Otherwise a diplomat is simply absent: they take nothing, and the two
+    // cities either side of them are treated as neighbours and fight each
+    // other. So the conflict runs around the circle of players still PRESENT,
+    // which is the whole rule in one line.
+    const present = [];
+    for (const p of G.players) {
+      if (spend(p)) addLog(G, `${p.name} sits out the conflict.`);
+      else present.push(p);
+    }
+    if (present.length === 2) {
+      // "they only face each other once and each take a single token"
+      fight(present[0], present[1], 1);
+      fight(present[1], present[0], 1);
+    } else if (present.length > 2) {
+      for (let i = 0; i < present.length; i++) {
+        const a = present[i], b = present[(i + 1) % present.length];
+        fight(a, b, 1);
+        fight(b, a, 1);
+      }
     }
   }
   addLog(G, `Age ${'I'.repeat(G.age)} conflicts resolved.`);
@@ -504,6 +620,14 @@ function bumpFx(G, fx) { G.fx = fx; G.fxSeq += 1; }
 
 // ---------------------------------------------------------------- counting
 
+// What a Cities loss card charges per: conflict victories, or wonder stages.
+function countOwned(q, of) {
+  if (of === 'victory') return q.tokens.filter((t) => t > 0).length;
+  if (of === 'stage') return q.stagesBuilt.length;
+  if (of === 'black') return q.built.filter((c) => c.c === 'black').length;
+  return 0;
+}
+
 // Several cards score "one point per X in these cities". This is that X.
 function countFor(G, seat, per) {
   const seats = [];
@@ -515,6 +639,7 @@ function countFor(G, seat, per) {
     if (!q) continue;
     if (per.of === 'stage') n += q.stagesBuilt.length;
     else if (per.of === 'defeat') n += q.tokens.filter((t) => t < 0).length;
+    else if (per.of === 'victory') n += q.tokens.filter((t) => t > 0).length;
     else {
       const colours = per.of.split('+');
       n += q.built.filter((c) => colours.includes(c.c)).length;
@@ -526,18 +651,29 @@ function countFor(G, seat, per) {
 // Science pays for both breadth and depth: every complete set of three is worth
 // seven, and each symbol is worth the square of how many you have. A wildcard
 // is worth whatever placing it earns, so try all three and keep the best.
-function bestScience(counts, wild) {
-  if (wild <= 0) {
+const ALL_SYMBOLS = [0, 1, 2];
+
+// Each entry of `choices` is one symbol you get to place, listed as the symbols
+// it is allowed to be. A guild wildcard may be anything; a Cities mask may only
+// copy a symbol a neighbour actually has, which is sometimes nothing at all.
+function bestScienceOf(counts, choices) {
+  if (!choices.length) {
     const [a, b, c] = counts;
     return a * a + b * b + c * c + SCIENCE_SET_BONUS * Math.min(a, b, c);
   }
+  const [first, ...rest] = choices;
+  if (!first.length) return bestScienceOf(counts, rest);
   let best = 0;
-  for (let i = 0; i < 3; i++) {
-    const next = counts.slice();
-    next[i] += 1;
-    best = Math.max(best, bestScience(next, wild - 1));
+  for (const i of first) {
+    counts[i] += 1;
+    best = Math.max(best, bestScienceOf(counts, rest));
+    counts[i] -= 1;
   }
   return best;
+}
+
+function bestScience(counts, wild) {
+  return bestScienceOf(counts.slice(), new Array(Math.max(0, wild)).fill(ALL_SYMBOLS));
 }
 
 const SCI_INDEX = { compass: 0, gear: 1, tablet: 2 };
@@ -550,6 +686,20 @@ export function scoreFor(G, seat) {
   for (const c of p.built) sci(c.sci);
   for (const s of p.stagesBuilt) sci(s.sci);
 
+  // Cities: a mask copies a symbol off a green card in one of the two cities
+  // beside you — so it is a wildcard, but only over what your neighbours
+  // actually own, and worth nothing if neither of them went for science.
+  const masks = p.built.reduce((a, c) => a + (c.mask || 0), 0);
+  const nearby = new Set();
+  if (masks) {
+    for (const nb of [leftOf(G, seat), rightOf(G, seat)]) {
+      const q = playerBySeat(G, nb);
+      if (!q || q.seat === seat) continue;
+      for (const c of q.built) if (c.c === 'green' && c.sci && c.sci !== 'any') nearby.add(SCI_INDEX[c.sci]);
+    }
+  }
+  const choices = new Array(wild).fill(ALL_SYMBOLS).concat(new Array(masks).fill([...nearby]));
+
   const perVp = (list) => list.reduce((a, c) => a + (c.per && c.per.vp ? countFor(G, seat, c.per) * c.per.vp : 0), 0);
 
   const parts = {
@@ -559,7 +709,7 @@ export function scoreFor(G, seat) {
     civilian: p.built.filter((c) => c.c === 'blue').reduce((a, c) => a + (c.vp || 0), 0),
     commercial: perVp(p.built.filter((c) => c.c === 'yellow')),
     guild: perVp(p.built.filter((c) => c.c === 'purple')),
-    science: bestScience(counts, wild),
+    science: bestScienceOf(counts.slice(), choices),
     debt: -p.debt,
   };
   parts.total = Object.values(parts).reduce((a, b) => a + b, 0);
@@ -604,6 +754,7 @@ export function viewFor(G, seat, code) {
     phase: G.phase,
     age: G.age,
     turn: G.turn,
+    turnsPerAge: (G.handSize || CARDS_PER_AGE) - 1,
     mySeat: seat,
     nPlayers: G.nPlayers,
     passDir: passDir(G.age),
@@ -616,11 +767,11 @@ export function viewFor(G, seat, code) {
       wonder: p.wonder, side: p.side, wonderRes: p.wonderRes,
       stages: p.stages, stagesBuilt: p.stagesBuilt.length,
       nextStageCost: nextStage(p) ? nextStage(p).cost : null,
-      coins: p.coins, shields: p.shields, tokens: p.tokens, debt: p.debt,
+      coins: p.coins, shields: p.shields, tokens: p.tokens, debt: p.debt, diplo: p.diplo,
       built: p.built, handCount: p.hand.length,
       picked: !!G.picks[p.seat],
     })),
-    left: leftOf(G, seat), right: rightOf(G, seat),
+    left: leftOf(G, seat), right: rightOf(G, seat), partner: partnerOf(G, seat),
     discardCount: G.discard.length,
     revealed: G.revealed,
     result: G.result,
@@ -661,7 +812,8 @@ export function viewFor(G, seat, code) {
 export const BOT = { scienceFaith: 0.3 };
 
 function scienceRoom(G) {
-  const turnsLeft = (3 - G.age) * (CARDS_PER_AGE - 1) + (CARDS_PER_AGE - 1 - G.turn);
+  const perAge = (G.handSize || CARDS_PER_AGE) - 1;
+  const turnsLeft = (3 - G.age) * perAge + (perAge - G.turn);
   return Math.max(0, Math.min(3, Math.round(turnsLeft / 5)));
 }
 

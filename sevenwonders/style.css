@@ -1557,3 +1557,6 @@ a {
 .ae-row .up { color: #6fcf7f; }
 .ae-row .down { color: #e07a6a; }
 @media (max-width: 700px) { .go-row { grid-template-columns: 1fr repeat(8, 34px); font-size: 11px; } }
+.diplo-chip { background: rgba(127,180,216,.25); color: #cfe8f7; border-radius: 9px; padding: 0 6px; }
+.chip.mate { background: rgba(127,192,138,.28); color: #c7ecd0; }
+.stack.black { color: #d9d9e2; }

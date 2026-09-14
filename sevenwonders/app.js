@@ -1160,9 +1160,9 @@ function ensureResignBtn(sess) {
 
 
 const EXPANSIONS = [
-  { key: 'cities', name: 'Cities', blurb: 'Black cards, debt and diplomacy — and the eighth seat, which the base box cannot deal.' },
+  { key: 'cities', name: 'Cities', blurb: 'Black cards, debt and diplomacy. Hands are eight cards, so you play seven an Age instead of six — and it brings the eighth seat, which the base box cannot deal.' },
   { key: 'leaders', name: 'Leaders', blurb: 'Draft four leaders before Age I and hire one at the start of each Age. Everyone starts with 6 coins instead of 3.' },
-  { key: 'teams', name: 'Teams', blurb: 'Partners sit alternately and score together, so you help your team by starving the people between you. Needs an even number of players.' },
+  { key: 'teams', name: 'Teams', blurb: 'Pairs sitting side by side, scoring together. You never fight your partner, so the one border you do have counts double. 4, 6 or 8 players.' },
 ];
 
 function renderLobby(lob, sess) {
@@ -1186,7 +1186,11 @@ function renderLobby(lob, sess) {
       row.dataset.seat = String(p.seat);
       row.append(avatarEl(p.name, p.seat, p.bot));
       row.append(el('span', 'seat-name', p.name));
-      if (opts.teams) row.append(el('span', `chip team t${p.seat % 2}`, `team ${p.seat % 2 + 1}`));
+      // partners sit side by side, so the pairing is seat/2 rather than seat%2
+      if (opts.teams) {
+        const t = Math.floor(p.seat / 2);
+        row.append(el('span', `chip team t${t % 2}`, `team ${t + 1}`));
+      }
       if (p.seat === 0) row.append(el('span', 'chip', 'host'));
       if (p.bot) row.append(el('span', 'chip bot', 'bot'));
       if (p.seat === mySeat) row.append(el('span', 'chip you', 'you'));
@@ -1273,6 +1277,14 @@ function cardGist(c) {
   if (c.sci) bits.push(SCI_GLYPH[c.sci]);
   if (c.coins) bits.push(`${c.coins} coins`);
   if (c.trade) bits.push(`buy ${c.trade.kind === 'raw' ? 'materials' : 'goods'} at 1 (${c.trade.with})`);
+  if (c.mask) bits.push(`${c.mask} mask${c.mask > 1 ? 's' : ''} — copy a neighbour's science`);
+  if (c.loss) bits.push(`everyone else loses ${c.loss}`);
+  if (c.perLoss) bits.push(`everyone else loses ${c.perLoss.coins} per ${c.perLoss.of === 'victory' ? 'victory token' : c.perLoss.of}`);
+  if (c.diplo) bits.push('diplomacy — sit out a conflict');
+  if (c.nbCoins) bits.push(`neighbours take ${c.nbCoins}`);
+  if (c.rebate) bits.push(`1 off the first buy (${c.rebate.with})`);
+  if (c.produceMissing) bits.push('produces what your city cannot');
+  if (c.freeStages) bits.push('wonder stages cost no resources');
   if (c.per) {
     const per = [];
     if (c.per.coins) per.push(`${c.per.coins} coin${c.per.coins > 1 ? 's' : ''}`);
@@ -1322,6 +1334,7 @@ function cityEl(view, p, tag) {
   head.append(avatarEl(p.name, p.seat, p.bot));
   head.append(el('span', 'city-name', p.name));
   if (tag) head.append(el('span', `chip nb ${tag}`, tag));
+  if (view.partner != null && p.seat === view.partner) head.append(el('span', 'chip mate', 'partner'));
   if (view.opts && view.opts.teams) head.append(el('span', `chip team t${p.team}`, `T${p.team + 1}`));
   if (!p.connected && !p.bot) head.append(el('span', 'chip off', 'away'));
   if (p.picked && view.phase === 'play') head.append(el('span', 'chip ready', '✓'));
@@ -1334,6 +1347,7 @@ function cityEl(view, p, tag) {
   const losses = p.tokens.filter((t) => t < 0).length;
   if (wins || losses) stat.append(el('span', 'tok-chip', `${wins ? '+' + wins : ''}${losses ? ' −' + losses : ''}`.trim()));
   if (p.debt) stat.append(el('span', 'debt-chip', `debt ${p.debt}`));
+  if (p.diplo) stat.append(el('span', 'diplo-chip', `☮ ${p.diplo}`));
   box.append(stat);
 
   const w = el('div', 'city-wonder');
@@ -1418,7 +1432,7 @@ function renderGame(view, sess) {
   lastSess = sess;
   $('#room-chip').textContent = view.code;
   $('#age-chip').textContent = `Age ${AGE_ROMAN[view.age]}`;
-  $('#turn-chip').textContent = view.phase === 'over' ? 'finished' : `Turn ${view.turn} of 6`;
+  $('#turn-chip').textContent = view.phase === 'over' ? 'finished' : `Turn ${view.turn} of ${view.turnsPerAge}`;
   $('#pass-chip').textContent = `passing ${view.passDir}`;
 
   // Neighbours first — they are the only two people you can trade with, and the
