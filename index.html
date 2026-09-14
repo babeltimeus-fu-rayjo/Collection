@@ -92,6 +92,14 @@
     .art.skull { background: linear-gradient(150deg, #1b2a47, #0d1526); }
     .art.harmonies { background: linear-gradient(150deg, #1b3a2a, #0c1d14); }
     .art.mahjong { background: linear-gradient(150deg, #0d3320, #061a10); }
+    .art.wonders { background: linear-gradient(150deg, #3a2a12, #1c1208); }
+    .art.wonders .zig { display: flex; align-items: flex-end; gap: 5px; }
+    .art.wonders .zig i { display: block; width: 15px; background: #e0b352; border-radius: 2px 2px 0 0; opacity: .9; }
+    .art.wonders .zig i:nth-child(1) { height: 22px; }
+    .art.wonders .zig i:nth-child(2) { height: 38px; }
+    .art.wonders .zig i:nth-child(3) { height: 56px; background: #f0cd7e; }
+    .art.wonders .zig i:nth-child(4) { height: 38px; }
+    .art.wonders .zig i:nth-child(5) { height: 22px; }
 
     /* mahjong art: a row of standing tiles */
     .mjtiles { display: flex; gap: 4px; }
@@ -344,6 +352,21 @@
   <p class="sub">Games that run entirely in your browser. Share a room code to play with friends peer-to-peer — most games can fill empty seats with bots. No accounts, no downloads, no server.</p>
 
   <main class="shelf">
+    <a class="game" href="./sevenwonders/">
+      <div class="art wonders">
+        <span class="zig"><i></i><i></i><i></i><i></i><i></i></span>
+      </div>
+      <div class="body">
+        <div class="title-row">
+          <span class="name">7 Wonders</span>
+          <span class="players">3–8 players</span>
+        </div>
+        <p class="blurb">Take one card, pass the rest. Build a city, raise a wonder, and keep an eye on the two neighbours you will be buying stone from all game — and fighting at the end of every age.</p>
+        <div class="tags"><span class="tag">drafting</span><span class="tag">bots</span><span class="tag">~30 min</span></div>
+        <span class="play">Play 7 Wonders →</span>
+      </div>
+    </a>
+
     <a class="game" href="./dnup/">
       <div class="art dnup">
         <span class="wordmark"><span class="a">dn</span><span class="b">dn</span></span>
