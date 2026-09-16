@@ -121,10 +121,17 @@ body {
    different questions were sharing one answer. So: yours is a SURFACE (always
    on, below) and active is a RING (gold, on top). Drawn as an outline with a
    negative offset so it costs no layout, which a border would. */
+/* Your quadrant and the strip below it are one region, not two: they already
+   sit on top of each other, so the only things making them read as separate
+   were a 16px gap and two outlines drawing a boundary between them. Close the
+   gap, drop the outlines, and let a single shared fill do the work — two
+   touching shapes in the same material read as one shape. Stretched to fill its
+   grid row so its bottom edge actually reaches the table's, and rounded only on
+   the corners that are on the OUTSIDE of the joined shape. */
 #my-zone {
-  background: rgba(255,255,255,.065);
-  outline: 1px solid rgba(255,255,255,.16);
-  outline-offset: -1px;
+  align-self: stretch;
+  background: rgba(255,255,255,.07);
+  border-radius: 10px 10px 0 0;
 }
 /* Everything below the table is yours — hand, buttons, score line — so it is
    one panel in the same material as your quadrant rather than three loose rows
@@ -134,19 +141,35 @@ body {
 #my-area {
   /* stretched rather than hugging its contents: the screen centres its children,
      so left to itself the panel would be exactly as wide as the hand and would
-     narrow by a tile every time you discarded one */
+     narrow by a tile every time you discarded one. The 4px sides match the
+     table's own padding, so the right edge lines up with the quadrant above. */
   align-self: stretch;
-  margin: 16px 8px 0;
-  border-radius: 14px;
+  margin: 0 4px;
   padding-bottom: 6px;
-  background: rgba(255,255,255,.065);
-  outline: 1px solid rgba(255,255,255,.16);
-  outline-offset: -1px;
+  background: rgba(255,255,255,.07);
+  /* square where it meets the quadrant above, rounded everywhere else */
+  border-radius: 14px 0 14px 14px;
 }
 
-.seat.active-turn, #my-zone.active-turn {
+.seat.active-turn {
   box-shadow: inset 0 0 0 2px rgba(232,213,163,.9), inset 0 0 16px 2px rgba(232,213,163,.35);
   background: rgba(232,213,163,.08);
+}
+/* Your own turn ring is open at the bottom, because that edge is where your
+   quadrant runs into the strip below it — closing it there would draw exactly
+   the boundary the shared fill exists to remove. And the warm wash goes across
+   the WHOLE of your area rather than the quadrant alone, so your turn lights up
+   your side of the table instead of one box on it. */
+#my-zone.active-turn {
+  box-shadow: inset 0 2px 0 rgba(232,213,163,.9),
+              inset 2px 0 0 rgba(232,213,163,.9),
+              inset -2px 0 0 rgba(232,213,163,.9),
+              inset 0 0 16px 2px rgba(232,213,163,.35);
+}
+#my-zone.active-turn, #screen-game.my-turn #my-area { background: rgba(232,213,163,.10); }
+#screen-game.my-turn #my-area {
+  box-shadow: inset 2px 0 0 rgba(232,213,163,.9), inset -2px 0 0 rgba(232,213,163,.9),
+              inset 0 -2px 0 rgba(232,213,163,.9);
 }
 .seat-inner { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; }
 
@@ -386,11 +409,19 @@ body {
    same hue as the tile faces, the felt's gold accents and the turn halo, so it
    was the least visible mark available. White appears nowhere else as an edge,
    and the dark halo is what separates it from a cream tile. */
-.tile.match { outline: 2px solid rgba(255,255,255,.95); z-index: 3;
-  box-shadow: 0 0 0 4px rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.45); }
-/* lift the small board tiles clear of their neighbours — depth reads faster
-   than colour. Not the hand, where .selected already owns the transform. */
-#table .tile.match { transform: translateY(-2px); }
+/* The ring is drawn INSIDE the tile. The melds tray and the pond are sized to
+   fit their tiles exactly and clip what overflows, so a ring drawn outside the
+   tile — an outline, or an outer shadow — is sliced off at the tray's edge,
+   most visibly on the outermost meld, which is exactly where you tend to be
+   looking. An inner ring cannot be clipped by anything, and for the same reason
+   there is no lift: a tile nudged upward inside a clipping tray just loses its
+   top 2px. The fading of everything else is what carries the signal anyway. */
+.tile.match { z-index: 3; }
+.tile.match::after {
+  content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,.95), inset 0 0 0 4px rgba(0,0,0,.5);
+}
 
 /* …and fade the rest of the board while a tile is being inspected. This is the
    half that actually works: the matches are untouched and simply become the

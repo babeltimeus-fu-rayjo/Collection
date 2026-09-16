@@ -282,8 +282,12 @@ function renderTile(t, opts = {}) {
 // without hunting across four discard piles. A face-down tile carries no key,
 // so nothing concealed can ever light up.
 let matchKey = null;
-function setMatch(key) {
-  if (key === matchKey && (!key || document.querySelector('.tile.match'))) return;
+// `force` re-applies the same key after a render. Every render rebuilds the
+// tiles, so the marks are lost with them — and since the board keeps its dimmed
+// class, the result is a faded table with nothing lit on it. A pointer that has
+// not moved fires no event to put it back, so the render has to.
+function setMatch(key, force = false) {
+  if (!force && key === matchKey && (!key || document.querySelector('.tile.match'))) return;
   matchKey = key;
   for (const n of document.querySelectorAll('.tile.match')) n.classList.remove('match');
   // Ringing the copies barely registers: a 2px outline on a 36px tile, in the
@@ -1227,7 +1231,10 @@ function renderGame(view, sess) {
 
   // my zone
   const me = view.players.find((q) => q.seat === my);
-  $('#my-zone').classList.toggle('active-turn', my === view.turn && view.phase !== 'over');
+  const myTurn = my === view.turn && view.phase !== 'over';
+  $('#my-zone').classList.toggle('active-turn', myTurn);
+  // your whole area warms up on your turn, not just the quadrant
+  $('#screen-game').classList.toggle('my-turn', myTurn);
   const nameEl = $('#my-name');
   nameEl.replaceChildren();
   if (me) { nameEl.append(el('span', '', me.name), el('span', 'you-chip', 'YOU')); }
@@ -1373,6 +1380,8 @@ function renderGame(view, sess) {
 
   chatSetVisible(true);
   paintChatBubbles();
+  // the tiles under the pointer were just replaced; light them again
+  if (matchKey) setMatch(matchKey, true);
 }
 
 // Hand tiles are reused across renders (and tile ids repeat from game to game),
