@@ -589,7 +589,11 @@ body {
 /* No width cap: this is a table, and the widest column is a list of tiles that
    would otherwise wrap for no reason on a screen with room to spare. It grows
    with the window and the columns grow with it. */
-#ways-panel { width: 100%; margin: 6px auto 0; padding-bottom: 28px; text-align: left; }
+/* The side gutters are not decoration: the chat button floats over the
+   bottom-right corner, and without them the last column of whichever row
+   happened to be there ran underneath it. Symmetric, so the table reads as
+   centred rather than shoved left. */
+#ways-panel { width: 100%; margin: 6px auto 0; padding: 0 clamp(16px, 5vw, 76px) 28px; text-align: left; }
 #ways-body { display: flex; flex-direction: column; gap: 2px; }
 .ways-row {
   display: grid; grid-template-columns: 64px minmax(150px, 1fr) minmax(200px, 2fr);
@@ -604,10 +608,11 @@ body {
 @media (max-width: 620px) { .ways-row { grid-template-columns: 56px 1fr; } .ways-need { grid-column: 1 / -1; } }
 
 /* ================================================================ feed (history log) */
-/* a floating popup anchored above the 📜 button, styled like the settings drawer;
-   hidden by default — toggle it with 📜 (common/feedtoggle.js) */
+/* a floating popup under the 📜 button in the top bar, styled like the settings
+   drawer; hidden by default — toggle it with 📜 (common/feedtoggle.js). Top right,
+   which is where every other game in the collection already keeps its log. */
 #feed {
-  position: fixed; left: 12px; bottom: 58px; z-index: 90;
+  position: fixed; right: 12px; top: 58px; z-index: 90;
   width: 300px; max-width: calc(100vw - 24px); max-height: 42vh; overflow-y: auto;
   padding: 10px 12px; font-size: 12px; line-height: 1.45; color: #b0c8a8;
   background: #0d3320; border: 1px solid #2a6b45; border-radius: 10px;

@@ -1305,6 +1305,12 @@ function scoreHK(G, winnerSeat, loserSeat, isTsumo) {
 // all, which is what makes the floor worth showing.
 export const HK_MIN_FAAN = 3;
 
+// How many unturned flowers a route is allowed to be counting on. Two is the
+// point where it stops being a plan and starts being a wish — and without a cap
+// every shape on the board, however worthless, becomes a "3 faan route" that
+// needs three flowers nobody has seen.
+const MAX_PETAL_LIFT = 2;
+
 function hkLockedFaan(pos) {
   if (pos.variant !== 'hk') return null;
   const p = pos, sw = pos.seatWind;
@@ -2474,7 +2480,7 @@ function dedupeRoutes(routes) {
   const seen = new Set();
   return routes.filter((r) => {
     const k = [
-      r.faan, r.away, r.selfDraw ? 'sd' : '', r.riichi ? 'r' : '',
+      r.faan, r.away, r.selfDraw ? 'sd' : '', r.riichi ? 'r' : '', r.flowersNeeded || 0,
       r.parts.map((x) => x.text).join('+'),
       r.wants.map((w) => `${w.key}:${w.count}`).sort().join(','),
     ].join('|');
@@ -2592,6 +2598,19 @@ function setSeats(w, others, mode) {
   return Math.min(1, others);                             // a run: chi, from the left
 }
 
+// Flowers and seasons nobody has turned up. Each is worth a faan and none of
+// them costs you a tile: a flower is set aside the moment you draw it and
+// replaced from the wall, so the only thing standing between you and the faan
+// is drawing one. That makes them the cheapest faan in the game and the easiest
+// to forget — a shape a faan or two short of declarable is not dead while there
+// are flowers still out there.
+function flowersOut(pos) {
+  if (pos.variant === 'jp') return 0;                 // riichi has none
+  let shown = 0;
+  for (const q of pos.players || []) shown += (q.flowers || []).length;
+  return Math.max(0, 8 - shown);
+}
+
 // Your own draws, and how many other seats are in front of you.
 function chanceCtx(pos) {
   const n = Math.max(1, (pos.players || []).length || 4);
@@ -2600,7 +2619,7 @@ function chanceCtx(pos) {
   // turn you have already drawn, so the next one is a full lap off.
   const gap = ((pos.mySeat - pos.turn) % n + n) % n || n;
   const draws = wall >= gap ? Math.floor((wall - gap) / n) + 1 : 0;
-  return { draws, others: n - 1, declared: !!pos.riichi, furiten: !!pos.furiten };
+  return { draws, others: n - 1, declared: !!pos.riichi, furiten: !!pos.furiten, flowers: flowersOut(pos) };
 }
 
 // Every tile nobody at the table can see and you are not holding: the wall plus
@@ -2621,9 +2640,16 @@ function unseenPool(pos, seen) {
 
 function winChance(route, ctx) {
   const short = route.wants.reduce((a, w) => a + w.count, 0);
-  if (!short) return 1;                                  // already there
+  const petals = route.flowersNeeded || 0;
+  if (!short && !petals) return 1;                       // already there
   if (ctx.pool <= 0 || ctx.draws <= 0) return 0;         // no wall, no chances
   let p = 1;
+  // Flowers come out of your own draws and nowhere else — nobody discards one,
+  // because nobody ever holds one.
+  if (petals) {
+    p *= hyperAtLeast(ctx.pool, ctx.flowers, ctx.draws, petals);
+    if (p <= 0) return 0;
+  }
   for (const w of route.wants) {
     if (w.left < w.count) return 0;                      // not enough of it left
     // One tile from home, any player's discard ends it: ron does not care what
@@ -2736,15 +2762,25 @@ function hkOutlook(pos, opts) {
   const wins = winsFor(hkRoutesFor, ctx, shapes, opts);
   const chance = { ...chanceCtx(pos), pool: unseenPool(pos, seen) };
 
+  // A shape short of the minimum is not dead: there are two faan lying around
+  // that cost no tiles at all. The self-draw is worth one, and every flower
+  // still in the wall is worth one more. So a shape two faan short reaches the
+  // minimum by drawing it yourself AND turning up a flower — or by turning up
+  // two flowers, which leaves the finish claimable off anyone's discard. Both
+  // are real hands and both used to be filtered out as unreachable.
+  const petalsLeft = flowersOut(pos);
   const ranked = shapes
-    // A shape worth less than the minimum can still get you home, but only by
-    // self-draw — the extra faan IS the self-draw. That is strictly harder than
-    // the same road with a claimable finish, and winChance is where it is
-    // priced: the tile you win on cannot be taken off a discard.
-    .map((r) => (r.shape >= HK_MIN_FAAN
-      ? { ...r, faan: r.shape, selfDraw: false }
-      : { ...r, faan: r.shape + 1, selfDraw: true }))
-    .filter((r) => r.faan >= HK_MIN_FAAN)
+    .flatMap((r) => {
+      const gap = HK_MIN_FAAN - r.shape;
+      if (gap <= 0) return [{ ...r, faan: r.shape, selfDraw: false, flowersNeeded: 0 }];
+      const lifted = [];
+      // the self-draw covers a faan, flowers cover the rest
+      if (gap - 1 <= petalsLeft) lifted.push({ ...r, faan: HK_MIN_FAAN, selfDraw: true, flowersNeeded: gap - 1 });
+      // or flowers cover all of it, and then anyone can throw you the last tile
+      if (gap <= petalsLeft && gap <= MAX_PETAL_LIFT) lifted.push({ ...r, faan: HK_MIN_FAAN, selfDraw: false, flowersNeeded: gap });
+      return lifted;
+    })
+    .filter((r) => r.faan >= HK_MIN_FAAN && (r.flowersNeeded || 0) <= MAX_PETAL_LIFT)
     .map((r) => ({ ...r, p: winChance(r, chance) }))
     // Cheapest hand first, and where two cost the same, the likelier one — see
     // the note on the riichi sort above.
@@ -2753,6 +2789,7 @@ function hkOutlook(pos, opts) {
   const routes = dedupeRoutes(ranked)
     .map((r) => ({
       parts: r.parts, faan: r.faan, away: r.away, selfDraw: r.selfDraw, p: r.p,
+      flowersNeeded: r.flowersNeeded || 0,
       wants: r.wants.map((w) => ({ k: w.key, count: w.count, left: w.left })),
       ...winsField(wins.get(r.id) || [], r.wants),
     }));

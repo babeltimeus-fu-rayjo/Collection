@@ -3,10 +3,11 @@
 //
 //   import '../common/feedtoggle.js';
 //
-// It adds a small 📜 button next to the ⚙ settings gear (bottom-left). Clicking
-// it hides/shows the log; the choice persists per game, per browser. The log
-// itself is re-rendered by each game into #feed, so the toggle only flips a
-// body class (never touches #feed's contents).
+// It adds a small 📜 button next to the ⚙ settings gear — in the game's own top
+// bar where there is one, otherwise floating in the bottom-left corner.
+// Clicking it hides/shows the log; the choice persists per game, per browser.
+// The log itself is re-rendered by each game into #feed, so the toggle only
+// flips a body class (never touches #feed's contents).
 
 (function () {
   function init() {
@@ -28,6 +29,8 @@
         transition: opacity .15s; }
       #feed-toggle:hover { opacity: 1; }
       #feed-toggle.off { opacity: .95; border-color: #e0b34e; color: #e0b34e; }
+      /* docked into the game's top bar, beside the gear */
+      .topbar #feed-toggle { position: static; width: 26px; height: 26px; font-size: 13px; opacity: .65; flex: 0 0 auto; }
       body.feed-hidden #feed { display: none !important; }
     `;
     document.head.append(style);
@@ -49,7 +52,13 @@
       try { localStorage.setItem(key, hidden ? '1' : '0'); } catch {}
       apply();
     });
-    document.body.append(btn);
+    // beside the gear, which settings.js has already put in the top bar if the
+    // game has one — so this goes to the same place, immediately before it
+    const bar = document.querySelector('.topbar');
+    const gear = document.getElementById('cfg-gear');
+    if (bar && gear && gear.parentElement === bar) bar.insertBefore(btn, gear);
+    else if (bar) bar.append(btn);
+    else document.body.append(btn);
     apply();
   }
 

@@ -2405,7 +2405,14 @@ function routeNeedEl(r, cap = 0) {
       if (wins.length) { wrap.append(el('span', '', ': ')); tileListEl(wrap, wins, 0); }
     }
   }
-  if (!r.away && !r.wants.length) wrap.append(el('span', 'ready', 'ready'));
+  // Flowers are a cost like any other, but they cost no tiles — they cost luck.
+  // They belong beside the tiles you still need rather than beside the faan you
+  // have already banked.
+  if (r.flowersNeeded) {
+    if (wrap.childElementCount) wrap.append(el('span', '', ' · '));
+    wrap.append(term('flowers', `${r.flowersNeeded} more flower${r.flowersNeeded > 1 ? 's' : ''}`));
+  }
+  if (!r.away && !r.wants.length && !r.flowersNeeded) wrap.append(el('span', 'ready', 'ready'));
   return wrap;
 }
 
