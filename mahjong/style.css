@@ -515,11 +515,7 @@ body {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
   min-height: 22px; font-size: 12px; padding: 0 12px; text-align: center;
 }
-#faan-routes.hidden { display: none !important; }
 .faan-row { display: flex; align-items: center; justify-content: center; gap: 8px; max-width: 100%; }
-#faan-routes { color: #8ab89a; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#faan-routes b { color: #cfe3d5; font-weight: 600; }
-#faan-routes .ready { color: #7fd4a0; font-weight: 700; }
 #faan-bar.hidden { display: none !important; }
 #faan-locked { color: #e8d5a3; font-weight: 700; white-space: nowrap; }
 #faan-locked.short { color: #d8a05a; }
@@ -590,11 +586,13 @@ body {
 
 /* the full list of ways to a Hong Kong win, in place under the hand — the page
    grows and scrolls rather than a panel covering the board you are reading */
-#ways-panel { width: 100%; max-width: 780px; margin: 6px auto 0; padding-bottom: 28px; text-align: left; }
-#ways-intro { font-size: 11px; color: #6f9a80; line-height: 1.5; margin-bottom: 6px; }
+/* No width cap: this is a table, and the widest column is a list of tiles that
+   would otherwise wrap for no reason on a screen with room to spare. It grows
+   with the window and the columns grow with it. */
+#ways-panel { width: 100%; margin: 6px auto 0; padding-bottom: 28px; text-align: left; }
 #ways-body { display: flex; flex-direction: column; gap: 2px; }
 .ways-row {
-  display: grid; grid-template-columns: 64px minmax(150px, 1fr) minmax(160px, 1.2fr);
+  display: grid; grid-template-columns: 64px minmax(150px, 1fr) minmax(200px, 2fr);
   gap: 10px; align-items: baseline; font-size: 12px;
   padding: 5px 6px; border-radius: 6px; background: rgba(255,255,255,.03);
 }
@@ -602,6 +600,7 @@ body {
 .ways-faan { color: #e8d5a3; font-weight: 700; font-variant-numeric: tabular-nums; }
 .ways-name { color: #cfe3d5; }
 .ways-need { color: #7fa38c; }
+.ways-need .ready { color: #7fd4a0; font-weight: 700; }
 @media (max-width: 620px) { .ways-row { grid-template-columns: 56px 1fr; } .ways-need { grid-column: 1 / -1; } }
 
 /* ================================================================ feed (history log) */

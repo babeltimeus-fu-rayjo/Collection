@@ -1292,36 +1292,19 @@ function renderGame(view, sess) {
       pieces.append(el('span', '', `· nothing banked yet · need ${o.goal} to win`));
     }
 
-    // and the way out: the cheapest shape that still reaches the minimum, with
-    // what it is actually waiting for. The rest are a click away.
-    const routes = $('#faan-routes');
-    routes.replaceChildren();
+    // and the way out, all of it, behind one button. There used to be a
+    // cheapest-route line here with a second button to expand it, which meant
+    // two disclosures for one question and a permanent extra line under the
+    // hand. The cheapest way is just the first row of the table.
     lastRoutes = o.routes || [];
     waysUnit = o.unit;
+    if (!lastRoutes.length) {
+      pieces.append(el('span', '', ' · no hand from here reaches it — play for the draw'));
+    }
     const toggle = $('#btn-routes');
     if (toggle) {
       toggle.classList.toggle('hidden', !lastRoutes.length);
-      toggle.textContent = routesOpen ? 'hide ways' : 'ways to win';
-    }
-    routes.classList.toggle('hidden', !routesOpen);
-    if (lastRoutes.length) {
-      const r = lastRoutes[0];
-      routes.append(el('span', '', `Cheapest way to ${o.goal}: `));
-      const b = el('b', '');
-      b.append(routeLabel(r));
-      routes.append(b);
-      routes.append(el('span', '', ' → '));
-      routes.append(term(o.unit === 'han' ? 'han' : 'faan', `${r.faan} ${o.unit}`));
-      routes.append(el('span', '', ' · '));
-      routes.append(routeNeedEl(r, 3));
-      if (lastRoutes.length > 1) {
-        const more = el('button', 'claim-mute undo', waysOpen ? 'hide' : `all ${lastRoutes.length} ways`);
-        more.type = 'button';
-        more.addEventListener('click', toggleWays);
-        routes.append(el('span', '', ' '), more);
-      }
-    } else {
-      routes.append(el('span', '', `No hand from here reaches ${o.goal} — play for the draw`));
+      toggle.textContent = routesOpen ? 'hide ways' : `${lastRoutes.length} ways to win`;
     }
     paintWays();
   } else {
@@ -2436,7 +2419,7 @@ let lastRoutes = [];
 // the solver cares about has moved.
 let outlookView = null, outlookDeep = false, outlookCache = null;
 function outlookOf(view) {
-  const deep = waysOpen;          // the full panel wants every route's tiles
+  const deep = routesOpen;        // the table wants every route's tiles
   if (view === outlookView && deep === outlookDeep) return outlookCache;
   outlookView = view;
   outlookDeep = deep;
@@ -2448,41 +2431,25 @@ let waysUnit = 'faan';
 // The full list, since the line under the hand only has room for the best one.
 // It opens in place rather than over the board — you want to read it WHILE
 // looking at your tiles, and the page can scroll if it runs long.
-let waysOpen = false;
-
-// Two levels of folding, both shut to begin with. The score line is the part
-// you read while choosing a discard; the routes below it are a question you ask
-// occasionally, and a paragraph of shapes sitting under the hand all game is
-// something to read past rather than something to read.
+// Shut to begin with. The score line is the part you read while choosing a
+// discard; the ways to win are a question you ask occasionally, and a table of
+// shapes sitting under the hand all game is something to read past rather than
+// something to read.
 let routesOpen = false;
 function toggleRoutes() {
   routesOpen = !routesOpen;
-  if (!routesOpen) waysOpen = false;             // the table folds with them
-  if (lastView) renderGame(lastView, session);
-}
-function toggleWays() {
-  waysOpen = !waysOpen;
-  paintWays();
   if (lastView) renderGame(lastView, session);   // so the button relabels
 }
+// Cheapest first; the odds break ties within a rank — see winChance in game.js.
+// No preamble: the columns say what they are, and a paragraph explaining them
+// was three lines of reading before the first row every time.
 function paintWays() {
   const panel = $('#ways-panel');
   if (!panel) return;
-  panel.classList.toggle('hidden', !waysOpen || !lastRoutes.length);
-  if (!waysOpen || !lastRoutes.length) return;
+  panel.classList.toggle('hidden', !routesOpen || !lastRoutes.length);
+  if (!routesOpen || !lastRoutes.length) return;
   const body = $('#ways-body');
-  const intro = $('#ways-intro');
   body.replaceChildren();
-  intro.replaceChildren();
-  if (!lastRoutes.length) {
-    intro.textContent = 'Nothing from this hand can be declared any more.';
-  } else {
-    // The ordering still comes from the odds — see winChance in game.js — but
-    // the percentages themselves are not printed. From a fresh hand almost
-    // every route rounds to the same "<1%", so a column of them said nothing
-    // the order had not already said.
-    intro.textContent = 'Every shape that still gets you a declarable hand, likeliest first: how many tiles it still wants, how many of those are left, and whether anyone can hand them to you. "Drop" is how many tiles in your hand have to go, and "needs" is one way to fill what is left. One tile short, that becomes "wins on" — every tile that finishes it, with the number nobody has seen yet when it is getting scarce.';
-  }
   for (const r of lastRoutes) {
     const row = el('div', 'ways-row');
     const f = el('span', 'ways-faan');
@@ -2587,7 +2554,6 @@ function leaveRoom() {
   chatSeenN = 0;
   shownDiscardId = null;
   lastRoutes = [];
-  waysOpen = false;
   routesOpen = false;
   // the hand-end sequence, so the next room starts from a clean slate rather
   // than inheriting a hidden score panel or a spent reveal timer
