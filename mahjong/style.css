@@ -128,27 +128,37 @@ body {
    touching shapes in the same material read as one shape. Stretched to fill its
    grid row so its bottom edge actually reaches the table's, and rounded only on
    the corners that are on the OUTSIDE of the joined shape. */
-#my-zone {
-  align-self: stretch;
+#my-zone { align-self: stretch; position: relative; }
+/* The fill sits on a backdrop rather than the quadrant itself, so it can run
+   out past the quadrant's right edge into the dead felt beside it (--bleed-right,
+   measured in relayout) and meet the window edge. Only the top-left corner is
+   rounded: the right runs off the screen and the bottom runs into the strip. */
+#my-zone::before {
+  content: ''; position: absolute; z-index: 0;
+  top: 0; bottom: 0; left: 0; right: calc(-1 * var(--bleed-right, 0px));
   background: rgba(255,255,255,.07);
-  border-radius: 10px 10px 0 0;
+  border-radius: 10px 0 0 0;
 }
+/* the quadrant's own contents sit above the backdrop */
+#my-zone .seat-inner { position: relative; z-index: 1; }
 /* Everything below the table is yours — hand, buttons, score line — so it is
    one panel in the same material as your quadrant rather than three loose rows
    floating on the felt. Wrapped in markup so the rounding sits on the block and
    does not have to guess which row is last (the faan line is hidden in
    Taiwanese). */
 #my-area {
-  /* stretched rather than hugging its contents: the screen centres its children,
-     so left to itself the panel would be exactly as wide as the hand and would
-     narrow by a tile every time you discarded one. The 4px sides match the
-     table's own padding, so the right edge lines up with the quadrant above. */
+  /* Stretched rather than hugging its contents: the screen centres its children,
+     so left to itself the strip would be exactly as wide as the hand and would
+     narrow by a tile every time you discarded one. No margins, so it meets both
+     window edges, and it grows into whatever vertical slack is left so it meets
+     the bottom one too — the region ends where the window does. */
   align-self: stretch;
-  margin: 0 4px;
+  flex: 1 0 auto;
+  margin: 0;
   padding-bottom: 6px;
   background: rgba(255,255,255,.07);
-  /* square where it meets the quadrant above, rounded everywhere else */
-  border-radius: 14px 0 14px 14px;
+  /* the only corner of the joined shape still on screen */
+  border-radius: 14px 0 0 0;
 }
 
 .seat.active-turn {
@@ -160,16 +170,18 @@ body {
    the boundary the shared fill exists to remove. And the warm wash goes across
    the WHOLE of your area rather than the quadrant alone, so your turn lights up
    your side of the table instead of one box on it. */
-#my-zone.active-turn {
+/* Only the two edges that are actually edges get a line: the top, and the left
+   down to where the strip takes over. The right runs off the window and the
+   bottom runs into the strip, so drawing either would cut the region in half. */
+#my-zone.active-turn::before {
+  background: rgba(232,213,163,.10);
   box-shadow: inset 0 2px 0 rgba(232,213,163,.9),
               inset 2px 0 0 rgba(232,213,163,.9),
-              inset -2px 0 0 rgba(232,213,163,.9),
               inset 0 0 16px 2px rgba(232,213,163,.35);
 }
-#my-zone.active-turn, #screen-game.my-turn #my-area { background: rgba(232,213,163,.10); }
 #screen-game.my-turn #my-area {
-  box-shadow: inset 2px 0 0 rgba(232,213,163,.9), inset -2px 0 0 rgba(232,213,163,.9),
-              inset 0 -2px 0 rgba(232,213,163,.9);
+  background: rgba(232,213,163,.10);
+  box-shadow: inset 2px 0 0 rgba(232,213,163,.9);
 }
 .seat-inner { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; }
 
@@ -426,7 +438,11 @@ body {
 /* …and fade the rest of the board while a tile is being inspected. This is the
    half that actually works: the matches are untouched and simply become the
    only bright thing left. */
-#table.dimmed .tile { opacity: .28; transition: opacity .12s; }
+/* Face-down tiles are excluded: a concealed hand carries no information to
+   push into the background, and fading it just makes the table flicker when you
+   are looking at something else entirely. A revealed hand renders real tiles
+   rather than backs, so those still fade and still light up. */
+#table.dimmed .tile:not(.facedown) { opacity: .28; transition: opacity .12s; }
 #table.dimmed .tile.match { opacity: 1; }
 
 /* hand tiles — sized by --ts-hand */

@@ -2303,6 +2303,9 @@ function jpLockedHan(pos) {
 export function keyParts(key) {
   if (key[0] === 'w') return { kind: 'wind', v: key.slice(1) };
   if (key[0] === 'd') return { kind: 'dragon', v: key.slice(1) };
+  // 'f' is the deck's letter for a flower but 'flower' is what tileName knows,
+  // and without this a hovered flower reads as "7 undefined"
+  if (key[0] === 'f') return { kind: 'flower', v: Number(key.slice(1)) };
   return { kind: key[0], v: Number(key.slice(1)) };
 }
 

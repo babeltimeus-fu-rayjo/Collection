@@ -503,6 +503,15 @@ function relayout() {
   const pw2 = pondW(pondCols);
   const handMax = floor > 0 ? pw2 + 4 + setsW(melds) : pw2 + Math.max(0, (seat - pw2) / 2);
   set('--hand-max', `${Math.round(handMax * 100) / 100}px`);
+
+  // The table is a set of capped, centred columns, so at a wide window there is
+  // dead felt to the right of your quadrant. Measure it and let your region's
+  // backdrop run out into it, rather than leaving a panel floating in the gap.
+  // Window width is the only thing this depends on, which is exactly when
+  // relayout runs.
+  const zone = $('#my-zone');
+  const bleed = zone ? Math.max(0, vw - zone.getBoundingClientRect().right) : 0;
+  set('--bleed-right', `${Math.round(bleed)}px`);
 }
 
 let relayoutPending = false;
