@@ -381,8 +381,8 @@ body {
 /* …and fade the rest of the board while a tile is being inspected. This is the
    half that actually works: the matches are untouched and simply become the
    only bright thing left. */
-#table.dimmed .tile, #hand.dimmed .tile { opacity: .28; transition: opacity .12s; }
-#table.dimmed .tile.match, #hand.dimmed .tile.match { opacity: 1; }
+#table.dimmed .tile { opacity: .28; transition: opacity .12s; }
+#table.dimmed .tile.match { opacity: 1; }
 
 /* hand tiles — sized by --ts-hand */
 #hand {

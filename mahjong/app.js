@@ -290,20 +290,21 @@ function setMatch(key) {
   // same warm hue as the tile faces and the turn halo. Fading everything ELSE
   // is the signal that actually carries — the matches do not change, the field
   // recedes around them.
+  // Only the table is marked up. Your own hand is the one place you are already
+  // looking and already know the contents of, so lighting it up is noise — but
+  // it still COUNTS, because two of a tile in your hand is two of it accounted
+  // for, and the number would be wrong without them.
   const dim = cfg.on('dimOthers');
-  for (const root of ['#table', '#hand']) {
-    const r = $(root);
-    if (r) r.classList.toggle('dimmed', !!key && dim);
-  }
+  $('#table')?.classList.toggle('dimmed', !!key && dim);
   if (!key) { paintMatchCount(null, 0); return; }
 
   const esc = (window.CSS && CSS.escape) ? CSS.escape(key) : key;
   let seen = 0;
-  for (const root of ['#table', '#hand']) {
+  for (const [root, mark] of [['#table', true], ['#hand', false]]) {
     const r = $(root);
     if (!r) continue;
     for (const n of r.querySelectorAll(`.tile[data-key="${esc}"]`)) {
-      n.classList.add('match');
+      if (mark) n.classList.add('match');
       // A revealed bot hand is a testing convenience, not something the table
       // can see, so it lights up but is not counted as accounted for.
       if (!n.closest('.seat-hand')) seen += 1;
