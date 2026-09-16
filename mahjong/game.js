@@ -2671,9 +2671,11 @@ function jpOutlook(pos, opts) {
     })
     .filter((r) => r && r.han >= JP_MIN_HAN)
     .map((r) => ({ ...r, p: winChance(r, chance) }))
-    // likeliest first, and where the odds tie the shorter road and then the
-    // bigger hand
-    .sort((a, b) => b.p - a.p || a.away - b.away || b.han - a.han)
+    // Cheapest hand first, and where two cost the same, the likelier one. The
+    // odds still decide within a rank but no longer decide the ranking: sorting
+    // by them alone put a 3-han shape above a 13-han one it was a hair more
+    // likely than, which reads as noise rather than as advice.
+    .sort((a, b) => a.han - b.han || b.p - a.p || a.away - b.away)
     .map((r) => ({
       parts: r.parts, faan: r.han, away: r.away, selfDraw: false, riichi: r.riichi, p: r.p,
       wants: r.wants.map((w) => ({ k: w.key, count: w.count, left: w.left })),
@@ -2707,9 +2709,9 @@ function hkOutlook(pos, opts) {
       : { ...r, faan: r.shape + 1, selfDraw: true }))
     .filter((r) => r.faan >= HK_MIN_FAAN)
     .map((r) => ({ ...r, p: winChance(r, chance) }))
-    // likeliest first, and where the odds tie the shorter road and then the
-    // bigger hand
-    .sort((a, b) => b.p - a.p || a.away - b.away || b.faan - a.faan)
+    // Cheapest hand first, and where two cost the same, the likelier one — see
+    // the note on the riichi sort above.
+    .sort((a, b) => a.faan - b.faan || b.p - a.p || a.away - b.away)
     .map((r) => ({
       parts: r.parts, faan: r.faan, away: r.away, selfDraw: r.selfDraw, p: r.p,
       wants: r.wants.map((w) => ({ k: w.key, count: w.count, left: w.left })),

@@ -1293,22 +1293,26 @@ function renderGame(view, sess) {
       pieces.append(el('span', '', `· nothing banked yet · need ${o.goal} to win`));
     }
 
-    // and the way out: the easiest shape that still reaches the minimum, with
+    // and the way out: the cheapest shape that still reaches the minimum, with
     // what it is actually waiting for. The rest are a click away.
     const routes = $('#faan-routes');
     routes.replaceChildren();
     lastRoutes = o.routes || [];
     waysUnit = o.unit;
+    const toggle = $('#btn-routes');
+    if (toggle) {
+      toggle.classList.toggle('hidden', !lastRoutes.length);
+      toggle.textContent = routesOpen ? 'hide ways' : 'ways to win';
+    }
+    routes.classList.toggle('hidden', !routesOpen);
     if (lastRoutes.length) {
       const r = lastRoutes[0];
-      routes.append(el('span', '', `Best chance at ${o.goal}: `));
+      routes.append(el('span', '', `Cheapest way to ${o.goal}: `));
       const b = el('b', '');
       b.append(routeLabel(r));
       routes.append(b);
       routes.append(el('span', '', ' → '));
       routes.append(term(o.unit === 'han' ? 'han' : 'faan', `${r.faan} ${o.unit}`));
-      routes.append(el('span', '', ' · '));
-      routes.append(term('odds', fmtChance(r.p)));
       routes.append(el('span', '', ' · '));
       routes.append(routeNeedEl(r, 3));
       if (lastRoutes.length > 1) {
@@ -1990,13 +1994,6 @@ const GLOSSARY = {
   selfdraw: { title: 'Self-draw only · 1 faan',
     body: 'Winning on a tile you drew yourself is worth a faan, which is what lifts a two-faan shape to the three you need to declare at all. The catch is in the name: the shape is only worth three WITH the self-draw, so the winning tile has to come off the wall on your own turn. You cannot take it from a discard, however obligingly somebody throws it. That makes the route harder than its distance suggests, and it is ranked accordingly.',
     links: { discard: 'ron' } },
-  odds: { title: 'Chance',
-    body: 'The odds of this route\u2019s tiles reaching you in the draws you have left, counting the discards you could take as well: Pon from anybody, Chi only from the player on your left, and nothing for the pair, which no call can finish. One tile short it counts every seat, because Ron does not care what the tile was for — unless the route needs the self-draw, or you have gone furiten. What it cannot know is whether somebody else finishes first, so read it against the other routes rather than as a forecast. 0% means the tiles are gone, not that they are unlikely.',
-    links: { Pon: 'pon', Chi: 'chi', Ron: 'ron', 'self-draw': 'selfdraw', furiten: 'furiten' } },
-  drop: { title: 'Drop',
-    body: 'How many tiles in your hand this route has no use for. You would be discarding these over the coming turns.' },
-  needs: { title: 'Needs',
-    body: 'What you would then have to draw or claim. One tile short, it turns into "wins on" and lists every tile that finishes the hand — a run open at both ends has two. A number in brackets is how many of that tile nobody has seen yet, shown when it is getting scarce.' },
   han: { title: 'Han',
     body: "Riichi's scoring unit. You need at least one han that is NOT dora — that is what a yaku is — before a finished hand can be declared at all. Han and fu together set the payout." },
   riichi: { title: 'Riichi \u00b7 1 han',
@@ -2254,11 +2251,13 @@ function showTip(anchor, key, depth = 0) {
   if (ex) tip.append(ex);
   tip.classList.remove('hidden');
 
-  // Two things a note must not cover. A note already open, because a
-  // third-level note doubling back onto the first is worse than useless — the
-  // first is what you were reading. And your own hand: the score line and the
-  // route line sit directly underneath it, so their notes opened upward over
-  // exactly the tiles you were reading them about.
+  // Keep off a note already open: a third-level note doubling back onto the
+  // first is worse than useless, since the first is what you were reading.
+  //
+  // The hand is deliberately NOT in this list. Steering notes clear of it put
+  // them on the far side, and a note you cannot reach without crossing the
+  // tiles — which closes it — is worse than one that sits over them for as
+  // long as you are reading it. The close delay does that job instead.
   const r = anchor.getBoundingClientRect();
   const box = tip.getBoundingClientRect();
   const W = window.innerWidth, H = window.innerHeight;
@@ -2267,11 +2266,6 @@ function showTip(anchor, key, depth = 0) {
   const blocks = tips.slice(0, depth)
     .filter((t) => !t.classList.contains('hidden'))
     .map((t) => t.getBoundingClientRect());
-  const hand = $('#hand');
-  if (hand && !anchor.closest('#hand')) {
-    const hb = hand.getBoundingClientRect();
-    if (hb.width && hb.height) blocks.push(hb);
-  }
   const overlap = (x, y) => blocks.reduce((sum, o) => {
     const w = Math.min(x + box.width, o.right) - Math.max(x, o.left);
     const h = Math.min(y + box.height, o.bottom) - Math.max(y, o.top);
@@ -2280,19 +2274,7 @@ function showTip(anchor, key, depth = 0) {
 
   const mid = r.left + r.width / 2 - box.width / 2;
   const spots = depth === 0
-    ? (() => {
-      // Above the anchor, then below it — and then the far side of the hand.
-      // The hand spans the whole width, so a note anchored beneath it can only
-      // clear it by clearing it completely, and the room to do that is usually
-      // nowhere near the anchor. Without this third spot a tall note has no
-      // choice that works and lands on the tiles whichever way it goes.
-      const list = [[mid, r.top - box.height - 8], [mid, r.bottom + 8]];
-      const hb = hand && hand.getBoundingClientRect();
-      if (hb && hb.height) {
-        list.push(r.top >= hb.bottom ? [mid, hb.top - box.height - 8] : [mid, hb.bottom + 8]);
-      }
-      return list;
-    })()
+    ? [[mid, r.top - box.height - 8], [mid, r.bottom + 8]]
     : (() => {
       const pr = tips[depth - 1].getBoundingClientRect();
       return [
@@ -2393,16 +2375,6 @@ function routeLabel(r) {
 // routes travel as tile keys; the spelled-out name is built here
 const wantName = (w) => tileName({ key: w.k, ...keyParts(w.k) });
 
-// A route's odds, rounded to something you can act on. The two ends both carry
-// meaning: 0% is a route whose tiles are gone or whose wall has run out, while
-// "<1%" is merely a long shot — so they must not print the same.
-function fmtChance(p) {
-  if (!(p > 0)) return '0%';
-  if (p >= 0.995) return '~100%';
-  if (p < 0.01) return '<1%';
-  return `${Math.round(p * 100)}%`;
-}
-
 function tileListEl(wrap, list, cap) {
   const show = cap > 0 ? list.slice(0, cap) : list;
   const cut = list.length - show.length;
@@ -2416,7 +2388,7 @@ function tileListEl(wrap, list, cap) {
 
 function routeNeedEl(r, cap = 0) {
   const wrap = el('span', '');
-  if (r.away > 0) { wrap.append(term('drop', `drop ${r.away}`)); if (r.wants.length) wrap.append(el('span', '', ' · ')); }
+  if (r.away > 0) { wrap.append(el('span', '', `drop ${r.away}`)); if (r.wants.length) wrap.append(el('span', '', ' · ')); }
   const short = r.wants.reduce((a, w) => a + w.count, 0);
   // named tiles when the engine sent them, otherwise just how many there are
   const wins = r.wins || [];
@@ -2426,7 +2398,7 @@ function routeNeedEl(r, cap = 0) {
   // the solver happened to trace: a 3-4 wins on 2 or 5, and being told only
   // about the 5 costs you half your outs.
   if (short === 1 && wins.length) {
-    wrap.append(term('needs', 'wins on'));
+    wrap.append(el('span', '', 'wins on'));
     wrap.append(el('span', '', ' '));
     tileListEl(wrap, wins, cap);
     return wrap;
@@ -2435,7 +2407,7 @@ function routeNeedEl(r, cap = 0) {
   if (r.wants.length) {
     const show = cap > 0 ? r.wants.slice(0, cap) : r.wants;
     const rest = r.wants.length - show.length;
-    wrap.append(term('needs', 'needs'));
+    wrap.append(el('span', '', 'needs'));
     wrap.append(el('span', '', ' '));
     show.forEach((w, i) => {
       if (i) wrap.append(el('span', '', ', '));
@@ -2478,6 +2450,17 @@ let waysUnit = 'faan';
 // It opens in place rather than over the board — you want to read it WHILE
 // looking at your tiles, and the page can scroll if it runs long.
 let waysOpen = false;
+
+// Two levels of folding, both shut to begin with. The score line is the part
+// you read while choosing a discard; the routes below it are a question you ask
+// occasionally, and a paragraph of shapes sitting under the hand all game is
+// something to read past rather than something to read.
+let routesOpen = false;
+function toggleRoutes() {
+  routesOpen = !routesOpen;
+  if (!routesOpen) waysOpen = false;             // the table folds with them
+  if (lastView) renderGame(lastView, session);
+}
 function toggleWays() {
   waysOpen = !waysOpen;
   paintWays();
@@ -2495,16 +2478,14 @@ function paintWays() {
   if (!lastRoutes.length) {
     intro.textContent = 'Nothing from this hand can be declared any more.';
   } else {
-    intro.append(el('span', '', 'Every shape that still gets you a declarable hand, likeliest first. '));
-    intro.append(term('odds', 'Chance'));
-    intro.append(el('span', '', ' is the odds of its tiles reaching you before the wall runs out. "Drop" is how many tiles in your hand have to go; "needs" is one way to fill what is left. One tile short, that becomes "wins on" — every tile that finishes it, with the number nobody has seen yet when it is getting scarce.'));
+    // The ordering still comes from the odds — see winChance in game.js — but
+    // the percentages themselves are not printed. From a fresh hand almost
+    // every route rounds to the same "<1%", so a column of them said nothing
+    // the order had not already said.
+    intro.textContent = 'Every shape that still gets you a declarable hand, likeliest first: how many tiles it still wants, how many of those are left, and whether anyone can hand them to you. "Drop" is how many tiles in your hand have to go, and "needs" is one way to fill what is left. One tile short, that becomes "wins on" — every tile that finishes it, with the number nobody has seen yet when it is getting scarce.';
   }
   for (const r of lastRoutes) {
     const row = el('div', 'ways-row');
-    // the odds lead, because the odds are what the list is sorted by
-    const c = el('span', 'ways-odds');
-    c.append(term('odds', fmtChance(r.p)));
-    row.append(c);
     const f = el('span', 'ways-faan');
     f.append(term(waysUnit === 'han' ? 'han' : 'faan', `${r.faan} ${waysUnit}`));
     row.append(f);
@@ -2608,6 +2589,7 @@ function leaveRoom() {
   shownDiscardId = null;
   lastRoutes = [];
   waysOpen = false;
+  routesOpen = false;
   // the hand-end sequence, so the next room starts from a clean slate rather
   // than inheriting a hidden score panel or a spent reveal timer
   clearTimeout(handEndTimer);
@@ -2632,6 +2614,7 @@ $('#btn-create').addEventListener('click', createRoom);
 $('#btn-join').addEventListener('click', joinRoom);
 $('#code-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') joinRoom(); });
 $('#name-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btn-create').click(); });
+$('#btn-routes').addEventListener('click', toggleRoutes);
 $('#btn-add-bot').addEventListener('click', () => session?.addBot());
 $('#btn-start').addEventListener('click', () => session?.start());
 $('#btn-size').addEventListener('click', (e) => { e.stopPropagation(); $('#size-popover').classList.toggle('hidden'); });
