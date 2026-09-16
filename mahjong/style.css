@@ -443,28 +443,13 @@ body {
 .tile.highlight { outline: 2px solid #4db87a; }
 .tile.last-draw { outline: 2px solid #e8d5a3; }
 .tile.riichi-mark { box-shadow: inset 0 calc(-3 * var(--u)) 0 #cc2222, 0 1px 2px rgba(0,0,0,.3); }
-/* Every copy of the tile under the pointer, wherever it is face up.
-   The ring is white with a dark halo rather than the old amber: amber was the
-   same hue as the tile faces, the felt's gold accents and the turn halo, so it
-   was the least visible mark available. White appears nowhere else as an edge,
-   and the dark halo is what separates it from a cream tile. */
-/* The ring is drawn INSIDE the tile. The melds tray and the pond are sized to
-   fit their tiles exactly and clip what overflows, so a ring drawn outside the
-   tile — an outline, or an outer shadow — is sliced off at the tray's edge,
-   most visibly on the outermost meld, which is exactly where you tend to be
-   looking. An inner ring cannot be clipped by anything, and for the same reason
-   there is no lift: a tile nudged upward inside a clipping tray just loses its
-   top 2px. The fading of everything else is what carries the signal anyway. */
-.tile.match { z-index: 3; }
-.tile.match::after {
-  content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none;
-  border-radius: inherit;
-  box-shadow: inset 0 0 0 2px rgba(255,255,255,.95), inset 0 0 0 4px rgba(0,0,0,.5);
-}
-
-/* …and fade the rest of the board while a tile is being inspected. This is the
-   half that actually works: the matches are untouched and simply become the
-   only bright thing left. */
+/* Every copy of the tile under the pointer, wherever it is face up — marked by
+   fading the rest of the board, and by nothing on the tile itself. A ring was
+   wrong whichever side it went: outside the tile it is sliced off by the melds
+   tray and the pond, which are sized to fit their tiles exactly, and inside it
+   reads as a rectangle drawn on top of the artwork rather than as an edge of
+   the tile. The fade was carrying the signal on its own anyway — the matches
+   are untouched and simply become the only bright thing left. */
 /* Face-down tiles are excluded: a concealed hand carries no information to
    push into the background, and fading it just makes the table flicker when you
    are looking at something else entirely. A revealed hand renders real tiles
@@ -798,15 +783,3 @@ body {
 .you-chip { background: rgba(255,255,255,.16); color: #fff; font-weight: 800;
             font-size: 10px; letter-spacing: .06em; padding: 1px 6px; border-radius: 4px; }
 
-/* What the hovered tile is and how many are unaccounted for. The slot is
-   reserved whether or not anything is in it — same as the wall and stick lines
-   above — because a readout that appears on hover would push the centre column
-   around under the pointer, and nothing here should move except on a resize. */
-#match-info { min-height: 2.5em; display: flex; flex-direction: column; align-items: center;
-  font-size: 11px; color: #8ab89a; line-height: 1.25; }
-/* NOT .hidden — that utility is display:none !important, which would
-   collapse the slot and shift the column under the pointer */
-#match-info.quiet { visibility: hidden; }
-#match-info .mi-name { color: #fff; font-weight: 700; white-space: nowrap; }
-#match-info .mi-left { white-space: nowrap; }
-#match-info .gone { color: #e08a6a; font-weight: 600; }

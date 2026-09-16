@@ -290,49 +290,19 @@ function setMatch(key, force = false) {
   if (!force && key === matchKey && (!key || document.querySelector('.tile.match'))) return;
   matchKey = key;
   for (const n of document.querySelectorAll('.tile.match')) n.classList.remove('match');
-  // Ringing the copies barely registers: a 2px outline on a 36px tile, in the
-  // same warm hue as the tile faces and the turn halo. Fading everything ELSE
-  // is the signal that actually carries — the matches do not change, the field
-  // recedes around them.
-  // Only the table is marked up. Your own hand is the one place you are already
-  // looking and already know the contents of, so lighting it up is noise — but
-  // it still COUNTS, because two of a tile in your hand is two of it accounted
-  // for, and the number would be wrong without them.
+  // The whole effect is the fade: the copies are left exactly as they are and
+  // become the only bright tiles on the board. Nothing is drawn on them.
+  // Only the table is touched. Your own hand is the one place you are already
+  // looking and already know the contents of, so fading it around the tile you
+  // are pointing at is noise.
   const dim = cfg.on('dimOthers');
   $('#table')?.classList.toggle('dimmed', !!key && dim);
-  if (!key) { paintMatchCount(null, 0); return; }
+  if (!key) return;
 
   const esc = (window.CSS && CSS.escape) ? CSS.escape(key) : key;
-  let seen = 0;
-  for (const [root, mark] of [['#table', true], ['#hand', false]]) {
-    const r = $(root);
-    if (!r) continue;
-    for (const n of r.querySelectorAll(`.tile[data-key="${esc}"]`)) {
-      if (mark) n.classList.add('match');
-      // A revealed bot hand is a testing convenience, not something the table
-      // can see, so it lights up but is not counted as accounted for.
-      if (!n.closest('.seat-hand')) seen += 1;
-    }
-  }
-  paintMatchCount(key, seen);
-}
-
-// What you are really asking when you hover a tile is how many are left, so
-// answer that instead of making anyone count outlines. Only face-up tiles carry
-// a key, so this is the same arithmetic a player at a real table can do.
-function paintMatchCount(key, seen) {
-  const box = $('#match-info');
-  if (!box) return;
-  if (!key) { box.classList.add('quiet'); return; }
-  const total = key[0] === 'f' ? 1 : 4;       // one of each flower, four of everything else
-  const left = Math.max(0, total - seen);
-  box.replaceChildren();
-  box.append(el('span', 'mi-name', tileName({ key, ...keyParts(key) })));
-  const line = el('span', 'mi-left');
-  if (left === 0) line.append(el('span', 'gone', 'none left'));
-  else line.append(el('span', '', `${left} of ${total} left`));
-  box.append(line);
-  box.classList.remove('quiet');
+  const table = $('#table');
+  if (!table) return;
+  for (const n of table.querySelectorAll(`.tile[data-key="${esc}"]`)) n.classList.add('match');
 }
 // Clearing is delayed; setting is not. Sweeping along a row of tiles crosses
 // the 3px gap between each pair, and on every one of those the pointer is over
