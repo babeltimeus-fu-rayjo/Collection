@@ -1962,8 +1962,9 @@ const GLOSSARY = {
     links: { 'seat wind': 'seatwind' },
     links: { melded: 'meld' },
     tiles: [T_('flower', 1), T_('flower', 6)] },
-  selfdraw: { title: 'Self-draw · 1 faan',
-    body: 'Winning on a tile you drew yourself rather than one somebody discarded. Always available, which is why a shape worth two faan is still a route to three.' },
+  selfdraw: { title: 'Self-draw only · 1 faan',
+    body: 'Winning on a tile you drew yourself is worth a faan, which is what lifts a two-faan shape to the three you need to declare at all. The catch is in the name: the shape is only worth three WITH the self-draw, so the winning tile has to come off the wall on your own turn. You cannot take it from a discard, however obligingly somebody throws it. That makes the route harder than its distance suggests, and it is ranked accordingly.',
+    links: { discard: 'ron' } },
   drop: { title: 'Drop',
     body: 'How many tiles in your hand this route has no use for. You would be discarding these over the coming turns.' },
   needs: { title: 'Needs',
@@ -2325,7 +2326,7 @@ function routeLabel(r) {
   let n = 0;
   const add = (node) => { if (n++) wrap.append(el('span', '', ' + ')); wrap.append(node); };
   for (const b of bits) add(b.term ? term(b.term, b.text) : el('span', '', b.text));
-  if (r.selfDraw) add(term('selfdraw', 'self-draw'));
+  if (r.selfDraw) add(term('selfdraw', 'self-draw only'));
   if (r.riichi) add(term('riichi', 'riichi'));
   return wrap;
 }

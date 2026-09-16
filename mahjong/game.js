@@ -2550,9 +2550,21 @@ function hkOutlook(pos, opts) {
   const wins = winsFor(hkRoutesFor, ctx, shapes, opts);
 
   const routes = shapes
-    .map((r) => (r.shape >= HK_MIN_FAAN
-      ? { ...r, faan: r.shape, selfDraw: false }
-      : { ...r, faan: r.shape + 1, selfDraw: true }))
+    // A shape worth less than the minimum can still get you home, but only by
+    // self-draw — the extra faan IS the self-draw. That makes it strictly
+    // harder to finish than a route of the same distance you could also claim
+    // off a discard: the tile you win on has to come out of the wall on your
+    // own turn instead of from any of four places. So the tile you finish on
+    // is priced at four times what it would cost if anyone could hand it to
+    // you, which is the same "4 / how many are left" unit the rest of effort
+    // already uses.
+    .map((r) => {
+      if (r.shape >= HK_MIN_FAAN) return { ...r, faan: r.shape, selfDraw: false };
+      const cheapest = r.wants.length
+        ? Math.min(...r.wants.map((w) => 4 / Math.max(1, w.left)))
+        : 1;
+      return { ...r, faan: r.shape + 1, selfDraw: true, effort: r.effort + 3 * cheapest };
+    })
     .filter((r) => r.faan >= HK_MIN_FAAN)
     // easiest first — effort counts the discards AND how scarce the tiles it
     // still wants are, so a route needing three of a nearly-exhausted tile sinks

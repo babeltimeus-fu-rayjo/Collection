@@ -126,9 +126,23 @@ body {
   outline: 1px solid rgba(255,255,255,.16);
   outline-offset: -1px;
 }
-/* your concealed hand is made of the same material, so your tiles read as one
-   region rather than two unrelated areas */
-#hand { background: rgba(255,255,255,.065); border-radius: 12px 12px 0 0; }
+/* Everything below the table is yours — hand, buttons, score line — so it is
+   one panel in the same material as your quadrant rather than three loose rows
+   floating on the felt. Wrapped in markup so the rounding sits on the block and
+   does not have to guess which row is last (the faan line is hidden in
+   Taiwanese). */
+#my-area {
+  /* stretched rather than hugging its contents: the screen centres its children,
+     so left to itself the panel would be exactly as wide as the hand and would
+     narrow by a tile every time you discarded one */
+  align-self: stretch;
+  margin: 16px 8px 0;
+  border-radius: 14px;
+  padding-bottom: 6px;
+  background: rgba(255,255,255,.065);
+  outline: 1px solid rgba(255,255,255,.16);
+  outline-offset: -1px;
+}
 
 .seat.active-turn, #my-zone.active-turn {
   box-shadow: inset 0 0 0 2px rgba(232,213,163,.9), inset 0 0 16px 2px rgba(232,213,163,.35);
@@ -387,7 +401,7 @@ body {
 /* hand tiles — sized by --ts-hand */
 #hand {
   display: flex; gap: 3px; justify-content: center; align-items: flex-end;
-  margin-top: 16px; padding: 6px 12px 8px; min-height: 60px; flex-wrap: wrap; touch-action: pan-y;
+  padding: 8px 12px; min-height: 60px; flex-wrap: wrap; touch-action: pan-y;
 }
 #hand .tile {
   --u: calc(1px * var(--ts-base) * var(--ts-hand));
