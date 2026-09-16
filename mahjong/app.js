@@ -334,11 +334,24 @@ function paintMatchCount(key, seen) {
   box.append(line);
   box.classList.remove('quiet');
 }
+// Clearing is delayed; setting is not. Sweeping along a row of tiles crosses
+// the 3px gap between each pair, and on every one of those the pointer is over
+// the container rather than a tile — so an immediate clear made the whole board
+// flash off and on again the length of the hand. A short grace period is long
+// enough for the next tile to claim the highlight, and far shorter than any
+// deliberate move away.
+let matchClear = null;
 document.addEventListener('pointerover', (e) => {
   const t = e.target && e.target.closest ? e.target.closest('.tile[data-key]') : null;
-  setMatch(t && t.closest('#table, #hand') ? t.dataset.key : null);
+  const key = t && t.closest('#table, #hand') ? t.dataset.key : null;
+  clearTimeout(matchClear);
+  if (key) { setMatch(key); return; }
+  matchClear = setTimeout(() => setMatch(null), 140);
 });
-document.addEventListener('pointerout', (e) => { if (!e.relatedTarget) setMatch(null); });
+// leaving the page entirely is deliberate, so that one is immediate
+document.addEventListener('pointerout', (e) => {
+  if (!e.relatedTarget) { clearTimeout(matchClear); setMatch(null); }
+});
 
 function renderMeld(meld) {
   const g = el('div', 'meld');
@@ -510,8 +523,12 @@ function relayout() {
   // Window width is the only thing this depends on, which is exactly when
   // relayout runs.
   const zone = $('#my-zone');
-  const bleed = zone ? Math.max(0, vw - zone.getBoundingClientRect().right) : 0;
-  set('--bleed-right', `${Math.round(bleed)}px`);
+  const zr = zone && zone.getBoundingClientRect();
+  set('--bleed-right', `${zr ? Math.round(Math.max(0, vw - zr.right)) : 0}px`);
+  // Where the quadrant's left edge falls. The strip below starts at the window
+  // edge, so this is also the width of the step between them — the one segment
+  // of the region's outline that neither box can draw by itself.
+  set('--zone-left', `${zr ? Math.round(Math.max(0, zr.left)) : 0}px`);
 }
 
 let relayoutPending = false;
@@ -1240,7 +1257,10 @@ function renderGame(view, sess) {
 
   // my zone
   const me = view.players.find((q) => q.seat === my);
-  $('#my-zone').classList.toggle('active-turn', my === view.turn && view.phase !== 'over');
+  const myTurn = my === view.turn && view.phase !== 'over';
+  $('#my-zone').classList.toggle('active-turn', myTurn);
+  // the halo traces the whole region, so the strip has to know as well
+  $('#screen-game').classList.toggle('my-turn', myTurn);
   const nameEl = $('#my-name');
   nameEl.replaceChildren();
   if (me) { nameEl.append(el('span', '', me.name), el('span', 'you-chip', 'YOU')); }

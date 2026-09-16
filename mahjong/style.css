@@ -161,6 +161,7 @@ body {
      window edges, and it grows into whatever vertical slack is left so it meets
      the bottom one too — the region ends where the window does. */
   align-self: stretch;
+  position: relative;
   flex: 1 0 auto;
   margin: 0;
   padding-bottom: 6px;
@@ -178,17 +179,33 @@ body {
    the boundary the shared fill exists to remove. And the warm wash goes across
    the WHOLE of your area rather than the quadrant alone, so your turn lights up
    your side of the table instead of one box on it. */
-/* Your own region gets NO turn treatment, and that is deliberate. It was a gold
-   wash, which worked when "yours" was one quadrant and stopped working the
-   moment it became the quadrant plus a full-width strip: that is most of the
-   screen going khaki behind cream tiles. A ring is no better — an inset glow
-   paints a soft edge on all four sides and so draws a band across the join, and
-   a ring on only some sides reads as an unfinished box.
-   Nothing is lost by leaving it alone. Your turn is already said three times
-   over: the pill in the centre, the prompt in the action bar, and your hand
-   becoming clickable — and no opponent wearing the gold ring is itself the
-   fourth. The region's job is to say WHERE you are, which it does constantly;
-   whose turn it is was never its question. */
+/* Your turn draws a halo, same as everyone else's — but around the OUTSIDE of
+   the joined region rather than around the quadrant's own box. That was the
+   whole problem before: a box-shaped ring on a ⌐-shaped region puts a line
+   straight through the middle of it.
+   Traced as four segments, two of which each box can manage alone and one of
+   which neither can:
+     1 the quadrant's top            inset shadow, below
+     2 the quadrant's left           inset shadow, below
+     3 the step across to the window edge   ┐ neither box's own edge —
+     4 the strip's left               ┘ drawn together as one corner piece
+   No right or bottom edge: those run off the window. And no soft glow, which
+   paints all four sides and so put a band across the join.
+   Values live in --zone-left / --bleed-right, measured in relayout(). */
+#my-zone.active-turn::before {
+  box-shadow: inset 0 2px 0 rgba(232,213,163,.9), inset 2px 0 0 rgba(232,213,163,.9);
+}
+/* segments 3 and 4: as wide as the step, as tall as the strip, so its top and
+   left borders are exactly the two edges nothing else can draw — and its
+   rounded corner is the one where they meet */
+#screen-game.my-turn #my-area::before {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 0;
+  width: var(--zone-left, 0px);
+  border-top: 2px solid rgba(232,213,163,.9);
+  border-left: 2px solid rgba(232,213,163,.9);
+  border-top-left-radius: 14px;
+  pointer-events: none;
+}
 .seat-inner { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; }
 
 .seat-info { display: flex; align-items: center; gap: 6px; font-size: 12px; flex-wrap: wrap; justify-content: center; }
