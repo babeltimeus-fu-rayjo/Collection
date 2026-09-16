@@ -166,8 +166,10 @@ body {
   margin: 0;
   padding-bottom: 6px;
   background: rgba(255,255,255,.07);
-  /* the only corner of the joined shape still on screen */
-  border-radius: 14px 0 0 0;
+  /* Square. The strip runs to the window on three sides, so its top-left is not
+     a corner of the region — it is just where the screen ends, and rounding it
+     made the region look like a floating card that had been cut off. */
+  border-radius: 0;
 }
 
 .seat.active-turn {
@@ -183,27 +185,29 @@ body {
    the joined region rather than around the quadrant's own box. That was the
    whole problem before: a box-shaped ring on a ⌐-shaped region puts a line
    straight through the middle of it.
-   Traced as four segments, two of which each box can manage alone and one of
-   which neither can:
-     1 the quadrant's top            inset shadow, below
-     2 the quadrant's left           inset shadow, below
-     3 the step across to the window edge   ┐ neither box's own edge —
-     4 the strip's left               ┘ drawn together as one corner piece
-   No right or bottom edge: those run off the window. And no soft glow, which
-   paints all four sides and so put a band across the join.
-   Values live in --zone-left / --bleed-right, measured in relayout(). */
+   Traced as three segments — the only three edges that are really edges:
+     1 the quadrant's top                   inset shadow, below
+     2 the quadrant's left                  inset shadow, below
+     3 the step left along the strip's top   a 2px rule, below
+   Nothing else gets a line. The right and the bottom run off the window, and so
+   does the strip's left edge once you are below the step: it sits ON the window
+   edge, so a line there is drawing a border around the screen. And no soft glow
+   — it paints all four sides and so put a band across the join.
+   Width comes from --zone-left, measured in relayout() beside --bleed-right. */
 #my-zone.active-turn::before {
   box-shadow: inset 0 2px 0 rgba(232,213,163,.9), inset 2px 0 0 rgba(232,213,163,.9);
 }
-/* segments 3 and 4: as wide as the step, as tall as the strip, so its top and
-   left borders are exactly the two edges nothing else can draw — and its
-   rounded corner is the one where they meet */
+/* Segment 3, the one edge neither box owns: the strip's top, from the window's
+   left edge across to where the quadrant begins. Two extra pixels of width so
+   it runs UNDER the quadrant's left line rather than merely up to it — two 2px
+   rules that only abut leave a hairline at the corner on a fractional layout,
+   and that notch is what made the intersection look broken. Square end: it
+   stops at the window edge, and a curve there reads as a corner of something
+   when it is really just where the screen stops. */
 #screen-game.my-turn #my-area::before {
-  content: ''; position: absolute; top: 0; bottom: 0; left: 0;
-  width: var(--zone-left, 0px);
-  border-top: 2px solid rgba(232,213,163,.9);
-  border-left: 2px solid rgba(232,213,163,.9);
-  border-top-left-radius: 14px;
+  content: ''; position: absolute; top: 0; left: 0; height: 2px;
+  width: calc(var(--zone-left, 0px) + 2px);
+  background: rgba(232,213,163,.9);
   pointer-events: none;
 }
 .seat-inner { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; }
