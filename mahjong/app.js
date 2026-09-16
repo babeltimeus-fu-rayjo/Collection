@@ -319,7 +319,9 @@ document.addEventListener('pointerover', (e) => {
   const el = e.target && e.target.closest ? e.target : null;
   const t = el ? el.closest('.tile[data-key]') : null;
   const key = t && t.closest('#table, #hand') ? t.dataset.key : null;
-  if (key) { clearTimeout(matchClear); setMatch(key); return; }
+  // Reaching a tile also means you have finished reading: put any note away at
+  // once rather than making you steer around it.
+  if (key) { clearTimeout(matchClear); hideTip(); setMatch(key); return; }
   if (el && el.closest('#table, #hand')) return;          // between tiles: hold
   clearTimeout(matchClear);
   matchClear = setTimeout(() => setMatch(null), 140);
@@ -1192,7 +1194,10 @@ function renderGame(view, sess) {
   // center info: round (prevailing wind + hand number) and tiles left in the wall
   const roundName = { E: 'East', S: 'South', W: 'West', N: 'North' }[view.roundWind] || view.roundWind;
   $('#round-wind-display').textContent = `${roundName} ${view.handNum}`;
-  $('#wall-display').replaceChildren(term('wall', `${view.wallCount} left`));
+  // No note on this one, nor on the score line below the hand: both are live
+  // numbers about this hand rather than a rule you might not know, and a note
+  // that opens because you glanced at a counter is only ever in the way.
+  $('#wall-display').textContent = `${view.wallCount} left`;
 
   // whose turn it is: only ever announce MY turn in the centre. For opponents the
   // gold halo around their quadrant is the cue, so no label is shown.
@@ -1273,7 +1278,7 @@ function renderGame(view, sess) {
     faanBar.classList.remove('hidden');
     const short = o.yakuHan < o.minToWin;
     const lock = $('#faan-locked');
-    lock.replaceChildren(term('current', `Current ${o.total} ${o.unit}`));
+    lock.textContent = `Current ${o.total} ${o.unit}`;
     lock.classList.toggle('short', short);
     const pieces = $('#faan-parts');
     pieces.replaceChildren();
@@ -1986,7 +1991,7 @@ const GLOSSARY = {
     body: 'Winning on a tile you drew yourself is worth a faan, which is what lifts a two-faan shape to the three you need to declare at all. The catch is in the name: the shape is only worth three WITH the self-draw, so the winning tile has to come off the wall on your own turn. You cannot take it from a discard, however obligingly somebody throws it. That makes the route harder than its distance suggests, and it is ranked accordingly.',
     links: { discard: 'ron' } },
   odds: { title: 'Chance',
-    body: 'The odds of this route\u2019s tiles reaching you in the draws you have left. A tile you need three of with three still out is a different proposition from one with eleven copies about, and this is that difference in a single number. It counts your own remaining draws plus the discards you could take — Pon from anybody, Chi only from the player on your left, and nothing at all for the pair, which no call can help you finish. One tile short it counts every seat, because Ron does not care what the tile was going to be for; a route that needs the self-draw, or a hand that has gone furiten, counts none of them. Two things it cannot know: whether somebody else finishes the hand first, and whether you play for this shape rather than one of the others. So read it against the rest of the list rather than as a forecast. 0% means the tiles are gone or the wall is, which is not the same as unlikely.',
+    body: 'The odds of this route\u2019s tiles reaching you in the draws you have left, counting the discards you could take as well: Pon from anybody, Chi only from the player on your left, and nothing for the pair, which no call can finish. One tile short it counts every seat, because Ron does not care what the tile was for — unless the route needs the self-draw, or you have gone furiten. What it cannot know is whether somebody else finishes first, so read it against the other routes rather than as a forecast. 0% means the tiles are gone, not that they are unlikely.',
     links: { Pon: 'pon', Chi: 'chi', Ron: 'ron', 'self-draw': 'selfdraw', furiten: 'furiten' } },
   drop: { title: 'Drop',
     body: 'How many tiles in your hand this route has no use for. You would be discarding these over the coming turns.' },
@@ -2118,8 +2123,6 @@ const GLOSSARY = {
     body: 'A limit hand — the maximum payout, worth more than any pile of han. Kokushi musou is the one this game implements.' },
   dealer: { title: 'Dealer (East)',
     body: 'The dealer wins and pays about half again as much as anyone else, and keeps the deal by winning — each repeat adding a honba. The seat rotates otherwise.' },
-  current: { title: 'Current score',
-    body: "What this hand is worth right now whatever happens next: flowers, a declared riichi, and dragon or wind triplets you have already melded. A triplet still hidden in your hand doesn't count — discard out of it and it's gone." },
 };
 
 // ---- the notes themselves -------------------------------------------------
@@ -2150,7 +2153,9 @@ function hideTip() { cancelOpen(); clearTimeout(closeTimer); closeFrom(0); }
 function cancelClose() { clearTimeout(closeTimer); }
 function scheduleClose(depth) {
   clearTimeout(closeTimer);
-  closeTimer = setTimeout(() => closeFrom(depth), 220);
+  // Only long enough to cross the 8px between a word and its note. It used to
+  // be 220ms, which is long enough to feel like the note is following you.
+  closeTimer = setTimeout(() => closeFrom(depth), 120);
 }
 
 // Opening waits too, for the opposite reason to closing. Terms sit inside
@@ -2249,24 +2254,45 @@ function showTip(anchor, key, depth = 0) {
   if (ex) tip.append(ex);
   tip.classList.remove('hidden');
 
-  // Try the natural spots in order and take the first that lands on screen
-  // without covering a note already open — a third-level note that doubles back
-  // onto the first is worse than useless, since the first is what you were
-  // reading.
+  // Two things a note must not cover. A note already open, because a
+  // third-level note doubling back onto the first is worse than useless — the
+  // first is what you were reading. And your own hand: the score line and the
+  // route line sit directly underneath it, so their notes opened upward over
+  // exactly the tiles you were reading them about.
   const r = anchor.getBoundingClientRect();
   const box = tip.getBoundingClientRect();
   const W = window.innerWidth, H = window.innerHeight;
   const clampX = (x) => Math.max(8, Math.min(W - box.width - 8, x));
   const clampY = (y) => Math.max(8, Math.min(H - box.height - 8, y));
-  const open = tips.slice(0, depth)
+  const blocks = tips.slice(0, depth)
     .filter((t) => !t.classList.contains('hidden'))
     .map((t) => t.getBoundingClientRect());
-  const hits = (x, y) => open.some((o) =>
-    !(x + box.width <= o.left || x >= o.right || y + box.height <= o.top || y >= o.bottom));
+  const hand = $('#hand');
+  if (hand && !anchor.closest('#hand')) {
+    const hb = hand.getBoundingClientRect();
+    if (hb.width && hb.height) blocks.push(hb);
+  }
+  const overlap = (x, y) => blocks.reduce((sum, o) => {
+    const w = Math.min(x + box.width, o.right) - Math.max(x, o.left);
+    const h = Math.min(y + box.height, o.bottom) - Math.max(y, o.top);
+    return sum + (w > 0 && h > 0 ? w * h : 0);
+  }, 0);
 
   const mid = r.left + r.width / 2 - box.width / 2;
   const spots = depth === 0
-    ? [[mid, r.top - box.height - 8], [mid, r.bottom + 8]]
+    ? (() => {
+      // Above the anchor, then below it — and then the far side of the hand.
+      // The hand spans the whole width, so a note anchored beneath it can only
+      // clear it by clearing it completely, and the room to do that is usually
+      // nowhere near the anchor. Without this third spot a tall note has no
+      // choice that works and lands on the tiles whichever way it goes.
+      const list = [[mid, r.top - box.height - 8], [mid, r.bottom + 8]];
+      const hb = hand && hand.getBoundingClientRect();
+      if (hb && hb.height) {
+        list.push(r.top >= hb.bottom ? [mid, hb.top - box.height - 8] : [mid, hb.bottom + 8]);
+      }
+      return list;
+    })()
     : (() => {
       const pr = tips[depth - 1].getBoundingClientRect();
       return [
@@ -2277,12 +2303,16 @@ function showTip(anchor, key, depth = 0) {
       ];
     })();
 
-  let pick = null;
+  // First spot that covers nothing wins; failing that, whichever covers least.
+  // Scoring rather than first-fit matters because clamping a note back onto the
+  // screen can drop it on the hand even when the spot it came from was clear.
+  let pick = null, least = Infinity;
   for (const [x, y] of spots) {
     const cx = clampX(x), cy = clampY(y);
-    if (!hits(cx, cy)) { pick = [cx, cy]; break; }
+    const o = overlap(cx, cy);
+    if (o < least) { least = o; pick = [cx, cy]; }
+    if (!o) break;
   }
-  if (!pick) pick = [clampX(spots[0][0]), clampY(spots[0][1])];
   tip.style.left = `${Math.round(pick[0])}px`;
   tip.style.top = `${Math.round(pick[1])}px`;
 }
@@ -2318,6 +2348,7 @@ function term(key, text, depth = 0) {
 }
 document.addEventListener('click', (e) => { if (!e.target.closest || !e.target.closest('.tip')) hideTip(); });
 window.addEventListener('scroll', hideTip, { passive: true });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideTip(); });
 // the static panels carry their terms in the markup
 wireTerms(document);
 

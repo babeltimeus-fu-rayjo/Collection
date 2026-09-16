@@ -455,7 +455,13 @@ body {
    are looking at something else entirely. A revealed hand renders real tiles
    rather than backs, so those still fade and still light up. */
 #table.dimmed .tile:not(.facedown) { opacity: .28; transition: opacity .12s; }
-#table.dimmed .tile.match { opacity: 1; }
+/* transition: none is load-bearing. A render rebuilds every tile on the table,
+   and something between the rebuild and the re-marking forces a style flush, so
+   the new tile has already committed the dimmed .28 by the time it is told it
+   is a match — and then it ANIMATES up to 1 over the .12s above. Measured at
+   8ms intervals: .28 → .32 → .40 → .62 → .79 → .89 → .96 → 1, on every single
+   click. That was the flicker. Lighting up is not something to animate. */
+#table.dimmed .tile.match { opacity: 1; transition: none; }
 
 /* hand tiles — sized by --ts-hand */
 #hand {
