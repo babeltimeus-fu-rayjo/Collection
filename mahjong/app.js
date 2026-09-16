@@ -304,23 +304,36 @@ function setMatch(key, force = false) {
   if (!table) return;
   for (const n of table.querySelectorAll(`.tile[data-key="${esc}"]`)) n.classList.add('match');
 }
-// Clearing is delayed; setting is not. Sweeping along a row of tiles crosses
-// the 3px gap between each pair, and on every one of those the pointer is over
-// the container rather than a tile — so an immediate clear made the whole board
-// flash off and on again the length of the hand. A short grace period is long
-// enough for the next tile to claim the highlight, and far shorter than any
-// deliberate move away.
+// What ends a highlight is leaving the tiles, not leaving A tile. The pointer
+// spends a lot of time inside the hand and the pond without being on anything:
+// there is a 3px gap between every pair of tiles, selecting a tile lifts it 8px
+// out from under the cursor, and a discard re-centres the whole hand. Treating
+// any of those as "stopped looking" made the board flash off and on again —
+// while the pointer had not gone anywhere. So the highlight holds anywhere
+// inside those two regions and only drops on the way out of them.
+//
+// Setting is immediate; the clear keeps a short grace period for the frames
+// where the pointer is crossing the boundary itself.
 let matchClear = null;
 document.addEventListener('pointerover', (e) => {
-  const t = e.target && e.target.closest ? e.target.closest('.tile[data-key]') : null;
+  const el = e.target && e.target.closest ? e.target : null;
+  const t = el ? el.closest('.tile[data-key]') : null;
   const key = t && t.closest('#table, #hand') ? t.dataset.key : null;
+  if (key) { clearTimeout(matchClear); setMatch(key); return; }
+  if (el && el.closest('#table, #hand')) return;          // between tiles: hold
   clearTimeout(matchClear);
-  if (key) { setMatch(key); return; }
   matchClear = setTimeout(() => setMatch(null), 140);
 });
-// leaving the page entirely is deliberate, so that one is immediate
 document.addEventListener('pointerout', (e) => {
-  if (!e.relatedTarget) { clearTimeout(matchClear); setMatch(null); }
+  // A null relatedTarget means the pointer left the window — and it means the
+  // same thing when the node under the pointer is taken out of the DOM and put
+  // back, which is what a render does to the hand. Clearing at once treated the
+  // two alike, so every click flashed the board: highlight off on the rebuild,
+  // on again a frame later. The same delay covers both, because a rebuild fires
+  // pointerover again immediately and a pointer that really left never does.
+  if (e.relatedTarget) return;
+  clearTimeout(matchClear);
+  matchClear = setTimeout(() => setMatch(null), 140);
 });
 
 function renderMeld(meld) {
@@ -1283,12 +1296,14 @@ function renderGame(view, sess) {
     waysUnit = o.unit;
     if (lastRoutes.length) {
       const r = lastRoutes[0];
-      routes.append(el('span', '', `Easiest way to ${o.goal}: `));
+      routes.append(el('span', '', `Best chance at ${o.goal}: `));
       const b = el('b', '');
       b.append(routeLabel(r));
       routes.append(b);
       routes.append(el('span', '', ' → '));
       routes.append(term(o.unit === 'han' ? 'han' : 'faan', `${r.faan} ${o.unit}`));
+      routes.append(el('span', '', ' · '));
+      routes.append(term('odds', fmtChance(r.p)));
       routes.append(el('span', '', ' · '));
       routes.append(routeNeedEl(r, 3));
       if (lastRoutes.length > 1) {
@@ -1333,14 +1348,15 @@ function renderGame(view, sess) {
     }
   }
 
-  // fx
+  // fx — only the two moments worth covering the board for. A new hand and an
+  // exhaustive draw are both already on screen where you would look for them
+  // (the round line in the centre, the hand-end panel), and flashing them in the
+  // plain style was too faint to read and too brief to catch.
   if (view.fx && view.fx.seq > seenFxSeq) {
     seenFxSeq = view.fx.seq;
-    if (view.fx.kind === 'deal') flash(`Hand ${view.handNum}`, '', cfg('flashMs'));
     if (view.fx.kind === 'riichi') flash('Riichi!', 'big', cfg('flashMs'));
-    if (view.fx.kind === 'handEnd') {
-      if (view.fx.result === 'win') flash(view.fx.seat === my ? 'You win!' : `${view.players.find((q) => q.seat === view.fx.seat)?.name || '?'} wins!`, 'big', 2500);
-      else flash('Draw', '', 2000);
+    if (view.fx.kind === 'handEnd' && view.fx.result === 'win') {
+      flash(view.fx.seat === my ? 'You win!' : `${view.players.find((q) => q.seat === view.fx.seat)?.name || '?'} wins!`, 'big', 2500);
     }
   }
 
@@ -1964,12 +1980,14 @@ const GLOSSARY = {
   roundwind: { title: 'Round wind · 1 faan', body: 'Three of the wind the round is named for. It stacks with seat wind when they are the same tile.' },
   flowers: { title: 'Flowers · 1 faan each',
     body: 'Flower and season tiles never sit in your hand: they are set aside the moment you draw one and replaced with a fresh tile. Free faan, and nothing can take them away.',
-    links: { 'seat wind': 'seatwind' },
     links: { melded: 'meld' },
     tiles: [T_('flower', 1), T_('flower', 6)] },
   selfdraw: { title: 'Self-draw only · 1 faan',
     body: 'Winning on a tile you drew yourself is worth a faan, which is what lifts a two-faan shape to the three you need to declare at all. The catch is in the name: the shape is only worth three WITH the self-draw, so the winning tile has to come off the wall on your own turn. You cannot take it from a discard, however obligingly somebody throws it. That makes the route harder than its distance suggests, and it is ranked accordingly.',
     links: { discard: 'ron' } },
+  odds: { title: 'Chance',
+    body: 'The odds of this route\u2019s tiles reaching you in the draws you have left. A tile you need three of with three still out is a different proposition from one with eleven copies about, and this is that difference in a single number. It counts your own remaining draws plus the discards you could take — Pon from anybody, Chi only from the player on your left, and nothing at all for the pair, which no call can help you finish. One tile short it counts every seat, because Ron does not care what the tile was going to be for; a route that needs the self-draw, or a hand that has gone furiten, counts none of them. Two things it cannot know: whether somebody else finishes the hand first, and whether you play for this shape rather than one of the others. So read it against the rest of the list rather than as a forecast. 0% means the tiles are gone or the wall is, which is not the same as unlikely.',
+    links: { Pon: 'pon', Chi: 'chi', Ron: 'ron', 'self-draw': 'selfdraw', furiten: 'furiten' } },
   drop: { title: 'Drop',
     body: 'How many tiles in your hand this route has no use for. You would be discarding these over the coming turns.' },
   needs: { title: 'Needs',
@@ -1980,9 +1998,7 @@ const GLOSSARY = {
     body: 'Declare when your hand is concealed and one tile from winning. It costs a 1000-point stick and locks your discards, and it is itself the yaku — which is why almost any concealed hand still has a way home.' },
   tanyao: { title: 'Tanyao \u00b7 1 han',
     body: 'No terminals and no honours: every tile between 2 and 8. The easiest yaku to steer into, and one of the few that survives opening your hand.',
-    links: { 'self-draw': 'tsumo' },
-    links: { concealed: 'concealed', tenpai: 'tenpai', yaku: 'han' },
-    links: { yaku: 'han', dora: 'dora', fu: 'fu' },
+    links: { yaku: 'han' },
     tiles: [T_('m', 3), T_('m', 4), T_('m', 5), T_('p', 7), T_('p', 7), T_('p', 7)] },
   pinfu: { title: 'Pinfu \u00b7 1 han',
     body: 'Every set is a run, with a concealed hand. Lost the moment you claim a tile from anyone.',
@@ -2032,10 +2048,7 @@ const GLOSSARY = {
     body: 'A Riichi rule: if any tile that would complete your hand is sitting in your own discards, you cannot win by Ron. You may still win by self-draw.' },
   dora: { title: 'Dora · +1 han each',
     body: 'The tile shown in the centre is the indicator, and is worth nothing itself. The dora is whatever comes one step after it, as below. Every copy of that tile in your hand is +1 han, so a kan of the right one is four. Each kan anybody calls turns up another indicator, and if you win after declaring riichi the tiles hidden underneath count as well. Dora is never a yaku: a hand with nothing else cannot be declared.',
-    links: { Riichi: 'riichi', Ron: 'ron', 'self-draw': 'selfdraw' },
-    links: { 'self-draw': 'selfdraw' },
-    links: { 'claim': 'meld' },
-    links: { han: 'han', kan: 'kan', riichi: 'riichi', 'hidden underneath': 'uradora', yaku: 'han' },
+    links: { Riichi: 'riichi', han: 'han', kan: 'kan', riichi: 'riichi', 'hidden underneath': 'uradora', yaku: 'han' },
     pairsCaption: 'indicator → the dora it points at',
     pairs: [
       { from: T_('p', 3), to: T_('p', 4), note: 'next in the suit' },
@@ -2070,8 +2083,6 @@ const GLOSSARY = {
     body: 'Win within one go-around of declaring riichi, before your next discard. Any claim by anybody in between cancels it.' },
   iipeiko: { title: 'Iipeiko \u00b7 1 han',
     body: 'Two identical runs — same three tiles, same suit, twice. Concealed hands only.',
-    links: { dora: 'dora', riichi: 'riichi' },
-    links: { riichi: 'riichi', claim: 'meld' },
     tiles: [T_('s', 3), T_('s', 4), T_('s', 5), T_('s', 3), T_('s', 4), T_('s', 5)] },
   concealed: { title: 'Concealed hand',
     body: 'A hand with no sets claimed from anyone. Drawing everything yourself keeps it concealed; one Chi, Pon or open Kan opens it and costs you riichi, pinfu, seven pairs and the rest of the concealed-only yaku.' },
@@ -2089,13 +2100,7 @@ const GLOSSARY = {
     body: 'A set turned face up because you claimed it from someone. It is locked — those tiles can never be rearranged or discarded — and it opens your hand.' },
   pung: { title: 'Pung (triplet)',
     body: 'Three identical tiles. Four of them is a kan.',
-    links: { 'exhaustive draw': 'wall' },
-    links: { riichi: 'riichi' },
-    links: { dealer: 'dealer', draw: 'wall' },
-    links: { riichi: 'riichi', 'exhaustive draw': 'wall' },
-    links: { claimed: 'chi', 'opens your hand': 'concealed' },
-    links: { Chi: 'chi', Pon: 'pon', Kan: 'kan', riichi: 'riichi', pinfu: 'pinfu', 'seven pairs': 'chiitoitsu', yaku: 'han' },
-    links: { han: 'han', triplets: 'pung', honours: 'honours', terminals: 'terminals', concealed: 'concealed', kan: 'kan' },
+    links: { kan: 'kan' },
     tiles: [T_('s', 7), T_('s', 7), T_('s', 7)] },
   run: { title: 'Run (sequence)',
     body: 'Three consecutive tiles in one suit. Winds and dragons have no order, so they can never form a run.',
@@ -2132,7 +2137,7 @@ function tipAt(depth) {
   while (tips.length <= depth) {
     const t = el('div', 'tip hidden');
     t.dataset.depth = String(tips.length);
-    t.addEventListener('mouseenter', cancelClose);
+    t.addEventListener('mouseenter', () => { cancelOpen(); cancelClose(); });
     t.addEventListener('mouseleave', () => scheduleClose(Number(t.dataset.depth)));
     document.body.append(t);
     tips.push(t);
@@ -2141,11 +2146,24 @@ function tipAt(depth) {
 }
 
 function closeFrom(depth) { for (let i = depth; i < tips.length; i++) tips[i].classList.add('hidden'); }
-function hideTip() { clearTimeout(closeTimer); closeFrom(0); }
+function hideTip() { cancelOpen(); clearTimeout(closeTimer); closeFrom(0); }
 function cancelClose() { clearTimeout(closeTimer); }
 function scheduleClose(depth) {
   clearTimeout(closeTimer);
   closeTimer = setTimeout(() => closeFrom(depth), 220);
+}
+
+// Opening waits too, for the opposite reason to closing. Terms sit inside
+// running prose and beside the buttons you are reaching for, so crossing one on
+// the way somewhere else should not throw a note over what you were reading. A
+// quarter of a second is longer than a pass-through and shorter than a stop.
+// Focus and taps are already deliberate, so those still open at once.
+const TIP_OPEN_MS = 250;
+let openTimer = null;
+function cancelOpen() { clearTimeout(openTimer); openTimer = null; }
+function scheduleOpen(anchor, key, depth) {
+  cancelOpen();
+  openTimer = setTimeout(() => { openTimer = null; showTip(anchor, key, depth); }, TIP_OPEN_MS);
 }
 
 // A flat row of tiles can only say "here is the shape". Some terms need to show
@@ -2203,7 +2221,10 @@ function bodyEl(g, depth) {
   const map = g.links;
   if (!map) { div.textContent = g.body; return div; }
   const phrases = Object.keys(map).sort((a, b) => b.length - a.length);
-  const re = new RegExp(`(${phrases.map(escapeRe).join('|')})`, 'gi');
+  // \b so a phrase has to start a word. Without it "chi" turned the middle of
+  // "reaching" into a link to Chi. No boundary at the END, though: a note that
+  // links "pung" should still catch "pungs".
+  const re = new RegExp(`\\b(${phrases.map(escapeRe).join('|')})`, 'gi');
   let last = 0, m;
   while ((m = re.exec(g.body)) !== null) {
     if (m.index > last) div.append(document.createTextNode(g.body.slice(last, m.index)));
@@ -2269,12 +2290,12 @@ function showTip(anchor, key, depth = 0) {
 function bindTerm(node, key, depth) {
   node.classList.add('term');
   node.tabIndex = 0;
-  node.addEventListener('mouseenter', () => showTip(node, key, depth));
-  node.addEventListener('focus', () => showTip(node, key, depth));
-  node.addEventListener('mouseleave', () => scheduleClose(depth));
+  node.addEventListener('mouseenter', () => scheduleOpen(node, key, depth));
+  node.addEventListener('focus', () => { cancelOpen(); showTip(node, key, depth); });
+  node.addEventListener('mouseleave', () => { cancelOpen(); scheduleClose(depth); });
   node.addEventListener('blur', () => scheduleClose(depth));
   // touch: tap a word to hold its note open, tap away to drop it
-  node.addEventListener('click', (e) => { e.stopPropagation(); showTip(node, key, depth); });
+  node.addEventListener('click', (e) => { e.stopPropagation(); cancelOpen(); showTip(node, key, depth); });
 }
 
 // attach the hover note to anything already marked up with data-term — lets the
@@ -2340,6 +2361,16 @@ function routeLabel(r) {
 // the list was cut short and there is no real last item to point at.
 // routes travel as tile keys; the spelled-out name is built here
 const wantName = (w) => tileName({ key: w.k, ...keyParts(w.k) });
+
+// A route's odds, rounded to something you can act on. The two ends both carry
+// meaning: 0% is a route whose tiles are gone or whose wall has run out, while
+// "<1%" is merely a long shot — so they must not print the same.
+function fmtChance(p) {
+  if (!(p > 0)) return '0%';
+  if (p >= 0.995) return '~100%';
+  if (p < 0.01) return '<1%';
+  return `${Math.round(p * 100)}%`;
+}
 
 function tileListEl(wrap, list, cap) {
   const show = cap > 0 ? list.slice(0, cap) : list;
@@ -2429,11 +2460,20 @@ function paintWays() {
   const body = $('#ways-body');
   const intro = $('#ways-intro');
   body.replaceChildren();
-  intro.textContent = lastRoutes.length
-    ? `Every shape that still gets you a declarable hand, easiest first. "Drop" is how many tiles in your hand have to go; "needs" is one way to fill what is left. One tile short, that becomes "wins on" — every tile that finishes it, with the number nobody has seen yet when it is getting scarce.`
-    : 'Nothing from this hand can be declared any more.';
+  intro.replaceChildren();
+  if (!lastRoutes.length) {
+    intro.textContent = 'Nothing from this hand can be declared any more.';
+  } else {
+    intro.append(el('span', '', 'Every shape that still gets you a declarable hand, likeliest first. '));
+    intro.append(term('odds', 'Chance'));
+    intro.append(el('span', '', ' is the odds of its tiles reaching you before the wall runs out. "Drop" is how many tiles in your hand have to go; "needs" is one way to fill what is left. One tile short, that becomes "wins on" — every tile that finishes it, with the number nobody has seen yet when it is getting scarce.'));
+  }
   for (const r of lastRoutes) {
     const row = el('div', 'ways-row');
+    // the odds lead, because the odds are what the list is sorted by
+    const c = el('span', 'ways-odds');
+    c.append(term('odds', fmtChance(r.p)));
+    row.append(c);
     const f = el('span', 'ways-faan');
     f.append(term(waysUnit === 'han' ? 'han' : 'faan', `${r.faan} ${waysUnit}`));
     row.append(f);

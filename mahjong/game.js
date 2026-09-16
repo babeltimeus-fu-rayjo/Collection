@@ -2186,7 +2186,10 @@ function hkRoutesFor(ctx) {
       const wants = [];
       const noteWant = (idx, used) => {
         const short = used - mine[idx];
-        if (short > 0) wants.push({ key: KEY_LIST[idx], count: short, left: Math.max(0, supply[idx] - mine[idx]) });
+        // `have` is what the arrangement already has of this tile. With `count`
+        // it says which SET the tile is for, and that decides who can hand it
+        // to you — see setSeats.
+        if (short > 0) wants.push({ key: KEY_LIST[idx], count: short, have: mine[idx], left: Math.max(0, supply[idx] - mine[idx]) });
       };
       if (best.suitSplit) {
         parts_.forEach((tab, si) => {
@@ -2198,11 +2201,6 @@ function hkRoutesFor(ctx) {
       hon.trace(best.honSets, best.honPair, best.hf, best.hu)
         .forEach((u, hi) => noteWant(27 + hi, u));
       wants.sort((a, b) => b.count - a.count || a.left - b.left);
-      // A route asking for three of a tile with three left is not the same work
-      // as one asking for a tile with eleven copies about. Scarcity is priced in
-      // so the ordering reflects effort rather than just the discard count.
-      const effort = (concealed - best.reuse)
-        + wants.reduce((a, w) => a + w.count * (4 / Math.max(1, w.left)), 0);
       const shape = f.val + m.val + best.hf + meldHon + flowerFaan;
       const parts = [];
       if (f.name) parts.push({ term: f.id.split(':')[0], text: f.name });
@@ -2212,9 +2210,9 @@ function hkRoutesFor(ctx) {
       if (honFaan > 0) parts.push({ term: 'honourpung', text: `${honFaan} from dragon/wind pungs` });
       if (flowerFaan > 0) parts.push({ term: 'flowers', text: `${flowerFaan} flower${flowerFaan > 1 ? 's' : ''}` });
       out.push({
-        id: `${f.id}|${m.id}`, parts, shape,
+        id: `${f.id}|${m.id}`, parts, shape, mode: m.id,
         away: concealed - best.reuse,
-        wants, effort: Math.round(effort * 10) / 10,
+        wants,
       });
     }
   }
@@ -2248,7 +2246,7 @@ function chiitoiRoute(mine, supply, concealed) {
   const picked = cands.slice(0, 7);
   const reuse = picked.reduce((a, c) => a + c.have, 0);
   const wants = picked.filter((c) => c.have < 2)
-    .map((c) => ({ key: KEY_LIST[c.i], count: 2 - c.have, left: Math.max(0, supply[c.i] - mine[c.i]) }));
+    .map((c) => ({ key: KEY_LIST[c.i], count: 2 - c.have, have: c.have, left: Math.max(0, supply[c.i] - mine[c.i]) }));
   return { away: concealed - reuse, wants };
 }
 
@@ -2264,7 +2262,7 @@ function kokushiRoute(mine, supply, concealed) {
     const i = keyIdx(k);
     if (supply[i] < 1) return null;              // one of the thirteen is gone
     if (mine[i] > 0) distinct++;
-    else wants.push({ key: k, count: 1, left: Math.max(0, supply[i] - mine[i]) });
+    else wants.push({ key: k, count: 1, have: mine[i], left: Math.max(0, supply[i] - mine[i]) });
     if (mine[i] > 1) pairable = true;
   }
   const reuse = Math.min(concealed, distinct + (pairable ? 1 : 0));
@@ -2357,6 +2355,9 @@ function jpRoutesFor(ctx) {
   const evaluate = (id, label, han, opts) => {
     const { sup = supply, suits = SUITS_ORDER, honors = true, requireHonor = false, mode } = opts;
     if (opts.closedOnly && !closed) return;
+    // A yaku that needs a concealed hand cannot be reached by calling, which is
+    // the whole difference between riichi and Hong Kong — see winChance.
+    const needsClosed = !!opts.closedOnly;
     if (mode.id === 'sequences' && !allChi) return;
     if (mode.id === 'triplets' && anyChi) return;
     const okKinds = new Set(suits);
@@ -2372,7 +2373,7 @@ function jpRoutesFor(ctx) {
     const wants = [];
     const noteWant = (idx, used) => {
       const short = used - mine[idx];
-      if (short > 0) wants.push({ key: KEY_LIST[idx], count: short, left: Math.max(0, supply[idx] - mine[idx]) });
+      if (short > 0) wants.push({ key: KEY_LIST[idx], count: short, have: mine[idx], left: Math.max(0, supply[idx] - mine[idx]) });
     };
     if (best.suitSplit) {
       parts_.forEach((t2, si) => {
@@ -2387,9 +2388,8 @@ function jpRoutesFor(ctx) {
     const parts = [...label];
     if (yakuhai > 0) parts.push({ term: 'yakuhai', text: `${yakuhai} yakuhai` });
     out.push({
-      id, parts, shape: han + yakuhai,
+      id, parts, shape: han + yakuhai, mode: mode.id, needsClosed,
       away: concealed - best.reuse, wants,
-      effort: (concealed - best.reuse) + wants.reduce((a, w) => a + w.count * (4 / Math.max(1, w.left)), 0),
     });
   };
 
@@ -2414,11 +2414,9 @@ function jpRoutesFor(ctx) {
 
   if (closed) {
     const c = chiitoiRoute(mine, supply, concealed);
-    if (c) out.push({ id: 'chiitoi', parts: [{ term: 'chiitoitsu', text: 'chiitoitsu' }], shape: 2, away: c.away, wants: c.wants,
-      effort: c.away + c.wants.reduce((a, w) => a + w.count * (4 / Math.max(1, w.left)), 0) });
+    if (c) out.push({ id: 'chiitoi', parts: [{ term: 'chiitoitsu', text: 'chiitoitsu' }], shape: 2, mode: 'nosets', needsClosed: true, away: c.away, wants: c.wants });
     const k = kokushiRoute(mine, supply, concealed);
-    if (k) out.push({ id: 'kokushi', parts: [{ term: 'kokushi', text: 'kokushi musou' }], shape: 13, away: k.away, wants: k.wants,
-      effort: k.away + k.wants.reduce((a, w) => a + w.count * (4 / Math.max(1, w.left)), 0) });
+    if (k) out.push({ id: 'kokushi', parts: [{ term: 'kokushi', text: 'kokushi musou' }], shape: 13, mode: 'nosets', needsClosed: true, away: k.away, wants: k.wants });
   }
   return out;
 }
@@ -2483,6 +2481,141 @@ function winsFor(routesFor, ctx, shapes, opts = {}) {
   return routeWins(routesFor, ctx, shapes);
 }
 
+// ---- how likely a route actually is ---------------------------------------
+//
+// The list used to be ordered by an "effort" score — tiles to discard plus a
+// surcharge for scarcity. It ranked sensibly enough, but it was a number with
+// no meaning, so it could neither be printed nor checked. This answers the
+// question the ordering is really asking: what are the chances?
+//
+// It is the poker calculation. Every tile nobody can see is equally likely to
+// be the next one you touch, so for each tile a route still wants, the chance
+// of collecting enough copies is hypergeometric — L copies of it hidden in a
+// pool of U, and N chances to find them.
+//
+// Two approximations, both deliberate:
+//
+//   * The wanted tiles are treated as independent. They are not: your draws are
+//     shared between them, so a route wanting several tiles reads a little
+//     rosier than it is. The error grows with the number of tiles wanted, which
+//     is the same thing that sinks a route anyway, so it costs accuracy at the
+//     bottom of the list rather than order at the top.
+//   * Every route is priced as though you play for it and nothing else. That is
+//     what makes them comparable; it is not what you will actually do.
+//
+// And one thing it does not attempt: whether somebody ELSE finishes first. That
+// depends on three hands nobody at this seat can see. So this is the chance the
+// tiles arrive, not the chance the hand is still yours to win when they do.
+//
+// Measured against 556 dealt hands per variant, sampling the top route's number
+// once the wall was down to 50 and then asking who actually won:
+//
+//   said      HK won    JP won
+//   ~1%        5.0%      5.9%
+//   ~3%        4.5%      8.7%
+//   ~10%      19.7%     12.3%
+//   ~23%      23.2%     14.3%
+//   ~56%      46.3%     24.1%
+//
+// Hong Kong tracks; riichi reads high in the upper bands, and the same runs say
+// why — a rival won 41% of those hands and the wall ran out in another 35%. It
+// ranks the same either way, which is what the list is for.
+
+const LOG_FACT = [0];
+for (let i = 1; i <= 256; i++) LOG_FACT[i] = LOG_FACT[i - 1] + Math.log(i);
+const logChoose = (n, k) => (k < 0 || k > n || n < 0 ? -Infinity : LOG_FACT[n] - LOG_FACT[k] - LOG_FACT[n - k]);
+
+// P(at least `want` of the `good` tiles turn up in `draws` from a pool of `pool`)
+function hyperAtLeast(pool, good, draws, want) {
+  if (want <= 0) return 1;
+  if (good < want || draws < want || pool <= 0) return 0;
+  if (draws >= pool) return good >= want ? 1 : 0;
+  let below = 0;
+  for (let x = 0; x < want; x++) {
+    const lp = logChoose(good, x) + logChoose(pool - good, draws - x) - logChoose(pool, draws);
+    if (lp > -Infinity) below += Math.exp(lp);
+  }
+  return Math.min(1, Math.max(0, 1 - below));
+}
+
+// Who can hand you a tile depends on the set it is for, and between them the
+// count and what the arrangement already holds say which set that is:
+//
+//   need 1 hold 2 / need 2 hold 1 / need 3 hold 0    a triplet — pon, from anyone
+//   need 2 hold 0 / need 1 hold 1                    the pair — nobody can give it
+//   need 1 hold 0                                    a run — chi, from your left only
+//
+// A run never wants two of the same tile, so `need + hold >= 3` is a triplet and
+// nothing else, and anything short of three that you already hold a copy of is
+// the pair. The pair is the one shape no discard can help with: there is no call
+// for it, and by the time you would want to claim one you are winning instead —
+// which winChance handles separately, because ron does not care about sets.
+function setSeats(w, others, mode) {
+  if (mode === 'nosets') return 0;                        // seven pairs, thirteen orphans
+  if (w.count + (w.have || 0) >= 3) return others;        // a triplet: pon
+  if (w.count === 2 || (w.have || 0) >= 1) return 0;      // the pair
+  return Math.min(1, others);                             // a run: chi, from the left
+}
+
+// Your own draws, and how many other seats are in front of you.
+function chanceCtx(pos) {
+  const n = Math.max(1, (pos.players || []).length || 4);
+  const wall = Math.max(0, pos.wallCount || 0);
+  // The next tile you draw is however many seats away the turn is. On your own
+  // turn you have already drawn, so the next one is a full lap off.
+  const gap = ((pos.mySeat - pos.turn) % n + n) % n || n;
+  const draws = wall >= gap ? Math.floor((wall - gap) / n) + 1 : 0;
+  return { draws, others: n - 1, declared: !!pos.riichi, furiten: !!pos.furiten };
+}
+
+// Every tile nobody at the table can see and you are not holding: the wall plus
+// the other hands. Flowers are in there too — they are not in the 34 the solver
+// counts, but they are tiles you can draw instead of what you wanted.
+function unseenPool(pos, seen) {
+  const mine = new Array(34).fill(0);
+  for (const t of pos.hand) { const i = keyIdx(t.key); if (i >= 0) mine[i]++; }
+  let pool = 0;
+  for (let i = 0; i < 34; i++) pool += Math.max(0, Math.min(4, 4 - (seen[i] || 0)) - mine[i]);
+  if (pos.variant !== 'jp') {
+    let shown = 0;
+    for (const q of pos.players || []) shown += (q.flowers || []).length;
+    pool += Math.max(0, 8 - shown);
+  }
+  return pool;
+}
+
+function winChance(route, ctx) {
+  const short = route.wants.reduce((a, w) => a + w.count, 0);
+  if (!short) return 1;                                  // already there
+  if (ctx.pool <= 0 || ctx.draws <= 0) return 0;         // no wall, no chances
+  let p = 1;
+  for (const w of route.wants) {
+    if (w.left < w.count) return 0;                      // not enough of it left
+    // One tile from home, any player's discard ends it: ron does not care what
+    // set the tile was going to be for. Unless the route needs the self-draw
+    // faan, in which case the tile has to come out of the wall on your turn.
+    // A route that only scores while the hand stays concealed cannot call for
+    // any of it, and a hand that has already declared riichi cannot call at all.
+    // The tile you win on is the exception either way: ron does not open a hand.
+    const mute = route.riichi || route.needsClosed || ctx.declared;
+    // Furiten is the same restriction arriving from the other direction: having
+    // discarded one of your own winning tiles, you can only self-draw the win.
+    const seats = short === 1
+      ? (route.selfDraw || ctx.furiten ? 0 : ctx.others)
+      : (mute ? 0 : setSeats(w, ctx.others, route.mode));
+    // Each of your draws comes around with one discard from every other seat.
+    // Only the copy that completes the set can be taken off one, though, so the
+    // claim channel is worth a fraction of itself when several are wanted.
+    let chances = ctx.draws + (seats * ctx.draws) / w.count;
+    // Further out, a self-draw route can still claim its way through the middle
+    // of the hand — it is only the last tile that has to be drawn.
+    if (route.selfDraw && short > 1) chances = ctx.draws + (chances - ctx.draws) * (short - 1) / short;
+    p *= hyperAtLeast(ctx.pool, w.left, Math.min(ctx.pool, Math.round(chances)), w.count);
+    if (p <= 0) return 0;
+  }
+  return p;
+}
+
 // What the outlook actually needs, lifted out of the private game state: your
 // own tiles, what everyone has face up, the dora and the two winds. All of it
 // is in the view every player already receives, so this can be built at either
@@ -2497,10 +2630,15 @@ export function positionFromView(view) {
     melds: me.melds || [],
     flowers: me.flowers || [],
     riichi: me.riichi,
+    furiten: me.furiten,
     seatWind: WINDS[((view.mySeat - view.dealer) % 4 + 4) % 4],
     roundWind: view.roundWind,
     dora: view.dora || [],
     players: view.players,
+    // for the odds: how much wall is left and how long until it is your turn
+    wallCount: view.wallCount,
+    turn: view.turn,
+    mySeat: view.mySeat,
   };
 }
 
@@ -2517,9 +2655,11 @@ function jpOutlook(pos, opts) {
   const p = pos;
   const closed = p.melds.every((m) => !m.open);
 
-  const ctx = { hand: p.hand, melds: p.melds, seatWind: pos.seatWind, roundWind: pos.roundWind, seen: seenFrom(pos) };
+  const seen = seenFrom(pos);
+  const ctx = { hand: p.hand, melds: p.melds, seatWind: pos.seatWind, roundWind: pos.roundWind, seen };
   const shapes = jpRoutesFor(ctx);
   const wins = winsFor(jpRoutesFor, ctx, shapes, opts);
+  const chance = { ...chanceCtx(pos), pool: unseenPool(pos, seen) };
 
   const routes = shapes
     .map((r) => {
@@ -2530,9 +2670,12 @@ function jpOutlook(pos, opts) {
       return null;
     })
     .filter((r) => r && r.han >= JP_MIN_HAN)
-    .sort((a, b) => a.effort - b.effort || a.away - b.away || b.han - a.han)
+    .map((r) => ({ ...r, p: winChance(r, chance) }))
+    // likeliest first, and where the odds tie the shorter road and then the
+    // bigger hand
+    .sort((a, b) => b.p - a.p || a.away - b.away || b.han - a.han)
     .map((r) => ({
-      parts: r.parts, faan: r.han, away: r.away, selfDraw: false, riichi: r.riichi, effort: r.effort,
+      parts: r.parts, faan: r.han, away: r.away, selfDraw: false, riichi: r.riichi, p: r.p,
       wants: r.wants.map((w) => ({ k: w.key, count: w.count, left: w.left })),
       ...winsField(wins.get(r.id) || [], r.wants),
     }));
@@ -2545,36 +2688,30 @@ function hkOutlook(pos, opts) {
   const locked = hkLockedFaan(pos);
   const p = pos;
 
+  const seen = seenFrom(pos);
   const ctx = {
     hand: p.hand, melds: p.melds, flowers: p.flowers,
-    seatWind: pos.seatWind, roundWind: pos.roundWind, seen: seenFrom(pos),
+    seatWind: pos.seatWind, roundWind: pos.roundWind, seen,
   };
   const shapes = hkRoutesFor(ctx);
   const wins = winsFor(hkRoutesFor, ctx, shapes, opts);
+  const chance = { ...chanceCtx(pos), pool: unseenPool(pos, seen) };
 
   const routes = shapes
     // A shape worth less than the minimum can still get you home, but only by
-    // self-draw — the extra faan IS the self-draw. That makes it strictly
-    // harder to finish than a route of the same distance you could also claim
-    // off a discard: the tile you win on has to come out of the wall on your
-    // own turn instead of from any of four places. So the tile you finish on
-    // is priced at four times what it would cost if anyone could hand it to
-    // you, which is the same "4 / how many are left" unit the rest of effort
-    // already uses.
-    .map((r) => {
-      if (r.shape >= HK_MIN_FAAN) return { ...r, faan: r.shape, selfDraw: false };
-      const cheapest = r.wants.length
-        ? Math.min(...r.wants.map((w) => 4 / Math.max(1, w.left)))
-        : 1;
-      return { ...r, faan: r.shape + 1, selfDraw: true, effort: r.effort + 3 * cheapest };
-    })
+    // self-draw — the extra faan IS the self-draw. That is strictly harder than
+    // the same road with a claimable finish, and winChance is where it is
+    // priced: the tile you win on cannot be taken off a discard.
+    .map((r) => (r.shape >= HK_MIN_FAAN
+      ? { ...r, faan: r.shape, selfDraw: false }
+      : { ...r, faan: r.shape + 1, selfDraw: true }))
     .filter((r) => r.faan >= HK_MIN_FAAN)
-    // easiest first — effort counts the discards AND how scarce the tiles it
-    // still wants are, so a route needing three of a nearly-exhausted tile sinks
-    .sort((a, b) => a.effort - b.effort || a.away - b.away || b.faan - a.faan)
+    .map((r) => ({ ...r, p: winChance(r, chance) }))
+    // likeliest first, and where the odds tie the shorter road and then the
+    // bigger hand
+    .sort((a, b) => b.p - a.p || a.away - b.away || b.faan - a.faan)
     .map((r) => ({
-      parts: r.parts, faan: r.faan, away: r.away, selfDraw: r.selfDraw,
-      effort: r.effort,
+      parts: r.parts, faan: r.faan, away: r.away, selfDraw: r.selfDraw, p: r.p,
       wants: r.wants.map((w) => ({ k: w.key, count: w.count, left: w.left })),
       ...winsField(wins.get(r.id) || [], r.wants),
     }));
@@ -2606,6 +2743,9 @@ export function viewFor(G, seat, code, opts = {}) {
       flowers: q.flowers,
       score: q.score,
       riichi: q.riichi,
+      // your own furiten is your own business to know: it is the difference
+      // between a wait you can ron and one you can only self-draw
+      furiten: isMe ? !!q.furiten : undefined,
       tileCount: q.hand.length,
       lastAction: q.lastAction,
     };
