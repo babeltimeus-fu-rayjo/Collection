@@ -1240,10 +1240,7 @@ function renderGame(view, sess) {
 
   // my zone
   const me = view.players.find((q) => q.seat === my);
-  const myTurn = my === view.turn && view.phase !== 'over';
-  $('#my-zone').classList.toggle('active-turn', myTurn);
-  // your whole area warms up on your turn, not just the quadrant
-  $('#screen-game').classList.toggle('my-turn', myTurn);
+  $('#my-zone').classList.toggle('active-turn', my === view.turn && view.phase !== 'over');
   const nameEl = $('#my-name');
   nameEl.replaceChildren();
   if (me) { nameEl.append(el('span', '', me.name), el('span', 'you-chip', 'YOU')); }
