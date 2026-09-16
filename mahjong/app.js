@@ -37,6 +37,7 @@ import '../common/version.js';
 
 const cfg = initSettings('mjg', [
   { key: 'stepBots', label: 'Step bots (click to continue)', def: false, bool: true, section: 'Testing', host: true, hint: 'Bots stop before every action and wait for you to click the table. Use it to watch one move at a time and judge whether they are playing well. Your own hand and the action buttons still work normally — click the felt, not a tile, to let the next bot go.' },
+  { key: 'dimOthers', label: 'Hover dims the rest', def: true, bool: true, section: 'Table', hint: 'Hovering a tile fades every tile that is not a copy of it, instead of only ringing the copies. Much easier to pick a tile out of a full pond.' },
   { key: 'revealBots', label: "Reveal bots' hands", def: false, bool: true, section: 'Testing', host: true, hint: 'Turn the bots\' concealed tiles face up while the hand is still being played, so you can see what they are holding. Only the host builds views, so this reveals them to everyone at the table.' },
   { key: 'botDelay', label: 'Bot thinking delay', def: [1200, 800], section: 'Host pacing', host: true },
   { key: 'claimTimeout', label: 'Claim timeout (0 = off)', def: 0, section: 'Host pacing', host: true, hint: 'Auto-pass a player who hasn\'t responded to a claim after this long. 0 waits indefinitely (the default).' },
@@ -285,12 +286,48 @@ function setMatch(key) {
   if (key === matchKey && (!key || document.querySelector('.tile.match'))) return;
   matchKey = key;
   for (const n of document.querySelectorAll('.tile.match')) n.classList.remove('match');
-  if (!key) return;
-  const esc = (window.CSS && CSS.escape) ? CSS.escape(key) : key;
+  // Ringing the copies barely registers: a 2px outline on a 36px tile, in the
+  // same warm hue as the tile faces and the turn halo. Fading everything ELSE
+  // is the signal that actually carries — the matches do not change, the field
+  // recedes around them.
+  const dim = cfg.on('dimOthers');
   for (const root of ['#table', '#hand']) {
     const r = $(root);
-    if (r) for (const n of r.querySelectorAll(`.tile[data-key="${esc}"]`)) n.classList.add('match');
+    if (r) r.classList.toggle('dimmed', !!key && dim);
   }
+  if (!key) { paintMatchCount(null, 0); return; }
+
+  const esc = (window.CSS && CSS.escape) ? CSS.escape(key) : key;
+  let seen = 0;
+  for (const root of ['#table', '#hand']) {
+    const r = $(root);
+    if (!r) continue;
+    for (const n of r.querySelectorAll(`.tile[data-key="${esc}"]`)) {
+      n.classList.add('match');
+      // A revealed bot hand is a testing convenience, not something the table
+      // can see, so it lights up but is not counted as accounted for.
+      if (!n.closest('.seat-hand')) seen += 1;
+    }
+  }
+  paintMatchCount(key, seen);
+}
+
+// What you are really asking when you hover a tile is how many are left, so
+// answer that instead of making anyone count outlines. Only face-up tiles carry
+// a key, so this is the same arithmetic a player at a real table can do.
+function paintMatchCount(key, seen) {
+  const box = $('#match-info');
+  if (!box) return;
+  if (!key) { box.classList.add('quiet'); return; }
+  const total = key[0] === 'f' ? 1 : 4;       // one of each flower, four of everything else
+  const left = Math.max(0, total - seen);
+  box.replaceChildren();
+  box.append(el('span', 'mi-name', tileName({ key, ...keyParts(key) })));
+  const line = el('span', 'mi-left');
+  if (left === 0) line.append(el('span', 'gone', 'none left'));
+  else line.append(el('span', '', `${left} of ${total} left`));
+  box.append(line);
+  box.classList.remove('quiet');
 }
 document.addEventListener('pointerover', (e) => {
   const t = e.target && e.target.closest ? e.target.closest('.tile[data-key]') : null;
@@ -1190,7 +1227,9 @@ function renderGame(view, sess) {
   // my zone
   const me = view.players.find((q) => q.seat === my);
   $('#my-zone').classList.toggle('active-turn', my === view.turn && view.phase !== 'over');
-  $('#my-name').textContent = me ? me.name : '';
+  const nameEl = $('#my-name');
+  nameEl.replaceChildren();
+  if (me) { nameEl.append(el('span', '', me.name), el('span', 'you-chip', 'YOU')); }
   const myWind = WINDS[(my - view.dealer + 4) % 4];
   const myWindEl = $('#my-wind');
   myWindEl.textContent = myWind;

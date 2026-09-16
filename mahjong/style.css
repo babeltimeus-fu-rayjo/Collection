@@ -115,6 +115,21 @@ body {
    outset glow paints outside the box without occupying any, so it can only look
    right if the neighbours leave it room, and that room comes out of the tiles'
    budget. Inset, it costs nothing and can never bleed into the seat next door. */
+/* Which quadrant is yours was carrying no signal at all: #my-zone and the
+   opponents' seats computed to identical styles, so the only thing marking your
+   own side was the gold halo — which means "your turn", not "yours". Two
+   different questions were sharing one answer. So: yours is a SURFACE (always
+   on, below) and active is a RING (gold, on top). Drawn as an outline with a
+   negative offset so it costs no layout, which a border would. */
+#my-zone {
+  background: rgba(255,255,255,.065);
+  outline: 1px solid rgba(255,255,255,.16);
+  outline-offset: -1px;
+}
+/* your concealed hand is made of the same material, so your tiles read as one
+   region rather than two unrelated areas */
+#hand { background: rgba(255,255,255,.065); border-radius: 12px 12px 0 0; }
+
 .seat.active-turn, #my-zone.active-turn {
   box-shadow: inset 0 0 0 2px rgba(232,213,163,.9), inset 0 0 16px 2px rgba(232,213,163,.35);
   background: rgba(232,213,163,.08);
@@ -352,9 +367,22 @@ body {
 .tile.highlight { outline: 2px solid #4db87a; }
 .tile.last-draw { outline: 2px solid #e8d5a3; }
 .tile.riichi-mark { box-shadow: inset 0 calc(-3 * var(--u)) 0 #cc2222, 0 1px 2px rgba(0,0,0,.3); }
-/* every copy of the tile under the pointer, wherever it is face up */
-.tile.match { outline: 2px solid #f0a63c; z-index: 2;
-  box-shadow: 0 0 0 3px rgba(240,166,60,.3), 0 1px 2px rgba(0,0,0,.3); }
+/* Every copy of the tile under the pointer, wherever it is face up.
+   The ring is white with a dark halo rather than the old amber: amber was the
+   same hue as the tile faces, the felt's gold accents and the turn halo, so it
+   was the least visible mark available. White appears nowhere else as an edge,
+   and the dark halo is what separates it from a cream tile. */
+.tile.match { outline: 2px solid rgba(255,255,255,.95); z-index: 3;
+  box-shadow: 0 0 0 4px rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.45); }
+/* lift the small board tiles clear of their neighbours — depth reads faster
+   than colour. Not the hand, where .selected already owns the transform. */
+#table .tile.match { transform: translateY(-2px); }
+
+/* …and fade the rest of the board while a tile is being inspected. This is the
+   half that actually works: the matches are untouched and simply become the
+   only bright thing left. */
+#table.dimmed .tile, #hand.dimmed .tile { opacity: .28; transition: opacity .12s; }
+#table.dimmed .tile.match, #hand.dimmed .tile.match { opacity: 1; }
 
 /* hand tiles — sized by --ts-hand */
 #hand {
@@ -676,3 +704,21 @@ body {
   #table { gap: 5px 6px; padding: var(--bubble-reserve) 4px 0; }
   .seat-name { max-width: 78px; font-size: 11px; }
 }
+
+/* the seat that is yours says so */
+#my-name { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; color: #f4e6bf; }
+.you-chip { background: rgba(255,255,255,.16); color: #fff; font-weight: 800;
+            font-size: 10px; letter-spacing: .06em; padding: 1px 6px; border-radius: 4px; }
+
+/* What the hovered tile is and how many are unaccounted for. The slot is
+   reserved whether or not anything is in it — same as the wall and stick lines
+   above — because a readout that appears on hover would push the centre column
+   around under the pointer, and nothing here should move except on a resize. */
+#match-info { min-height: 2.5em; display: flex; flex-direction: column; align-items: center;
+  font-size: 11px; color: #8ab89a; line-height: 1.25; }
+/* NOT .hidden — that utility is display:none !important, which would
+   collapse the slot and shift the column under the pointer */
+#match-info.quiet { visibility: hidden; }
+#match-info .mi-name { color: #fff; font-weight: 700; white-space: nowrap; }
+#match-info .mi-left { white-space: nowrap; }
+#match-info .gone { color: #e08a6a; font-weight: 600; }
