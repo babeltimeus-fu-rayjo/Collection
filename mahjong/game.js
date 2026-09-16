@@ -2769,15 +2769,31 @@ function hkOutlook(pos, opts) {
   // two flowers, which leaves the finish claimable off anyone's discard. Both
   // are real hands and both used to be filtered out as unreachable.
   const petalsLeft = flowersOut(pos);
+  const banked = (p.flowers || []).length;
+  // A route's name says what the finished hand is worth, which is why the
+  // self-draw appears in it. Flowers have to do the same: a row that names the
+  // two you are holding while quietly taking a third from the needs column
+  // reads as two flowers adding up to three faan. Name the total.
+  const nameFlowers = (r, need) => {
+    if (!need) return r.parts;
+    const total = banked + need;
+    return [
+      ...r.parts.filter((x) => x.term !== 'flowers'),
+      { term: 'flowers', text: `${total} flower${total > 1 ? 's' : ''}` },
+    ];
+  };
+  const lift = (r, sd, need) => ({
+    ...r, faan: HK_MIN_FAAN, selfDraw: sd, flowersNeeded: need, parts: nameFlowers(r, need),
+  });
   const ranked = shapes
     .flatMap((r) => {
       const gap = HK_MIN_FAAN - r.shape;
       if (gap <= 0) return [{ ...r, faan: r.shape, selfDraw: false, flowersNeeded: 0 }];
       const lifted = [];
       // the self-draw covers a faan, flowers cover the rest
-      if (gap - 1 <= petalsLeft) lifted.push({ ...r, faan: HK_MIN_FAAN, selfDraw: true, flowersNeeded: gap - 1 });
+      if (gap - 1 <= petalsLeft) lifted.push(lift(r, true, gap - 1));
       // or flowers cover all of it, and then anyone can throw you the last tile
-      if (gap <= petalsLeft && gap <= MAX_PETAL_LIFT) lifted.push({ ...r, faan: HK_MIN_FAAN, selfDraw: false, flowersNeeded: gap });
+      if (gap <= petalsLeft && gap <= MAX_PETAL_LIFT) lifted.push(lift(r, false, gap));
       return lifted;
     })
     .filter((r) => r.faan >= HK_MIN_FAAN && (r.flowersNeeded || 0) <= MAX_PETAL_LIFT)
