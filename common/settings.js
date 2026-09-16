@@ -32,21 +32,6 @@ const SPEED = {
   hint: 'One knob to rule them: multiplies every delay below.',
 };
 
-// Every game in the collection has exactly one .topbar, at the top of the game
-// screen, with its own buttons pushed to the right by a .spacer. That is where
-// a utility button belongs: in the row of buttons, not floating over a corner
-// of the board where it collides with whatever the game puts there. Games
-// without a top bar keep the floating corner.
-export function dock(btn) {
-  const bar = document.querySelector('.topbar');
-  if (bar) {
-    bar.append(btn);
-    document.body.classList.add('cfg-docked');
-  } else {
-    document.body.append(btn);
-  }
-}
-
 export function initSettings(stem, defs) {
   const all = [SPEED, ...defs];
   const byKey = new Map(all.map((d) => [d.key, d]));
@@ -105,18 +90,19 @@ export function initSettings(stem, defs) {
 
   // ------------------------------------------------------------------ ui
   const css = `
-#cfg-gear { position: fixed; left: 12px; bottom: 12px; z-index: 95; width: 36px; height: 36px;
+#cfg-gear { position: fixed; right: 12px; top: 12px; z-index: 95; width: 36px; height: 36px;
   border-radius: 50%; border: 1px solid rgba(255,255,255,.22); background: rgba(16,19,28,.82);
   color: #dfe6f2; font-size: 17px; line-height: 1; cursor: pointer; opacity: .5;
   transition: opacity .15s, transform .15s; padding: 0; }
 #cfg-gear:hover { opacity: 1; transform: rotate(25deg); }
 #cfg-gear.mod { opacity: .95; border-color: #e0b34e; color: #e0b34e; }
-/* Docked into the game's own top bar when there is one — see dock() below. It
-   stops floating, shrinks to the bar's height, and the drawer drops from the
-   top right underneath it instead of rising from the bottom left. */
-.topbar #cfg-gear { position: static; width: 26px; height: 26px; font-size: 14px; opacity: .65; flex: 0 0 auto; }
-body.cfg-docked #cfg-drawer { top: 56px; bottom: auto; left: auto; right: 12px; }
-#cfg-drawer { position: fixed; left: 12px; bottom: 56px; z-index: 96; width: min(352px, calc(100vw - 24px));
+/* Every game caps its content width, so on a normal window the top bar stops
+   well short of this corner. On a narrow one it does not — and its own buttons
+   are pushed to the right, exactly where these now sit. So reserve the room
+   there, and only there. This rule is injected at runtime, which puts it after
+   the game's stylesheet and lets it win at equal specificity. */
+@media (max-width: 900px) { .topbar { padding-right: 100px; } }
+#cfg-drawer { position: fixed; right: 12px; top: 56px; z-index: 96; width: min(352px, calc(100vw - 24px));
   max-height: min(74vh, 640px); overflow-y: auto; overscroll-behavior: contain; border-radius: 14px;
   background: rgba(14,17,25,.97); border: 1px solid rgba(255,255,255,.16);
   box-shadow: 0 14px 44px rgba(0,0,0,.5); color: #dfe6f2; font-size: 13px;
@@ -153,7 +139,6 @@ body.cfg-docked #cfg-drawer { top: 56px; bottom: auto; left: auto; right: 12px; 
   }
 
   let drawer = null;
-  let gear = null;
 
   function numInput(d, get, set, idx) {
     const inp = document.createElement('input');
@@ -297,24 +282,17 @@ body.cfg-docked #cfg-drawer { top: 56px; bottom: auto; left: auto; right: 12px; 
   function openDrawer() {
     if (!drawer) buildDrawer();
     else drawer.classList.toggle('hidden');
-    // Docked, the drawer hangs off the gear rather than off a guessed offset:
-    // top bars run from 39px to 59px tall across the collection, and picking
-    // one number for all of them leaves a gap in some games and an overlap in
-    // others.
-    if (drawer && gear.closest('.topbar')) {
-      drawer.style.top = `${Math.round(gear.getBoundingClientRect().bottom) + 8}px`;
-    }
   }
 
   ensureStyle();
-  gear = document.createElement('button');
+  const gear = document.createElement('button');
   gear.id = 'cfg-gear';
   gear.type = 'button';
   gear.title = 'Testing & pacing settings';
   gear.textContent = '⚙';
   gear.classList.toggle('mod', all.some((x) => isMod(x.key)));
   gear.addEventListener('click', openDrawer);
-  dock(gear);
+  document.body.append(gear);
 
   return cfg;
 }

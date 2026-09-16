@@ -3,11 +3,12 @@
 //
 //   import '../common/feedtoggle.js';
 //
-// It adds a small 📜 button next to the ⚙ settings gear — in the game's own top
-// bar where there is one, otherwise floating in the bottom-left corner.
-// Clicking it hides/shows the log; the choice persists per game, per browser.
-// The log itself is re-rendered by each game into #feed, so the toggle only
-// flips a body class (never touches #feed's contents).
+// It adds a small 📜 button next to the ⚙ settings gear, in the top-right corner
+// — which is also where every game in the collection puts #feed itself, so the
+// button sits directly above the panel it opens. Clicking it hides/shows the
+// log; the choice persists per game, per browser. The log itself is re-rendered
+// by each game into #feed, so the toggle only flips a body class (never touches
+// #feed's contents).
 
 (function () {
   function init() {
@@ -23,14 +24,12 @@
     const style = document.createElement('style');
     style.id = 'feed-toggle-style';
     style.textContent = `
-      #feed-toggle { position: fixed; left: 54px; bottom: 12px; z-index: 95; width: 36px; height: 36px;
+      #feed-toggle { position: fixed; right: 54px; top: 12px; z-index: 95; width: 36px; height: 36px;
         border-radius: 50%; border: 1px solid rgba(255,255,255,.22); background: rgba(16,19,28,.82);
         color: #dfe6f2; font-size: 16px; line-height: 1; cursor: pointer; opacity: .5; padding: 0;
         transition: opacity .15s; }
       #feed-toggle:hover { opacity: 1; }
       #feed-toggle.off { opacity: .95; border-color: #e0b34e; color: #e0b34e; }
-      /* docked into the game's top bar, beside the gear */
-      .topbar #feed-toggle { position: static; width: 26px; height: 26px; font-size: 13px; opacity: .65; flex: 0 0 auto; }
       body.feed-hidden #feed { display: none !important; }
     `;
     document.head.append(style);
@@ -52,13 +51,7 @@
       try { localStorage.setItem(key, hidden ? '1' : '0'); } catch {}
       apply();
     });
-    // beside the gear, which settings.js has already put in the top bar if the
-    // game has one — so this goes to the same place, immediately before it
-    const bar = document.querySelector('.topbar');
-    const gear = document.getElementById('cfg-gear');
-    if (bar && gear && gear.parentElement === bar) bar.insertBefore(btn, gear);
-    else if (bar) bar.append(btn);
-    else document.body.append(btn);
+    document.body.append(btn);
     apply();
   }
 

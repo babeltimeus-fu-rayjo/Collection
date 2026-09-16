@@ -58,7 +58,10 @@ body {
    grow taller than the viewport at big tile sizes — the page then scrolls
    instead of clipping the hand off the bottom */
 #screen-game { padding: 0; display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
-.topbar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: #0a2a1a; border-bottom: 1px solid #1a4a32; min-height: 40px; font-size: 13px; flex-shrink: 0; position: relative; z-index: 70; }
+/* wraps like every other game's: on a phone the row cannot hold the code, four
+   buttons AND the corner buttons' reserved space, and without this the buttons
+   spill out of the bar rather than moving down a line */
+.topbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 12px; background: #0a2a1a; border-bottom: 1px solid #1a4a32; min-height: 40px; font-size: 13px; flex-shrink: 0; position: relative; z-index: 70; }
 .topbar span { color: #8ab89a; }
 .spacer { flex: 1; }
 #room-chip { font-weight: 700; color: #e8d5a3 !important; letter-spacing: 2px; }
@@ -593,7 +596,7 @@ body {
    bottom-right corner, and without them the last column of whichever row
    happened to be there ran underneath it. Symmetric, so the table reads as
    centred rather than shoved left. */
-#ways-panel { width: 100%; margin: 6px auto 0; padding: 0 clamp(16px, 5vw, 76px) 28px; text-align: left; }
+#ways-panel { width: 100%; margin: 6px auto 0; padding: 0 clamp(32px, 10vw, 152px) 28px; text-align: left; }
 #ways-body { display: flex; flex-direction: column; gap: 2px; }
 .ways-row {
   display: grid; grid-template-columns: 64px minmax(150px, 1fr) minmax(200px, 2fr);
