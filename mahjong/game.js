@@ -2087,10 +2087,26 @@ function convolveSuits(tables) {
   return { table: cur, splits };
 }
 
-// best reuse for a whole shape, plus the honour faan and the arrangement that
-// produced it — the arrangement is what the trace functions turn into "needs"
-function shapeBest(suits, honorPart, need, requireHonor) {
-  let best = { reuse: NEG, hf: 0, suitSplit: null, honSets: 0, honPair: 0, hu: 0 };
+// Every arrangement of a shape worth showing, with the honour faan and the
+// arrangement that produced it — the arrangement is what the trace functions
+// turn into "needs".
+//
+// There is more than one, and that used to be lost. Within a single
+// (flush × set-mode) cell the honour pungs are a CHOICE: chasing a second
+// dragon costs you a tile and buys you a faan, and which of those you want
+// depends on how much faan you still need. Reporting only the max-reuse
+// arrangement hid every other side of that trade — and they are different
+// WAITS, not just different prices. A hand holding a dragon pair and an East
+// pair, one tile from home, wins on the East (a pung worth two) or on the
+// dragon (worth one, so self-draw only). Two tiles, two hands, and only the
+// first was ever mentioned.
+//
+// So every honour-faan level a shape can reach gets its own entry, at the
+// closest arrangement that reaches it. No pruning here: whether one entry
+// makes another pointless depends on the minimum, on flowers, and on the
+// self-draw faan, none of which this function knows about.
+function shapeBests(suits, honorPart, need, requireHonor) {
+  const byHf = [];
   for (let s = 0; s <= need; s++) for (let p = 0; p < 2; p++) {
     const a = suits.table[s][p];
     if (a <= NEG / 2) continue;
@@ -2100,13 +2116,12 @@ function shapeBest(suits, honorPart, need, requireHonor) {
       const b = honorPart[s2][p2][hf][hu];
       if (b <= NEG / 2) continue;
       const reuse = a + b;
-      // more reuse first (closer), then more honour faan at the same distance
-      if (reuse > best.reuse || (reuse === best.reuse && hf > best.hf)) {
-        best = { reuse, hf, suitSplit: suits.splits[s][p], honSets: s2, honPair: p2, hu };
+      if (!byHf[hf] || reuse > byHf[hf].reuse) {
+        byHf[hf] = { reuse, hf, suitSplit: suits.splits[s][p], honSets: s2, honPair: p2, hu };
       }
     }
   }
-  return best;
+  return byHf.filter(Boolean).reverse();
 }
 
 const SET_MODES = [
@@ -2179,41 +2194,43 @@ function hkRoutesFor(ctx) {
       if (m.id === 'triplets' && anyChiMeld) continue;
       const parts_ = SUITS_ORDER.map((s) => (f.suits.includes(s) ? suitTab[`${s}:${m.id}`] : ZERO_TRACE));
       const hon = f.honors ? honTab[m.id] : { table: ZERO_HONOR, trace: () => new Array(HONORS_ORDER.length).fill(0) };
-      const best = shapeBest(convolveSuits(parts_.map((x) => x.table)), hon.table, need, f.requireHonor);
-      if (best.reuse <= NEG / 2) continue;
+      const cell = convolveSuits(parts_.map((x) => x.table));
+      for (const best of shapeBests(cell, hon.table, need, f.requireHonor)) {
+        if (best.reuse <= NEG / 2) continue;
 
-      // what the arrangement actually asks for, beyond what is already held
-      const wants = [];
-      const noteWant = (idx, used) => {
-        const short = used - mine[idx];
-        // `have` is what the arrangement already has of this tile. With `count`
-        // it says which SET the tile is for, and that decides who can hand it
-        // to you — see setSeats.
-        if (short > 0) wants.push({ key: KEY_LIST[idx], count: short, have: mine[idx], left: Math.max(0, supply[idx] - mine[idx]) });
-      };
-      if (best.suitSplit) {
-        parts_.forEach((tab, si) => {
-          const [ss, sp] = best.suitSplit[si] || [0, 0];
-          const used = tab.trace(ss, sp);
-          used.forEach((u, vi) => noteWant(SUIT_BASE[SUITS_ORDER[si]] + vi, u));
+        // what the arrangement actually asks for, beyond what is already held
+        const wants = [];
+        const noteWant = (idx, used) => {
+          const short = used - mine[idx];
+          // `have` is what the arrangement already has of this tile. With
+          // `count` it says which SET the tile is for, and that decides who can
+          // hand it to you — see setSeats.
+          if (short > 0) wants.push({ key: KEY_LIST[idx], count: short, have: mine[idx], left: Math.max(0, supply[idx] - mine[idx]) });
+        };
+        if (best.suitSplit) {
+          parts_.forEach((tab, si) => {
+            const [ss, sp] = best.suitSplit[si] || [0, 0];
+            const used = tab.trace(ss, sp);
+            used.forEach((u, vi) => noteWant(SUIT_BASE[SUITS_ORDER[si]] + vi, u));
+          });
+        }
+        hon.trace(best.honSets, best.honPair, best.hf, best.hu)
+          .forEach((u, hi) => noteWant(27 + hi, u));
+        wants.sort((a, b) => b.count - a.count || a.left - b.left);
+        const shape = f.val + m.val + best.hf + meldHon + flowerFaan;
+        const parts = [];
+        if (f.name) parts.push({ term: f.id.split(':')[0], text: f.name });
+        if (m.name) parts.push({ term: m.id, text: m.name });
+        // faan, not pungs: an East pung in the East round is worth two on its own
+        const honFaan = best.hf + meldHon;
+        if (honFaan > 0) parts.push({ term: 'honourpung', text: `${honFaan} from dragon/wind pungs` });
+        if (flowerFaan > 0) parts.push({ term: 'flowers', text: `${flowerFaan} flower${flowerFaan > 1 ? 's' : ''}` });
+        out.push({
+          id: `${f.id}|${m.id}|${best.hf}`, parts, shape, mode: m.id,
+          away: concealed - best.reuse,
+          wants,
         });
       }
-      hon.trace(best.honSets, best.honPair, best.hf, best.hu)
-        .forEach((u, hi) => noteWant(27 + hi, u));
-      wants.sort((a, b) => b.count - a.count || a.left - b.left);
-      const shape = f.val + m.val + best.hf + meldHon + flowerFaan;
-      const parts = [];
-      if (f.name) parts.push({ term: f.id.split(':')[0], text: f.name });
-      if (m.name) parts.push({ term: m.id, text: m.name });
-      // faan, not pungs: an East pung in the East round is worth two on its own
-      const honFaan = best.hf + meldHon;
-      if (honFaan > 0) parts.push({ term: 'honourpung', text: `${honFaan} from dragon/wind pungs` });
-      if (flowerFaan > 0) parts.push({ term: 'flowers', text: `${flowerFaan} flower${flowerFaan > 1 ? 's' : ''}` });
-      out.push({
-        id: `${f.id}|${m.id}`, parts, shape, mode: m.id,
-        away: concealed - best.reuse,
-        wants,
-      });
     }
   }
   return out;
@@ -2367,41 +2384,41 @@ function jpRoutesFor(ctx) {
       ? tab(sup, x, mode)
       : { table: ZERO_SUIT, trace: () => new Array(9).fill(0) }));
     const hon = honors ? honTab(sup, mode) : { table: ZERO_HONOR, trace: () => new Array(HONORS_ORDER.length).fill(0) };
-    const best = shapeBest(convolveSuits(parts_.map((x) => x.table)), hon.table, need, requireHonor);
-    if (best.reuse <= NEG / 2) return;
+    const cell = convolveSuits(parts_.map((x) => x.table));
+    for (const best of shapeBests(cell, hon.table, need, requireHonor)) {
+      if (best.reuse <= NEG / 2) continue;
 
-    const wants = [];
-    const noteWant = (idx, used) => {
-      const short = used - mine[idx];
-      if (short > 0) wants.push({ key: KEY_LIST[idx], count: short, have: mine[idx], left: Math.max(0, supply[idx] - mine[idx]) });
-    };
-    if (best.suitSplit) {
-      parts_.forEach((t2, si) => {
-        const [ss, sp] = best.suitSplit[si] || [0, 0];
-        t2.trace(ss, sp).forEach((u, vi) => noteWant(SUIT_BASE[SUITS_ORDER[si]] + vi, u));
+      const wants = [];
+      const noteWant = (idx, used) => {
+        const short = used - mine[idx];
+        if (short > 0) wants.push({ key: KEY_LIST[idx], count: short, have: mine[idx], left: Math.max(0, supply[idx] - mine[idx]) });
+      };
+      if (best.suitSplit) {
+        parts_.forEach((t2, si) => {
+          const [ss, sp] = best.suitSplit[si] || [0, 0];
+          t2.trace(ss, sp).forEach((u, vi) => noteWant(SUIT_BASE[SUITS_ORDER[si]] + vi, u));
+        });
+      }
+      hon.trace(best.honSets, best.honPair, best.hf, best.hu).forEach((u, hi) => noteWant(27 + hi, u));
+      wants.sort((a, b) => b.count - a.count || a.left - b.left);
+
+      const yakuhai = best.hf + meldHon;
+      const parts = [...label];
+      if (yakuhai > 0) parts.push({ term: 'yakuhai', text: `${yakuhai} yakuhai` });
+      out.push({
+        id: `${id}|${best.hf}`, parts, shape: han + yakuhai, mode: mode.id, needsClosed,
+        away: concealed - best.reuse, wants,
       });
     }
-    hon.trace(best.honSets, best.honPair, best.hf, best.hu).forEach((u, hi) => noteWant(27 + hi, u));
-    wants.sort((a, b) => b.count - a.count || a.left - b.left);
-
-    const yakuhai = best.hf + meldHon;
-    const parts = [...label];
-    if (yakuhai > 0) parts.push({ term: 'yakuhai', text: `${yakuhai} yakuhai` });
-    out.push({
-      id, parts, shape: han + yakuhai, mode: mode.id, needsClosed,
-      away: concealed - best.reuse, wants,
-    });
   };
 
   const FREE = SET_MODES[0], SEQ = SET_MODES[1], TRIP = SET_MODES[2];
-  // The plain hand: worth nothing on its own. It usually comes back carrying a
-  // yakuhai or two, since the solver prefers the better arrangement at the same
-  // distance — so keep a bare copy as well. For a concealed hand that copy
-  // becomes "riichi", which is the one line a beginner most needs to read:
-  // reach tenpai, declare, and the declaration IS the yaku.
+  // The plain hand: worth nothing on its own, which for a concealed hand is the
+  // one line a beginner most needs to read — reach tenpai, declare, and the
+  // declaration IS the yaku. shapeBests hands that back on its own now: its
+  // zero-yakuhai entry is this shape priced without the honour pungs, at the
+  // closest arrangement that does not chase them.
   evaluate('any', [], 0, { mode: FREE });
-  const plain = out.find((r) => r.id === 'any');
-  if (plain && plain.parts.length) out.push({ ...plain, id: 'plain', parts: [], shape: 0 });
   evaluate('tanyao', [{ term: 'tanyao', text: 'tanyao' }], 1, { mode: FREE, sup: simples, honors: false });
   evaluate('pinfu', [{ term: 'pinfu', text: 'pinfu' }], 1, { mode: SEQ, closedOnly: true });
   evaluate('toitoi', [{ term: 'toitoi', text: 'toitoi' }], 2, { mode: TRIP });
@@ -2447,6 +2464,24 @@ function routeWins(routesFor, ctx, base) {
     }
   }
   return wins;
+}
+
+// Two cells can describe the same hand in the same words — "full flush in man
+// + all triplets" falls out of both the honours-allowed and honours-barred
+// passes — and with every honour level enumerated there are more of these than
+// before. If two rows would render identically they are one row.
+function dedupeRoutes(routes) {
+  const seen = new Set();
+  return routes.filter((r) => {
+    const k = [
+      r.faan, r.away, r.selfDraw ? 'sd' : '', r.riichi ? 'r' : '',
+      r.parts.map((x) => x.text).join('+'),
+      r.wants.map((w) => `${w.key}:${w.count}`).sort().join(','),
+    ].join('|');
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
 }
 
 // Only what the panel is actually going to print: the tiles when it will name
@@ -2661,7 +2696,7 @@ function jpOutlook(pos, opts) {
   const wins = winsFor(jpRoutesFor, ctx, shapes, opts);
   const chance = { ...chanceCtx(pos), pool: unseenPool(pos, seen) };
 
-  const routes = shapes
+  const ranked = shapes
     .map((r) => {
       // A concealed hand can always declare riichi, which IS the yaku — so a
       // shape worth nothing still gets you home as long as you stay closed.
@@ -2675,7 +2710,9 @@ function jpOutlook(pos, opts) {
     // odds still decide within a rank but no longer decide the ranking: sorting
     // by them alone put a 3-han shape above a 13-han one it was a hair more
     // likely than, which reads as noise rather than as advice.
-    .sort((a, b) => a.han - b.han || b.p - a.p || a.away - b.away)
+    .sort((a, b) => a.han - b.han || b.p - a.p || a.away - b.away);
+
+  const routes = dedupeRoutes(ranked)
     .map((r) => ({
       parts: r.parts, faan: r.han, away: r.away, selfDraw: false, riichi: r.riichi, p: r.p,
       wants: r.wants.map((w) => ({ k: w.key, count: w.count, left: w.left })),
@@ -2699,7 +2736,7 @@ function hkOutlook(pos, opts) {
   const wins = winsFor(hkRoutesFor, ctx, shapes, opts);
   const chance = { ...chanceCtx(pos), pool: unseenPool(pos, seen) };
 
-  const routes = shapes
+  const ranked = shapes
     // A shape worth less than the minimum can still get you home, but only by
     // self-draw — the extra faan IS the self-draw. That is strictly harder than
     // the same road with a claimable finish, and winChance is where it is
@@ -2711,7 +2748,9 @@ function hkOutlook(pos, opts) {
     .map((r) => ({ ...r, p: winChance(r, chance) }))
     // Cheapest hand first, and where two cost the same, the likelier one — see
     // the note on the riichi sort above.
-    .sort((a, b) => a.faan - b.faan || b.p - a.p || a.away - b.away)
+    .sort((a, b) => a.faan - b.faan || b.p - a.p || a.away - b.away);
+
+  const routes = dedupeRoutes(ranked)
     .map((r) => ({
       parts: r.parts, faan: r.faan, away: r.away, selfDraw: r.selfDraw, p: r.p,
       wants: r.wants.map((w) => ({ k: w.key, count: w.count, left: w.left })),

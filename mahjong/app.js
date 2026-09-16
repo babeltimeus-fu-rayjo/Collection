@@ -304,27 +304,26 @@ function setMatch(key, force = false) {
   if (!table) return;
   for (const n of table.querySelectorAll(`.tile[data-key="${esc}"]`)) n.classList.add('match');
 }
-// What ends a highlight is leaving the tiles, not leaving A tile. The pointer
-// spends a lot of time inside the hand and the pond without being on anything:
-// there is a 3px gap between every pair of tiles, selecting a tile lifts it 8px
-// out from under the cursor, and a discard re-centres the whole hand. Treating
-// any of those as "stopped looking" made the board flash off and on again —
-// while the pointer had not gone anywhere. So the highlight holds anywhere
-// inside those two regions and only drops on the way out of them.
+// Setting is immediate; clearing waits out a frame or two. There is a 3px gap
+// between every pair of tiles, and sweeping along a row crosses one on every
+// tile — with an immediate clear the whole board flashed off and on again the
+// length of the hand. A tenth of a second bridges that and nothing else: you
+// would have to be moving slower than 30px a second for it to be the reason
+// the board is still dark.
 //
-// Setting is immediate; the clear keeps a short grace period for the frames
-// where the pointer is crossing the boundary itself.
+// It used to hold for as long as the pointer stayed anywhere inside the hand
+// or the table, which fixed the flashing and broke something worse — the
+// table is most of the screen, so the tiles simply stayed dark after you had
+// moved away from them.
 let matchClear = null;
 document.addEventListener('pointerover', (e) => {
-  const el = e.target && e.target.closest ? e.target : null;
-  const t = el ? el.closest('.tile[data-key]') : null;
+  const t = e.target && e.target.closest ? e.target.closest('.tile[data-key]') : null;
   const key = t && t.closest('#table, #hand') ? t.dataset.key : null;
+  clearTimeout(matchClear);
   // Reaching a tile also means you have finished reading: put any note away at
   // once rather than making you steer around it.
-  if (key) { clearTimeout(matchClear); hideTip(); setMatch(key); return; }
-  if (el && el.closest('#table, #hand')) return;          // between tiles: hold
-  clearTimeout(matchClear);
-  matchClear = setTimeout(() => setMatch(null), 140);
+  if (key) { hideTip(); setMatch(key); return; }
+  matchClear = setTimeout(() => setMatch(null), 100);
 });
 document.addEventListener('pointerout', (e) => {
   // A null relatedTarget means the pointer left the window — and it means the
@@ -335,7 +334,7 @@ document.addEventListener('pointerout', (e) => {
   // pointerover again immediately and a pointer that really left never does.
   if (e.relatedTarget) return;
   clearTimeout(matchClear);
-  matchClear = setTimeout(() => setMatch(null), 140);
+  matchClear = setTimeout(() => setMatch(null), 100);
 });
 
 function renderMeld(meld) {
