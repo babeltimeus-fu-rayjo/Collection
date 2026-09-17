@@ -508,11 +508,20 @@ function relayout() {
   // relayout runs.
   const zone = $('#my-zone');
   const zr = zone && zone.getBoundingClientRect();
-  set('--bleed-right', `${zr ? Math.round(Math.max(0, vw - zr.right)) : 0}px`);
+  // Neither of these is rounded. A grid of capped columns puts the quadrant's
+  // edges on a half pixel at every odd window width, and rounding them to whole
+  // pixels is how both of these measurements went wrong: the backdrop reached a
+  // half pixel past the window, and the step below missed the line it is meant
+  // to meet by the same half pixel — sometimes over it, sometimes short of it,
+  // which is the notch that appeared in the corner at some widths and not
+  // others. Two decimal places is below anything a screen can show and keeps
+  // float noise out of the CSS.
+  const px = (v) => `${Math.round(v * 100) / 100}px`;
+  set('--bleed-right', px(zr ? Math.max(0, vw - zr.right) : 0));
   // Where the quadrant's left edge falls. The strip below starts at the window
   // edge, so this is also the width of the step between them — the one segment
   // of the region's outline that neither box can draw by itself.
-  set('--zone-left', `${zr ? Math.round(Math.max(0, zr.left)) : 0}px`);
+  set('--zone-left', px(zr ? Math.max(0, zr.left) : 0));
 }
 
 let relayoutPending = false;

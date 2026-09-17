@@ -88,6 +88,17 @@ body {
      seat; one bubble's worth is enough to keep them off the top bar */
   --bubble-reserve: 40px;
   flex: 0 0 auto; display: grid; gap: 8px; padding: var(--bubble-reserve) 4px 0; position: relative;
+  /* Clip sideways, and only sideways. Your region's backdrop deliberately runs
+     out past the quadrant into the dead felt beside it, and the width it runs
+     is a measurement — so a half pixel of rounding, or one stale frame in the
+     middle of a window drag, was enough to push it past the window and raise a
+     horizontal scrollbar. The body is the scroller here, so that scrollbar then
+     narrows the window, which changes the measurement, which moves the backdrop
+     again. Clipping the table ends the argument: a decoration that runs off the
+     edge is simply cut off there. `clip` rather than `hidden` because hidden
+     would make this a scroll container; vertical stays visible so nothing that
+     legitimately stands proud of the table gets cut. */
+  overflow-x: clip; overflow-y: visible;
   /* stretch across the width and centre the tracks, so the side columns get a
      generous FIXED width (room for a few melds without clipping) while the centre
      stays a fixed width — nothing resizes as content changes */
