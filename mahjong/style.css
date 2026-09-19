@@ -13,7 +13,10 @@ body {
 
 /* ================================================================ home */
 .back-home { align-self: flex-start; color: #8ab89a; text-decoration: none; font-size: 13px; margin-bottom: 16px; }
-.logo { font-size: clamp(28px, 6vw, 44px); letter-spacing: 4px; text-align: center; margin: 12px 0 8px; color: #e8d5a3; }
+.logo { font-size: clamp(28px, 6vw, 44px); letter-spacing: 4px; text-align: center; margin: 12px 0 8px; color: #e8d5a3;
+        display: flex; align-items: center; justify-content: center; gap: 14px; }
+/* the same tile the game deals, at wordmark scale */
+.logo-tile { --u: calc(1px * clamp(.62, .13vw + .5, .92)); cursor: default; }
 .tagline { max-width: 520px; text-align: center; font-size: 14px; line-height: 1.55; color: #b0c8a8; margin-bottom: 24px; }
 .field { width: 100%; max-width: 320px; padding: 10px 14px; border: 2px solid #2a6b45; border-radius: 8px; background: #0a2a1a; color: #e8e0d0; font-size: 16px; text-align: center; outline: none; }
 .field:focus { border-color: #4db87a; }
@@ -37,9 +40,27 @@ body {
 .lobby-label { font-size: 12px; color: #5a8a6a; text-transform: uppercase; letter-spacing: 1px; margin-top: 16px; }
 #lobby-code { font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #e8d5a3; }
 .copy-row { display: flex; gap: 8px; margin: 4px 0 12px; }
-#lobby-players { list-style: none; }
-#lobby-players li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #1a4a32; font-size: 15px; min-height: 42px; }
-#lobby-players li.empty { opacity: .55; }
+/* The lobby's four seats, laid out as the table. Same arrangement the board
+   uses — you bottom right — so this screen is a picture of where you will sit
+   rather than a list of who turned up. Always four cells, so nothing moves as
+   they fill. */
+#lobby-seats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.lobby-seat {
+  display: flex; align-items: center; gap: 8px; min-height: 58px; padding: 8px 10px;
+  border: 1px solid #1a4a32; border-radius: 10px; background: rgba(255,255,255,.04);
+  font-size: 15px; position: relative;
+}
+.lobby-seat.open { border-style: dashed; opacity: .6; }
+/* yours in the same gold the board uses for your own region */
+.lobby-seat.me { border-color: rgba(232,213,163,.6); background: rgba(232,213,163,.09); }
+.lobby-wind {
+  position: absolute; top: 6px; right: 8px;
+  font-size: 10px; font-weight: 700; letter-spacing: .06em;
+  color: #e8d5a3; background: #1a5a38; border-radius: 4px; padding: 1px 5px;
+}
+.lobby-seat.open .lobby-wind { background: none; color: #5a8a6a; border: 1px solid #1a4a32; }
+.lobby-seat .p-name { min-width: 0; }
+@media (max-width: 380px) { #lobby-seats { grid-template-columns: 1fr; } }
 .p-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .empty-label { color: #6a9a7a; font-style: italic; }
 .seat-remove { margin-left: auto; }
@@ -397,6 +418,11 @@ body {
    ONE canonical tile (40 x 52 units) is shared by every category, so a given
    percentage means the SAME physical tile wherever it is spent: 90% played and
    95% discards are directly comparable, and flowers match the melds beside them. */
+/* Tile size lives on the game screen, which is the only place relayout() has an
+   opinion about it. The defaults sit on :root as well so a .tile drawn anywhere
+   else — the wordmark on the home screen — renders at its natural 40x52 instead
+   of collapsing to nothing. */
+:root { --ts-base: 1; --ts-hand: 1; --ts-ohand: 1; --ts-played: 1; --ts-disc: 1; }
 #screen-game { --ts-base: 1; --ts-hand: 1; --ts-ohand: 1; --ts-played: 1; --ts-disc: 1; }
 /* Seat shape, rewritten by relayout() in app.js whenever the WINDOW changes (see
    there). These are the side-by-side defaults: a deep 6-wide pond and a sets

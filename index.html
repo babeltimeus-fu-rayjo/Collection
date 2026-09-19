@@ -101,26 +101,36 @@
     .art.wonders .zig i:nth-child(4) { height: 38px; }
     .art.wonders .zig i:nth-child(5) { height: 22px; }
 
-    /* mahjong art: a row of standing tiles */
-    .mjtiles { display: flex; gap: 4px; }
+    /* mahjong art: the three dragons, drawn the way the game draws them.
+       These few rules are lifted from mahjong/style.css (.tile / .face / .honor
+       and the three dragon colours) so the card shows the same face you meet one
+       click later — that file is the original if either ever changes. */
+    .mjtiles { display: flex; gap: 5px; }
 
-    .mjtiles i {
-      width: 36px;
-      height: 50px;
-      border-radius: 5px;
-      background: linear-gradient(180deg, #f5f0e0, #d8d0b8);
-      border: 1px solid rgba(0, 0, 0, 0.3);
-      box-shadow: 0 5px 12px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.6);
-      display: grid;
-      place-items: center;
-      font-style: normal;
-      font-weight: 900;
-      font-size: 20px;
-      color: #1a472a;
+    .mjtiles .tile {
+      width: 40px;
+      height: 52px;
+      font-size: 52px;
+      border-radius: 4px;
+      background: linear-gradient(165deg, #fdf9ee, #ece1c6);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75), 0 5px 12px rgba(0, 0, 0, 0.4);
+      position: relative;
+      line-height: 1;
+      flex-shrink: 0;
     }
 
-    .mjtiles i.red { color: #c22; }
-    .mjtiles i.blue { color: #2266aa; }
+    .mjtiles .face {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .mjtiles .honor { font-size: 0.66em; font-weight: 800; line-height: 1; }
+    .mjtiles .dragon-R .honor { color: #c62828; }
+    .mjtiles .dragon-G .honor { color: #1a7d31; }
+    .mjtiles .dragon-W .honor { color: #2560c8; }
 
     /* dnup art: the flipped wordmark */
     .wordmark {
@@ -461,7 +471,11 @@
     </a>
     <a class="game" href="./mahjong/">
       <div class="art mahjong">
-        <span class="mjtiles"><i class="red">中</i><i class="blue">萬</i><i>發</i><i class="red">🀄</i></span>
+        <span class="mjtiles">
+          <span class="tile"><span class="face dragon-R"><span class="honor">中</span></span></span>
+          <span class="tile"><span class="face dragon-G"><span class="honor">發</span></span></span>
+          <span class="tile"><span class="face dragon-W"><span class="honor">白</span></span></span>
+        </span>
       </div>
       <div class="body">
         <div class="title-row">

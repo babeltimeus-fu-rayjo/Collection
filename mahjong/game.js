@@ -948,7 +948,7 @@ function resolveWin(G, winnerSeat, loserSeat, isTsumo) {
   let payments;
   if (isTsumo) {
     addLog(G, `${winner.name} declares Tsumo — ${scoring.summary}!`);
-    say(G, winnerSeat, 'Tsumo! 🀄');
+    say(G, winnerSeat, 'Tsumo!');
     // All others pay. Riichi splits the hand value between them (dealer pays more);
     // Hong Kong and Taiwanese both have each player pay the hand IN FULL on a
     // self-draw, which is what makes tsumo worth three times a win on a discard.

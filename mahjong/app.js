@@ -1093,27 +1093,43 @@ function renderLobby(sess, lobbyMsg) {
   const variant = isHost ? sess.selectedVariant : (lobbyMsg && lobbyMsg.variant) || 'tw';
 
   $('#lobby-code').textContent = sess.code;
-  // Always render NUM_PLAYERS seats (filled or "Open seat") so the list height
-  // stays constant — adding a bot fills a slot instead of growing the panel.
-  const list = $('#lobby-players');
-  list.replaceChildren();
-  const bySeat = [...roster].sort((a, b) => a.seat - b.seat);
-  for (let i = 0; i < NUM_PLAYERS; i++) {
-    const p = bySeat[i];
-    const li = el('li', p ? '' : 'empty');
+
+  // The four seats drawn as the table they are about to become, in the same
+  // arrangement the board uses — you at the bottom right, the player you can Chi
+  // from on your left — so the lobby is a picture of where you will be sitting
+  // rather than a list of who has arrived. Winds are the opening hand's: seat 0
+  // deals the first hand, so it is East and the rest follow round.
+  //
+  // Always all four, filled or open, so nothing moves as they fill.
+  const mySeat = isHost ? 0 : (sess.seat ?? -1);
+  const seats = $('#lobby-seats');
+  seats.replaceChildren();
+  const at = (n) => roster.find((r) => r.seat === n);
+  // Reading the grid tl, tr, bl, br — and it has to be the SAME mapping the
+  // board uses (renderGame puts my+2 top left, my+1 top right, my+3 bottom
+  // left), or the lobby shows you a table you then have to unlearn. my+3 is the
+  // player before you in turn order: the one on your left, the only one you can
+  // Chi from, and bottom left is where they sit.
+  const order = mySeat >= 0
+    ? [(mySeat + 2) % 4, (mySeat + 1) % 4, (mySeat + 3) % 4, mySeat]
+    : [2, 1, 3, 0];
+  for (const n of order) {
+    const p = at(n);
+    const cell = el('div', `lobby-seat${p ? '' : ' open'}${n === mySeat ? ' me' : ''}`);
+    cell.append(el('span', 'lobby-wind', WINDS[n]));
     if (p) {
-      li.append(avatarEl(p.name, p.seat, p.bot));
-      li.append(el('span', 'p-name', p.name));
+      cell.append(avatarEl(p.name, p.seat, p.bot));
+      cell.append(el('span', 'p-name', p.name + (n === mySeat ? ' · you' : '')));
       if (p.bot && isHost) {
         const rm = el('button', 'btn ghost seat-remove', '✕');
         rm.addEventListener('click', () => sess.removeBot(p.seat));
-        li.append(rm);
+        cell.append(rm);
       }
     } else {
-      li.append(el('div', 'av empty-av'));
-      li.append(el('span', 'p-name empty-label', 'Open seat'));
+      cell.append(el('div', 'av empty-av'));
+      cell.append(el('span', 'p-name empty-label', 'Open seat'));
     }
-    list.append(li);
+    seats.append(cell);
   }
 
   // variant picker
