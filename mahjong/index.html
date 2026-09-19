@@ -44,6 +44,11 @@
       <div class="lobby-label">Rules</div>
       <div id="variant-picker"></div>
       <div id="variant-blurb"></div>
+      <div id="lobby-limit">
+        <div class="lobby-label">House limit</div>
+        <div id="limit-picker"></div>
+        <div id="limit-blurb"></div>
+      </div>
       <div id="lobby-hint"></div>
       <button id="btn-add-bot" class="btn secondary hidden" type="button">🤖 Add a bot</button>
       <button id="btn-start" class="btn primary hidden" type="button">Start game</button>
@@ -192,8 +197,9 @@
           <br>· <b>Hong Kong:</b> 3-faan minimum — a complete hand worth less than that cannot be declared, so you keep playing. Faan from winds, dragons, flushes, flowers.
           <br>· <b>Japanese Riichi:</b> to declare a win you need at least <b>1 han that is not dora</b> — a <b data-term="han">yaku</b>. The list is in <b>Hands &amp; scoring</b>; Riichi, Menzen Tsumo and Tanyao are the easy ones. Without one you simply keep playing. Declare Riichi when 1 tile away from winning (bet 1000 pts, lock your hand). <b data-term="furiten">Furiten</b>: cannot Ron if you discarded a tile you could win on.
           <br>· <b>Taiwanese:</b> 16-tile hand, 5 sets + 1 pair. <b data-term="flowers">Flowers</b> drawn aside for bonuses. Tai-based scoring.</li>
-        <li><b>Scoring:</b> the winner earns points based on the hand's value. Tsumo: all others pay. Ron: the discarder pays.</li>
+        <li><b>Scoring:</b> the winner is paid for the hand; everyone else's score moves by what they pay. On a <b data-term="ron">Ron</b> the discarder pays alone; on a <b data-term="tsumo">Tsumo</b> everyone pays. What the hand is worth depends on the ruleset:</li>
       </ol>
+      <div id="rules-scoring"></div>
       <button id="btn-rules-close" class="btn secondary" type="button">Got it</button>
     </div>
   </div>
@@ -202,6 +208,7 @@
   <div id="modal-cheat" class="modal hidden">
     <div class="panel wide">
       <h2>Special hands &amp; scoring</h2>
+      <div id="cheat-tabs"></div>
       <div id="cheat-body"></div>
       <button id="btn-cheat-close" class="btn secondary" type="button">Got it</button>
     </div>

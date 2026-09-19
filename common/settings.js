@@ -71,6 +71,11 @@ export function initSettings(stem, defs) {
   };
   cfg.raw = rawVal;
   cfg.on = (k) => !!rawVal(k);
+  // A few of these knobs are also table rules, and a table rule belongs where
+  // the table is set up rather than behind a testing gear. Those screens write
+  // through here so both places read one value; the drawer is rebuilt so its
+  // inputs never show a number that is no longer stored. (set is assigned
+  // below, once setVal and the drawer exist.)
 
   // ------------------------------------------------------------- storage
   function persist() {
@@ -283,6 +288,17 @@ export function initSettings(stem, defs) {
     if (!drawer) buildDrawer();
     else drawer.classList.toggle('hidden');
   }
+
+  cfg.set = (k, v) => {
+    setVal(k, v);
+    gear.classList.toggle('mod', all.some((x) => isMod(x.key)));
+    if (drawer) {
+      const open = !drawer.classList.contains('hidden');
+      drawer.remove();
+      drawer = null;
+      if (open) openDrawer();
+    }
+  };
 
   ensureStyle();
   const gear = document.createElement('button');

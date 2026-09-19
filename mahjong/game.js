@@ -929,6 +929,7 @@ function resolveExhaustiveDraw(G) {
   // as a South player who had somehow been paid for a seat wind.
   G.handResult = { type: 'draw', exhaustive: true, tenpai, delta };
   setFx(G, { kind: 'handEnd', result: 'draw' });
+  settleCentre(G);
   // dealer stays if tenpai (JP) or always for HK/TW draw
   const dealerTenpai = isTenpai(playerBySeat(G, G.dealer).hand, G.variant, playerBySeat(G, G.dealer).melds);
   G.pendingDeal = { rotate: G.variant === 'jp' && !dealerTenpai, honba: G.honba + 1 };
@@ -937,6 +938,18 @@ function resolveExhaustiveDraw(G) {
 }
 
 // ---------------------------------------------------------------- win resolution
+
+// A discard rests in the centre while play continues, skipped from the
+// discarder's tray so it is only drawn once. That only makes sense while
+// someone might still claim it: once the hand is over, a tile left in the
+// middle reads as the tile the hand was won on — and when the winner happens
+// to hold a matching copy, as a self-draw often does, it looks duplicated into
+// their hand. So every ending except a ron settles it back into the tray it
+// already belongs to; clearing the centre is all that takes.
+function settleCentre(G) {
+  G.lastDiscard = null;
+  G.lastDiscardSeat = -1;
+}
 
 function resolveWin(G, winnerSeat, loserSeat, isTsumo) {
   const winner = playerBySeat(G, winnerSeat);
@@ -999,6 +1012,8 @@ function resolveWin(G, winnerSeat, loserSeat, isTsumo) {
     delta,
   };
   setFx(G, { kind: 'handEnd', result: 'win', seat: winnerSeat });
+  // a ron puts the winning tile back in the centre straight after this call
+  if (isTsumo) settleCentre(G);
 
   // The deal passes unless the dealer won — but not yet. See pendingDeal.
   const keeps = winnerSeat === G.dealer;

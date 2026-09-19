@@ -80,6 +80,15 @@ body {
 #variant-picker .chip { padding: 6px 14px; border-radius: 16px; font-size: 13px; cursor: pointer; background: #1a4a32; color: #8ab89a; border: 2px solid transparent; }
 #variant-picker .chip.active { background: #2a6b45; color: #e8d5a3; border-color: #4db87a; }
 #variant-blurb { font-size: 13px; color: #8ab89a; margin: 4px 0 12px; min-height: 36px; }
+/* Only Hong Kong has a limit to set, but the row holds its place on the other
+   two rulesets so the buttons under it never move as you switch. */
+#lobby-limit { width: 100%; visibility: hidden; margin-bottom: 4px; }
+#lobby-limit.on { visibility: visible; }
+#limit-picker { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+#limit-picker .chip { padding: 5px 11px; border-radius: 16px; font-size: 12.5px; cursor: pointer;
+  background: #1a4a32; color: #8ab89a; border: 2px solid transparent; }
+#limit-picker .chip.active { background: #2a6b45; color: #e8d5a3; border-color: #4db87a; }
+#limit-blurb { font-size: 12px; color: #5a8a6a; min-height: 18px; }
 /* Two lines reserved, not one. The hint rewrites itself as the table fills
    ("Share the code or link — or add a bot" becoming "4 aboard — ten rounds"),
    and the long one wraps: every button below it moved down the moment somebody
@@ -716,7 +725,25 @@ body {
 .rules b { color: #e8d5a3; }
 .btn-row { display: flex; gap: 8px; margin-top: 12px; }
 /* special-hands cheatsheet */
+#cheat-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 12px;
+  border-bottom: 1px solid rgba(255,255,255,.1); padding-bottom: 8px; }
+.cheat-tab { display: inline-flex; align-items: baseline; gap: 5px; padding: 6px 12px; border-radius: 16px;
+  font-size: 13px; font-weight: 600; cursor: pointer; background: #1a4a32; color: #8ab89a;
+  border: 2px solid transparent; }
+.cheat-tab:hover { color: #cfe3d5; }
+.cheat-tab.on { background: #2a6b45; color: #e8d5a3; border-color: #4db87a; }
+.cheat-tab-dot { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; opacity: .8; }
 #cheat-body { max-height: 60vh; overflow-y: auto; margin-bottom: 14px; }
+.cheat-sec:last-child { margin-bottom: 0; }
+
+/* how a hand's value becomes points, inside the rules */
+#rules-scoring { margin: 4px 0 16px; }
+.rs-sec { border: 1px solid rgba(255,255,255,.1); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+  background: rgba(0,0,0,.14); }
+.rs-sec.on { border-color: #4db87a; background: rgba(42,107,69,.22); }
+.rs-head { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.rs-name { color: #e8d5a3; font-weight: 700; font-size: 14px; }
+.rs-line { font-size: 12.5px; line-height: 1.5; color: #b0c8a8; margin-bottom: 4px; }
 .cheat-sec { margin-bottom: 18px; }
 .cheat-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .cheat-name { color: #e8d5a3; font-weight: 700; font-size: 15px; }

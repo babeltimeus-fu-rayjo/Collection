@@ -860,7 +860,7 @@ class HostSession {
   }
 
   pushLobby() {
-    const data = { t: 'lobby', roster: this.roster.map((r) => ({ seat: r.seat, name: r.name, bot: !!r.bot })), variant: this.selectedVariant };
+    const data = { t: 'lobby', roster: this.roster.map((r) => ({ seat: r.seat, name: r.name, bot: !!r.bot })), variant: this.selectedVariant, faanLimit: cfg.raw('faanLimit') };
     for (const [, conn] of this.conns) { try { conn.send(data); } catch {} }
     renderLobby(this);
   }
@@ -881,6 +881,14 @@ class HostSession {
 
   setVariant(key) {
     if (VARIANTS.some((v) => v.key === key)) { this.selectedVariant = key; this.pushLobby(); }
+  }
+
+  // The house limit is a table rule, not a personal preference, so the lobby
+  // owns it — but it writes to the same store the settings drawer reads, so
+  // the two can never disagree about what this table is playing.
+  setFaanLimit(n) {
+    cfg.set('faanLimit', Math.max(0, Math.min(20, Math.round(Number(n) || 0))));
+    this.pushLobby();
   }
 
   start() {
@@ -1141,6 +1149,27 @@ function renderLobby(sess, lobbyMsg) {
     picker.append(chip);
   }
   $('#variant-blurb').textContent = variantByKey(variant).blurb;
+
+  // House limit — Hong Kong's table doubles from 7 faan up with nothing to stop
+  // it, so a limit is the usual house answer and it belongs where the ruleset
+  // is chosen, not behind the testing gear. The row keeps its space on the
+  // other two rulesets so the buttons below never move.
+  const limit = isHost ? cfg.raw('faanLimit') : (lobbyMsg && lobbyMsg.faanLimit) || 0;
+  const limitBox = $('#lobby-limit');
+  limitBox.classList.toggle('on', variant === 'hk');
+  const lp = $('#limit-picker');
+  lp.replaceChildren();
+  const stops = [0, 5, 7, 10, 13];
+  if (limit && !stops.includes(limit)) stops.push(limit);
+  stops.sort((a, b) => a - b);
+  for (const n of stops) {
+    const chip = el('div', `chip${n === limit ? ' active' : ''}`, n ? `${n} faan` : 'No limit');
+    if (isHost) chip.addEventListener('click', () => sess.setFaanLimit(n));
+    lp.append(chip);
+  }
+  $('#limit-blurb').textContent = limit
+    ? `${limit} faan and above all pay ${hkFaanToPoints(limit, limit)} points.`
+    : 'Uncapped: every faan past 7 doubles the payout.';
 
   // buttons
   const canAdd = isHost && roster.length < NUM_PLAYERS;
@@ -1847,39 +1876,101 @@ function renderGlossary(into) {
   into.append(sec);
 }
 
+// which ruleset the table is playing, or the one picked in the lobby
+function liveVariant() {
+  return (lastView && lastView.variant) || (session && session.selectedVariant) || null;
+}
+
+// One ruleset's faan/tai/han table.
+function cheatSection(g) {
+  // no heading: the tab above it already names the ruleset and flags the one
+  // in play, and saying it twice pushes the table itself down the panel
+  const sec = el('div', 'cheat-sec');
+  sec.append(el('div', 'cheat-note', g.note));
+  const rows = el('div', 'cheat-rows');
+  for (const [name, val, req] of g.rows) {
+    const r = el('div', 'cheat-row');
+    // "1 each" reads better as "1 faan each" than "1 each faan"
+    const valStr = /\beach$/.test(val)
+      ? `${val.replace(/\s*each$/, '')} ${g.unit} each`
+      : `${val} ${g.unit}`;
+    const key = CHEAT_TERMS[name];
+    r.append(key ? (() => { const c = el('span', 'cheat-hand'); c.append(term(key, name)); return c; })()
+                 : el('span', 'cheat-hand', name));
+    r.append(el('span', 'cheat-val', valStr));
+    r.append(el('span', 'cheat-req', req));
+    rows.append(r);
+  }
+  sec.append(rows);
+  return sec;
+}
+
+// Three rulesets and a glossary laid end to end is a page you scroll past
+// rather than read. They are alternatives, not a sequence, so they get tabs —
+// and the one the table is actually playing is the one that opens.
+let cheatTab = null;
 function renderCheatsheet() {
   const body = $('#cheat-body');
+  const tabs = $('#cheat-tabs');
   if (!body) return;
-  const active = (lastView && lastView.variant) || (session && session.selectedVariant) || null;
+  const active = liveVariant();
   const guide = Array.isArray(SCORING_GUIDE) ? SCORING_GUIDE : [];
-  const guides = [...guide].sort((a, b) => (b.key === active) - (a.key === active));
-  body.replaceChildren();
-  for (const g of guides) {
-    const sec = el('div', 'cheat-sec');
-    const head = el('div', 'cheat-head');
-    head.append(el('span', 'cheat-name', g.name));
-    if (g.key === active) head.append(el('span', 'cheat-tag', 'in play'));
-    sec.append(head);
-    sec.append(el('div', 'cheat-note', g.note));
-    const rows = el('div', 'cheat-rows');
-    for (const [name, val, req] of g.rows) {
-      const r = el('div', 'cheat-row');
-      // "1 each" reads better as "1 faan each" than "1 each faan"
-      const valStr = /\beach$/.test(val)
-        ? `${val.replace(/\s*each$/, '')} ${g.unit} each`
-        : `${val} ${g.unit}`;
-      const key = CHEAT_TERMS[name];
-      r.append(key ? (() => { const c = el('span', 'cheat-hand'); c.append(term(key, name)); return c; })()
-                   : el('span', 'cheat-hand', name));
-      r.append(el('span', 'cheat-val', valStr));
-      r.append(el('span', 'cheat-req', req));
-      rows.append(r);
+  const panels = [
+    ...guide.map((g) => ({ key: g.key, name: g.name, draw: (into) => into.append(cheatSection(g)) })),
+    { key: 'gloss', name: 'Glossary', draw: renderGlossary },
+  ];
+  if (!panels.some((p) => p.key === cheatTab)) cheatTab = null;
+  const show = cheatTab || (guide.some((g) => g.key === active) ? active : panels[0].key);
+
+  if (tabs) {
+    tabs.replaceChildren();
+    for (const p of panels) {
+      const t = el('button', `cheat-tab${p.key === show ? ' on' : ''}`, p.name);
+      t.type = 'button';
+      if (p.key === active) t.append(el('span', 'cheat-tab-dot', '\u00b7 in play'));
+      t.addEventListener('click', () => { cheatTab = p.key; renderCheatsheet(); });
+      tabs.append(t);
     }
-    sec.append(rows);
-    body.append(sec);
   }
-  renderGlossary(body);
+  body.replaceChildren();
+  panels.find((p) => p.key === show).draw(body);
   wireTerms(body);
+}
+
+// What a hand is finally worth — the step the rules only used to gesture at.
+// Hong Kong's is drawn by the same ladder the score panel uses, so the rules
+// and the result can never quote different numbers, and it honours the house
+// limit this table set.
+function renderRulesScoring() {
+  const into = $('#rules-scoring');
+  if (!into) return;
+  const active = liveVariant();
+  const limit = cfg.raw('faanLimit') || (lastView && lastView.faanLimit) || 0;
+  const parts = [
+    ['hk', 'Hong Kong', [
+      'Add up the faan, then read the payout off this table. A hand under 3 faan cannot be declared at all.',
+    ], () => hkLadder(-1, limit)],
+    ['tw', 'Taiwanese', [
+      'Flat 200 base (\u5e95) plus 200 for every tai (\u53f0): 1 tai pays 400, 3 tai 800, 8 tai 1800.',
+      'On a self-draw each of the other three pays that in full, so the hand is worth three times as much.',
+    ], null],
+    ['jp', 'Japanese Riichi', [
+      'Han and fu together set the payout, and it climbs in named steps: mangan at 5 han (8000 to a non-dealer, 12000 to the dealer), haneman at 6\u20137, baiman at 8\u201310, sanbaiman at 11\u201312, yakuman at 13.',
+      'The dealer pays and receives half again as much. A self-draw splits the total between the other three; riichi sticks and honba are paid on top.',
+    ], null],
+  ];
+  parts.sort((a, b) => (b[0] === active) - (a[0] === active));
+  into.replaceChildren();
+  for (const [key, name, lines, extra] of parts) {
+    const sec = el('div', 'rs-sec' + (key === active ? ' on' : ''));
+    const head = el('div', 'rs-head');
+    head.append(el('span', 'rs-name', name));
+    if (key === active) head.append(el('span', 'cheat-tag', 'in play'));
+    sec.append(head);
+    for (const line of lines) sec.append(el('div', 'rs-line', line));
+    if (extra) sec.append(extra());
+    into.append(sec);
+  }
 }
 
 // Everyone's hand is laid open the moment a hand ends; the score panel waits
@@ -2742,6 +2833,12 @@ function leaveRoom() {
   // the next one
   $('#hand').replaceChildren();
   $('#action-bar').replaceChildren();
+  // the centre is the one part of the board that is not redrawn from scratch
+  // every frame — it is left alone unless the resting tile changed, so that it
+  // flies in once rather than on every render. Both sides of that comparison
+  // are null in a fresh room, so without clearing it here the last tile of the
+  // last game is still lying in the middle of the new one.
+  $('#last-discard').replaceChildren();
   clearChatBubbles();
   showScreen('home');
   setHomeStatus('');
@@ -2766,7 +2863,12 @@ $('#size-popover').addEventListener('click', (e) => e.stopPropagation());
 document.addEventListener('click', () => $('#size-popover').classList.add('hidden'));
 applySizes();
 for (const b of document.querySelectorAll('.btn-leave')) b.addEventListener('click', leaveRoom);
-for (const b of document.querySelectorAll('.btn-rules')) b.addEventListener('click', () => $('#modal-rules').classList.remove('hidden'));
+for (const b of document.querySelectorAll('.btn-rules')) {
+  b.addEventListener('click', () => {
+    try { renderRulesScoring(); } catch (err) { console.error('rules scoring render failed', err); }
+    $('#modal-rules').classList.remove('hidden');
+  });
+}
 $('#btn-rules-close').addEventListener('click', () => $('#modal-rules').classList.add('hidden'));
 $('#modal-rules').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
 // open the cheatsheet even if rendering hiccups (e.g. a half-cached reload), so
