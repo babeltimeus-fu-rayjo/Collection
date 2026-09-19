@@ -898,73 +898,60 @@ body {
 }
 
 /* ================================================================ responsive */
-/* A phone is not a small table, it is a tall one. Two quadrants side by side
-   leave each player 131px of width for a tray that wants 198, so the melds ran
-   out past every seat and the pond with them. Stacked, each player gets the
-   whole width — nearly three times as much — and the table becomes four rows
-   read downward in turn order, with yours last so it sits against your hand.
-   --stacked tells relayout() which shape it is measuring; the breakpoint stays
-   here, in one place. */
+/* A phone still gets the table, because the table is the information: which
+   player is across from you, which one is on your left (the only one you may
+   Chi from), whose discards are whose. Stacked into four bands it stopped
+   saying any of that, and cost 948px of height to not say it.
+   What made the 2x2 impossible here was width — two quadrants left each player
+   131px for a tray that wanted 198, and nothing could shrink it. Two things
+   have changed: --ts-fit shrinks the tiles to whatever the column can hold, and
+   the centre gives up its 92px column to become a strip between the two rows.
+   That is 179px a quadrant instead of 131, and the table fits the screen. */
 @media (max-width: 600px) {
   /* device factor shrinks every tile so the table fits a phone; the Size
      sliders still scale on top of this, and relayout() shrinks it further if
      even this leaves a row wider than the column it has to sit in. */
-  #screen-game { --ts-device: 0.66; --stacked: 1; }
+  #screen-game { --ts-device: 0.66; }
   #table {
-    gap: 5px 6px; padding: var(--bubble-reserve) 4px 0;
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: repeat(5, auto);
-    /* one column, so there is no dead felt beside a quadrant to bleed into */
+    gap: 5px 6px;
+    /* two equal quadrants and no middle column: the centre becomes the strip
+       between the rows, which is where a real table keeps the discard anyway */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
     --bubble-reserve: 26px;
   }
-  .seat-tr { grid-column: 1; grid-row: 1; }
-  .seat-tl { grid-column: 1; grid-row: 2; }
+  .seat-tl { grid-column: 1; grid-row: 1; }
+  .seat-tr { grid-column: 2; grid-row: 1; }
+  #center  { grid-column: 1 / -1; grid-row: 2; }
   .seat-bl { grid-column: 1; grid-row: 3; }
-  #center  { grid-column: 1; grid-row: 4; }
-  .seat-br { grid-column: 1; grid-row: 5; }
+  .seat-br { grid-column: 2; grid-row: 3; }
 
-  /* The left column's seats mirror themselves so their sets face the outside of
-     the table. In one column there is no outside: they all read the same way. */
-  .seat-tl .seat-board, .seat-bl .seat-board { flex-direction: row; }
-  .seat-tl .seat-hand, .seat-bl .seat-hand { align-self: center; justify-content: center; }
-  .seat-tr .seat-hand, #my-zone .seat-hand { align-self: center; justify-content: center; }
-
-  /* the centre was a column between two columns of seats; as a row between two
-     seats it costs a third of the height */
-  #center { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 8px 12px; padding: 2px 0; }
-  #center-info { flex-direction: row; gap: 8px; }
+  /* a strip, not a column: round, wall and the resting discard side by side */
+  #center { flex-direction: row; flex-wrap: wrap; justify-content: center;
+    align-items: center; gap: 4px 12px; padding: 2px 0; }
+  #center-info { flex-direction: row; align-items: center; gap: 8px; }
+  #last-discard { min-height: 0; }
 
   .seat { padding: 3px 4px; }
-  .seat-name { max-width: 78px; font-size: 11px; }
+  .seat-name { max-width: 64px; font-size: 11px; }
+  .seat-info { gap: 4px; font-size: 11px; }
 
   /* one row: the bar cannot hold a room code, four buttons and the corner
-     buttons' reserved 76px, so the code gives up width before the buttons do */
-  /* stays with the gear and log buttons, which are fixed to the corner: half
-     the bar scrolling away while the other half sits still reads as a fault */
+     buttons' reserved 76px, so the code gives up width before the buttons do.
+     Sticky, because the gear and log buttons are fixed to that corner: half a
+     bar scrolling away while the other half sits still reads as a fault. */
   .topbar { flex-wrap: nowrap; gap: 5px; padding: 5px 10px; min-height: 0;
     position: sticky; top: 0; }
   .topbar #room-chip, .topbar > span:not(.spacer) { min-width: 0; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
   .topbar .btn { flex: none; padding: 5px 8px; font-size: 12px; white-space: nowrap; }
 
-  /* Four stacked quadrants are a page, not a screen, so your own hand would sit
-     nearly a thousand pixels below the top of the table. It stays put instead
-     and the board scrolls behind it — the one thing you always need in reach is
-     the one thing that never moves. Opaque, because tiles now pass underneath:
-     this is the colour the translucent panel already resolved to on the felt. */
-  #my-area { position: sticky; bottom: 0; z-index: 40; background: #1e4130;
-    box-shadow: 0 -8px 18px rgba(0,0,0,.35); }
-  /* The strip is pinned to the bottom right, which is where the chat button
-     floats — so the two were sharing a corner and the button was sitting on
-     "ways to win". Chat moves to the same 10px offset the other games use, and
-     the faan line stops short of it instead of running underneath. */
+  /* The chat button floats in the bottom right, which is the corner your own
+     strip ends in — so the faan line stops short of it rather than running
+     underneath. */
   #chat { right: 10px; bottom: 10px; }
   #chat-toggle { width: 38px; height: 38px; font-size: 17px; }
   #faan-bar { padding-right: 52px; padding-left: 12px; }
-  /* the quadrant and the strip are no longer touching, so they stop pretending
-     to be one shape: yours is simply the seat with the lighter surface */
-  #my-zone::before { right: 0; border-radius: 10px; }
-  #screen-game.my-turn #my-area::before { display: none; }
 }
 
 /* the seat that is yours says so */

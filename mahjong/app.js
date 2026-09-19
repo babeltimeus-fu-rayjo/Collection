@@ -469,8 +469,6 @@ function relayout() {
   const hasFlowers = layoutVariant !== 'jp';
   const gcs = getComputedStyle(g);
   const device = parseFloat(gcs.getPropertyValue('--ts-device')) || 1;
-  // one column of seats rather than two: see the responsive block in the CSS
-  const stacked = gcs.getPropertyValue('--stacked').trim() === '1';
 
   // How wide a quadrant's CONTENT can be, worked out from the table's own width
   // rather than from anything that depends on tile size — the clamp below feeds
@@ -486,7 +484,12 @@ function relayout() {
   const tGap = tcs ? parseFloat(tcs.columnGap) || 8 : 8;
   const vw = document.body.clientWidth || window.innerWidth;
   const tInner = tableEl ? tableEl.clientWidth - tPad : vw - 8;
-  const availSeat = stacked ? tInner - pad : (tInner - 92 - 2 * tGap) / 2 - pad;
+  // The resolved grid tracks say how wide a quadrant is, in whichever shape the
+  // table is currently in — three columns with a centre between them, or two
+  // with the centre as a strip below. Asking the grid means the arithmetic does
+  // not have to know which, and it cannot drift out of step with the CSS.
+  const tracks = tcs ? tcs.gridTemplateColumns.split(' ').map(parseFloat).filter(Number.isFinite) : [];
+  const availSeat = tracks.length ? tracks[0] - pad : (tInner - 92 - 2 * tGap) / 2 - pad;
 
   // Nothing may be wider than the column it has to sit in. The pond and the
   // sets column each pick a shape that fits, but both have a narrowest shape
@@ -506,11 +509,17 @@ function relayout() {
     if (!(tilesAt1 > 0)) return 1;
     return room > 0 ? room / (device * tilesAt1) : 0;
   };
+  // The pond is the fourth: not because six across cannot fit, but because a
+  // deep pond is the wrong shape where height is the scarce thing. Eight across
+  // holds the same 24 discards in three rows instead of four and saves 34px in
+  // every quadrant, so the tiles come down the last few percent it takes to fit
+  // eight. On a wide window all four of these divide out above 1 and none of
+  // them binds.
   const fit = Math.max(0.2, Math.min(
     1,
     hasFlowers ? fitFor(FLOWER_TILES * TILE_W * sizes.played, FLOWER_TILES - 1) : 1,
     fitFor(2 * MELD_TILES * TILE_W * sizes.played, 8),
-    fitFor(6 * TILE_W * sizes.disc, 5 * TILE_GAP + 6),
+    fitFor(8 * TILE_W * sizes.disc, 7 * TILE_GAP + 6),
   ));
   const base = device * fit;
 
