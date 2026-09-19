@@ -441,6 +441,10 @@ body {
   background: linear-gradient(165deg, #fdf9ee, #ece1c6);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.75), 0 1px 2px rgba(0,0,0,.3);
   color: #1a1a1a; flex-shrink: 0; position: relative; line-height: 1; text-align: center; cursor: default;
+  /* A tile's face is one centred glyph, so any letter-spacing it inherits is
+     added AFTER that glyph and shoves it off-centre by half the tracking. The
+     wordmark on the home screen sets 4px, which put the 中 two pixels left. */
+  letter-spacing: normal;
 }
 
 /* hand-drawn tile face (sized in em, relative to the tile) — no frame, so
