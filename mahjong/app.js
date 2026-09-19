@@ -2953,6 +2953,19 @@ $('#btn-size').addEventListener('click', (e) => { e.stopPropagation(); $('#size-
 for (const k of SZ_KEYS) { const el = $(`#sz-${k}`); if (el) el.addEventListener('input', (e) => setSize(k, parseFloat(e.target.value))); }
 $('#size-popover').addEventListener('click', (e) => e.stopPropagation());
 document.addEventListener('click', () => $('#size-popover').classList.add('hidden'));
+// A selected tile is a held gesture — the next click on it discards it — so
+// there has to be a way to put it back down that is not "discard it". Clicking
+// anywhere off the hand does that: the felt, a seat, the top bar. The action
+// bar is the exception, because its buttons act ON the selection — Riichi
+// discards the tile you have chosen — and clearing it on the way past would
+// take the tile out from under them.
+document.addEventListener('click', (e) => {
+  if (!selectedTile) return;
+  const t = e.target;
+  if (t && t.closest && (t.closest('#hand') || t.closest('#action-bar'))) return;
+  selectedTile = null;
+  if (lastView) renderGame(lastView, session);
+});
 applySizes();
 for (const b of document.querySelectorAll('.btn-leave')) b.addEventListener('click', leaveRoom);
 for (const b of document.querySelectorAll('.btn-rules')) {
