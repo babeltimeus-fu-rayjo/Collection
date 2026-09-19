@@ -807,10 +807,16 @@ function resolveClaims(G) {
   disc.discards = disc.discards.filter((t) => t.id !== tile.id);
 
   if (winner.response.type === 'ron') {
+    // The winning tile is what the hand is scored with, but it never becomes
+    // yours the way the rest of your hand is — it came off the table, and
+    // leaving it there is what shows the table where the win came from. So it
+    // is lent to the hand for the scoring and put straight back in the centre,
+    // which leaves the winner showing the thirteen tiles they actually held.
     p.hand.push(tile);
     p.hand.sort(tileSort);
-    G.lastDiscard = null; // taken off the table
     resolveWin(G, p.seat, G.lastDiscardSeat, false);
+    p.hand = p.hand.filter((t) => t.id !== tile.id);
+    G.lastDiscard = tile;
     return;
   }
 
