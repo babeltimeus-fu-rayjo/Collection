@@ -562,6 +562,49 @@ a {
   text-overflow: ellipsis;
 }
 
+/* the play order for this trick, spelled out in the trick box (see renderTrick) */
+.tq {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 5px;
+  width: 100%;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.tq-p {
+  color: var(--dim);
+  max-width: 7em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+.tq-p.me {
+  color: var(--ink);
+}
+
+/* already played: out of the running for this trick */
+.tq-p.done {
+  opacity: 0.4;
+}
+
+/* to act */
+.tq-p.now {
+  background: var(--gold-dim);
+  color: var(--gold);
+  opacity: 1;
+}
+
+.tq-arrow {
+  color: #4a5670;
+  font-weight: 400;
+}
+
 /* where this player comes in the current trick (see orderChip) */
 .seat-head .ord {
   flex: none;
@@ -1606,6 +1649,8 @@ a {
   #action-bar { padding: 6px 8px 8px; min-height: 0; gap: 6px; }
   .abar-row { gap: 6px; }
   .abar-label { font-size: 12.5px; }
+  .tq { font-size: 12px; gap: 1px 4px; }
+  .tq-p { padding: 0 5px; max-width: 6em; }
   /* round ten offers eleven bids; at the desktop size they need two rows */
   .pick { padding: 7px 8px; font-size: 14px; min-width: 30px; border-radius: 9px; }
   .pick.go, .pick.escape-go, .pick.pirate-go { padding: 8px 15px; min-width: 0; }

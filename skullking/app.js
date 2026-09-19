@@ -1405,8 +1405,34 @@ function renderTrick(view) {
   }
   box.append(label);
 
-  // the played cards themselves sit in front of each player now
-  if (!showLast && view.trick && view.phase === 'play' && view.trick.plays.length === 0) {
+  // The order, spelled out, in the middle of the table where the trick is.
+  // The seating says it too — clockwise from you — and the number on each seat
+  // says it again, but a phone wraps the rows into a grid and neither survives
+  // that. A queue cannot be misread: it is a line of names with arrows between
+  // them, the ones who have played greyed, the one to act lit.
+  let queued = false;
+  if (!showLast && view.trick && view.phase === 'play') {
+    const seats = view.players.map((q) => q.seat);
+    const li = seats.indexOf(view.trick.leader);
+    if (li >= 0) {
+      const q = el('div', 'tq');
+      const now = shownTurn(view, view.turn);
+      for (let k = 0; k < seats.length; k++) {
+        const seat = seats[(li + k) % seats.length];
+        const played = view.trick.plays.some((x) => x.seat === seat);
+        if (k) q.append(el('span', 'tq-arrow', '\u203a'));
+        const cls = `tq-p${played ? ' done' : ''}${seat === now ? ' now' : ''}${seat === view.you ? ' me' : ''}`;
+        q.append(el('span', cls, seat === view.you ? 'you' : seatName(view, seat)));
+      }
+      box.append(q);
+      queued = true;
+    }
+  }
+
+  // the played cards themselves sit in front of each player now. "X leads" is
+  // the queue's first name lit, so it is only worth a line of its own when
+  // there is no queue to read it off.
+  if (!queued && !showLast && view.trick && view.phase === 'play' && view.trick.plays.length === 0) {
     box.append(el('span', 'abar-label', `${seatName(view, view.trick.leader)} leads.`));
   }
 }
