@@ -1343,6 +1343,7 @@ function playSlotEl(view, p) {
 
 function renderTable(view) {
   const rows = tableRows(view);
+  const stacked = stackedTable();
   for (const [rowSel, list, facing] of [
     ['#row-top', rows.top, 'down'],
     ['#row-bottom', rows.bottom, 'up'],
@@ -1355,8 +1356,19 @@ function renderTable(view) {
       const cell = el('div', 'pcell');
       const tile = seatTile(view, p);
       const slot = playSlotEl(view, p);
-      if (facing === 'down') cell.append(tile, slot);
-      else cell.append(slot, tile);
+      if (stacked) {
+        // The card goes INSIDE the player's box, the way DNUP and Love Letter
+        // do it: one box per player, so a row of the grid is a row of players.
+        // Beside the seat it made every row four boxes — seat, card, seat,
+        // card — and that is what there was to read past before you could tell
+        // who came next.
+        tile.append(slot);
+        cell.append(tile);
+      } else if (facing === 'down') {
+        cell.append(tile, slot);
+      } else {
+        cell.append(slot, tile);
+      }
       box.append(cell);
     }
   }

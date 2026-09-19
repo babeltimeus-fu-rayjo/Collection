@@ -1605,24 +1605,42 @@ a {
      one pixel short, so every player took a row of their own and the table ran
      three screens deep. They share a row now, as many as fit. */
   .prow { gap: 6px; padding: 2px 8px; }
-  /* and the card each player has played moves to their side rather than under
-     them: stacked, eight players cost 560px of table; side by side they cost
-     140px, and a card beside a name still reads as that player's card. */
+  /* One box per player, three across, the card they have played inside it —
+     the shape DNUP and Love Letter use. The seats then read the way a list
+     reads, left to right and down, and that reading order is the turn order.
+     (renderTable puts the card inside the seat; here it only has to be laid
+     out and the boxes given a width.) */
   .prow .pcell,
-  .pcell { width: auto; min-width: 0; flex: 1 1 calc(50% - 3px); max-width: calc(50% - 3px);
-    flex-direction: row; align-items: center; gap: 5px; }
-  .pcell .seat { min-height: 0; flex: 1 1 auto; min-width: 0; }
-  .pcell .pslot { flex: none; }
+  .pcell { width: auto; min-width: 100px; flex: 1 1 108px; max-width: calc(33.33% - 4px);
+    flex-direction: column; align-items: stretch; gap: 0; }
+  .pcell .seat { min-height: 0; width: 100%; min-width: 0; }
+  /* your own box is alone on its row, so it has the width for "(you)" */
+  #row-bottom .pcell { flex: 0 1 168px; max-width: calc(50% - 3px); }
   .seat { padding: 6px 7px; gap: 3px; border-radius: 11px; }
-  .seat-head { gap: 5px; }
-  .seat-head .av { width: 20px; height: 20px; font-size: 10px; }
-  .seat-head .nm { font-size: 12px; }
-  .seat-score { font-size: 12px; }
-  .seat-bid { min-height: 0; gap: 3px; }
-  .bidchip { font-size: 9.5px; padding: 1px 6px; letter-spacing: 0; }
-  .seat-note { font-size: 10px; min-height: 13px; }
-  .pslot { min-height: 56px; }
-  .pslot.empty { width: 34px; height: 48px; }
+  .seat-head { gap: 4px; }
+  .seat-head .av { width: 18px; height: 18px; font-size: 9px; }
+  .seat-head .nm { font-size: 11px; }
+  /* The number says where a player comes in THIS trick, and the list says the
+     order they sit in — which starts wherever you are, not where the lead is.
+     Side by side those two disagreed: the boxes read 5, 6, 1, 2, 3, 4 down the
+     screen, which is harder to read than no numbers at all. The list keeps the
+     seating and the queue in the trick box keeps the trick. */
+  .seat-head .ord { display: none; }
+  .seat-score { font-size: 11.5px; }
+  .seat-bid { min-height: 0; gap: 3px; flex-wrap: wrap; }
+  /* "bid 0 · won 0" and "dealer" on one line rather than two: at eight players
+     that second line is four rows of it */
+  .bidchip { font-size: 9px; padding: 1px 5px; letter-spacing: 0; }
+  /* "· played black 6" is the card now sitting in the box under it */
+  .seat-note { display: none; }
+  /* The played card sits at the foot of the box, centred under the name, in a
+     slot as tall as the card — so a box does not grow by 20px the moment
+     somebody plays into it. */
+  .seat .pslot { min-height: 56px; align-self: center; margin-top: 1px;
+    align-items: center; }
+  .seat .pslot .card { width: 38px; height: 54px; }
+  .seat .pslot .card .cv { font-size: 16px; }
+  .seat .pslot.empty { width: 30px; height: 42px; border-radius: 7px; }
   .pslot .slot-hint { font-size: 9.5px; }
   /* headroom for table talk above the top row: a phone cannot spare 84px of
      it, and the bubbles sit on a fixed overlay that can overlap instead */
