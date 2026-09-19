@@ -400,11 +400,15 @@ a {
   min-height: 20px;
 }
 
+/* Two lines reserved, not one. The hint rewrites itself as the table fills
+   ("Share the code or link — or add a bot" becoming "4 aboard — ten rounds"),
+   and the long one wraps: every button below it moved down the moment somebody
+   joined. It is the only thing on this screen whose height depends on content. */
 #lobby-hint {
   color: var(--dim);
   font-size: 14px;
   text-align: center;
-  min-height: 20px;
+  line-height: 1.5; min-height: 3em;
 }
 
 .av {
@@ -1629,3 +1633,8 @@ button.wire.can:focus-visible .face {
 #bubble-layer .chat-bubble { position: relative; left: auto; top: auto; bottom: auto; right: auto; margin: 0; transform: none; }
 #bubble-layer .chat-bubble::after { display: none; }
 #bubble-layer .chat-bubble:last-child::after { display: block; left: 50%; right: auto; bottom: -12px; top: auto; transform: translateX(-50%); border: 6px solid transparent; border-top-color: #fff; }
+
+/* The lobby's two conditional buttons take turns in the same slot, so they hold
+   one height between them — an emoji in one label made its line box 2px taller
+   than the other's and everything below twitched as they swapped. */
+#btn-add-bot, #btn-start { min-height: 42px; line-height: 1.2; }

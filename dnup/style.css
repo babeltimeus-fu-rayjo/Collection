@@ -379,10 +379,14 @@ a {
   color: #ffb4b4;
 }
 
+/* Two lines reserved, not one. The hint rewrites itself as the table fills
+   ("Share the code or link — or add a bot" becoming "4 aboard — ten rounds"),
+   and the long one wraps: every button below it moved down the moment somebody
+   joined. It is the only thing on this screen whose height depends on content. */
 #lobby-hint {
   color: var(--dim);
   text-align: center;
-  min-height: 20px;
+  line-height: 1.5; min-height: 3em;
 }
 
 /* ---------------------------------------------------------------- avatars */
@@ -1621,3 +1625,8 @@ body:not(.my-turn) #hand .pcard .pc-body {
 .opp { width: 272px; min-height: 168px; }
 #row-bottom #my-zone { min-height: 168px; }
 .prow .opp { flex: 0 0 272px; }
+
+/* The lobby's two conditional buttons take turns in the same slot, so they hold
+   one height between them — an emoji in one label made its line box 2px taller
+   than the other's and everything below twitched as they swapped. */
+#btn-add-bot, #btn-start { min-height: 42px; line-height: 1.2; }
