@@ -1471,7 +1471,9 @@ a {
    the fold, the lobby 296px and the table 1384px — two and a half screens of
    scrolling to see a trick. Nothing below changes the design; it is the same
    layout at phone scale. */
-@media (max-width: 640px) {
+/* The home and lobby screens tighten on a short window as well as a narrow
+   one, because a phone held sideways has 375px of height and the same problem. */
+@media (max-width: 640px), (max-height: 520px) {
   #screen-home,
   #screen-lobby { padding: 14px; gap: 9px; }
 
@@ -1508,7 +1510,11 @@ a {
   .scoring-pick { padding: 5px 10px; font-size: 12.5px; }
   #scoring-blurb { font-size: 12px; line-height: 1.4; }
   #lobby-hint { font-size: 12.5px; }
+}
 
+/* The table below is a narrow-screen layout, not a short-screen one: a wide
+   window that happens to be short still wants the desktop table. */
+@media (max-width: 640px) {
   /* ---- the table ----------------------------------------------------- */
 
   /* One line. A wrapped topbar costs three of them, and the gear and log

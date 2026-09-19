@@ -1656,7 +1656,9 @@ a {
    the window narrowed, so on a 375x667 phone the important half of each one
    sat below the fold. Nothing below changes the design; it is the same layout
    at phone scale. */
-@media (max-width: 640px) {
+/* The home and lobby screens tighten on a short window as well as a narrow
+   one, because a phone held sideways has 375px of height and the same problem. */
+@media (max-width: 640px), (max-height: 520px) {
   #screen-home,
   #screen-lobby { padding: 14px; gap: 9px; }
   /* the Collection pill is fixed at the top left, so the screen has to start
@@ -1689,7 +1691,11 @@ a {
   .seat-row .chip.bot { display: none; }
   .kick { width: 20px; height: 20px; font-size: 10px; }
   #lobby-hint { font-size: 12.5px; }
+}
 
+/* The table below is a narrow-screen layout, not a short-screen one: a wide
+   window that happens to be short still wants the desktop table. */
+@media (max-width: 640px) {
   /* One line. A wrapped topbar costs three of them, and the gear and log
      buttons already claim the right-hand 100px. */
   .topbar { flex-wrap: nowrap; gap: 6px; padding: 8px 10px; min-height: 0; }
