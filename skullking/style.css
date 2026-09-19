@@ -1618,15 +1618,18 @@ a {
      one pixel short, so every player took a row of their own and the table ran
      three screens deep. They share a row now, as many as fit. */
   .prow { gap: 6px; padding: 2px 8px; }
-  /* One box per player, three across, the card they have played inside it —
-     the shape DNUP and Love Letter use. The seats then read the way a list
-     reads, left to right and down, and that reading order is the turn order.
-     (renderTable puts the card inside the seat; here it only has to be laid
-     out and the boxes given a width.) */
+  /* One box per player, four across — which is one row at four players and two
+     at a full table, and both read straight across. Three across was the worst
+     of both: a ragged last row at every count, and 116px boxes. */
   .prow .pcell,
-  .pcell { width: auto; min-width: 100px; flex: 1 1 108px; max-width: calc(33.33% - 4px);
+  .pcell { width: auto; min-width: 0; flex: 1 1 calc(25% - 5px); max-width: calc(25% - 5px);
     flex-direction: column; align-items: stretch; gap: 0; }
-  .pcell .seat { min-height: 0; width: 100%; min-width: 0; }
+  .pcell .seat { min-height: 0; width: 100%; min-width: 0;
+    display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 5px; }
+  /* a quarter of a phone is 85px, and the avatar is 22 of them that the name
+     needs more than the colour does */
+  .pcell .seat-head .av { display: none; }
+  .pcell .seat-head { justify-content: space-between; }
   .seat { padding: 6px 7px; gap: 3px; border-radius: 11px; }
   .seat-head { gap: 4px; }
   .seat-head .av { width: 18px; height: 18px; font-size: 9px; }
@@ -1645,11 +1648,10 @@ a {
   .bidchip { font-size: 9px; padding: 1px 5px; letter-spacing: 0; }
   /* "· played black 6" is the card now sitting in the box under it */
   .seat-note { display: none; }
-  /* The played card sits at the foot of the box, centred under the name, in a
-     slot as tall as the card — so a box does not grow by 20px the moment
-     somebody plays into it. */
-  .seat .pslot { min-height: 56px; align-self: center; margin-top: 1px;
-    align-items: center; }
+  /* The played card sits beside the text, in a slot as wide and tall as a card
+     — so a box does not change size the moment somebody plays into it. */
+  .seat .pslot { min-height: 54px; min-width: 38px; align-self: center; margin-top: 1px;
+    align-items: center; justify-content: center; }
   .seat .pslot .card { width: 38px; height: 54px; }
   .seat .pslot .card .cv { font-size: 16px; }
   .seat .pslot.empty { width: 30px; height: 42px; border-radius: 7px; }
