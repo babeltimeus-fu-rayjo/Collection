@@ -1263,7 +1263,11 @@ function seatTile(view, p) {
   const ord = orderChip(view, p);
   if (ord) head.append(ord);
   head.append(avatarEl(p.name, p.seat, p.bot));
-  head.append(el('span', 'nm', p.seat === view.you ? `${p.name} (you)` : p.name));
+  head.append(el('span', 'nm', p.name));
+  // a chip rather than "(you)" inside the name: at a third of a phone's width
+  // the name has no room to carry a suffix, and it would be the first thing
+  // ellipsis ate
+  if (p.seat === view.you) head.append(el('span', 'nm-you', 'you'));
   head.append(el('span', 'seat-score', `${p.score}`));
   tile.append(head);
   const bidRow = el('div', 'seat-bid');
@@ -1290,13 +1294,19 @@ function stackedTable() {
 // None of which survives a phone. Two seats do not fit across one, so the rows
 // wrap into a grid and that shape says nothing: with four players it read 3rd,
 // 4th, 2nd, you down the screen. A list has its own order — down the page — so
-// on a phone the seats are simply dealt into it in the order they play, from
-// whoever goes after you, with you last against your own hand.
+// on a phone the seats are dealt into one grid in the order they play, you
+// first and the rest following round.
+//
+// You are IN that grid, not set apart below it. Your own seat sat alone under
+// the trick panel for a while, which is how DNUP and Love Letter do it — but
+// those two have a play area of your own to put there, and this does not: your
+// seat is the same box as everyone else's. Sitting it out of line only broke
+// the sequence in half, which was most of what made the order hard to read.
 function tableRows(view) {
   const seats = view.players.map((p) => p.seat);
   const myIdx = Math.max(0, seats.indexOf(view.you));
   const S = seats.map((_, k) => seats[(myIdx + k) % seats.length]);
-  if (stackedTable()) return { top: S.slice(1), bottom: [S[0]] };
+  if (stackedTable()) return { top: S, bottom: [] };
   const bottomN = Math.max(1, Math.floor(S.length / 2));
   return { bottom: S.slice(0, bottomN).reverse(), top: S.slice(bottomN) };
 }

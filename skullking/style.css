@@ -631,6 +631,19 @@ a {
   opacity: 0.3;
 }
 
+/* "you", as a chip beside your name rather than a suffix inside it */
+.seat-head .nm-you {
+  flex: none;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--gold-dim);
+  color: var(--gold);
+}
+
 .seat-score {
   margin-left: auto;
   font-weight: 800;
@@ -1614,12 +1627,11 @@ a {
   .pcell { width: auto; min-width: 100px; flex: 1 1 108px; max-width: calc(33.33% - 4px);
     flex-direction: column; align-items: stretch; gap: 0; }
   .pcell .seat { min-height: 0; width: 100%; min-width: 0; }
-  /* your own box is alone on its row, so it has the width for "(you)" */
-  #row-bottom .pcell { flex: 0 1 168px; max-width: calc(50% - 3px); }
   .seat { padding: 6px 7px; gap: 3px; border-radius: 11px; }
   .seat-head { gap: 4px; }
   .seat-head .av { width: 18px; height: 18px; font-size: 9px; }
   .seat-head .nm { font-size: 11px; }
+  .seat-head .nm-you { font-size: 8px; padding: 1px 4px; letter-spacing: 0.03em; }
   /* The number says where a player comes in THIS trick, and the list says the
      order they sit in — which starts wherever you are, not where the lead is.
      Side by side those two disagreed: the boxes read 5, 6, 1, 2, 3, 4 down the
