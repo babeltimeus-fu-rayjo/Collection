@@ -439,8 +439,14 @@ body {
    opinion about it. The defaults sit on :root as well so a .tile drawn anywhere
    else — the wordmark on the home screen — renders at its natural 40x52 instead
    of collapsing to nothing. */
+/* --ts-base is two factors multiplied: --ts-device, which this stylesheet sets
+   and JS never touches, and --ts-fit, which relayout() sets when even the
+   device factor leaves a row wider than the column it has to sit in. Keeping
+   them apart is what stops the shrink feeding itself: if JS wrote --ts-base it
+   would read its own last answer back next time and go on shrinking. */
 :root { --ts-base: 1; --ts-hand: 1; --ts-ohand: 1; --ts-played: 1; --ts-disc: 1; }
-#screen-game { --ts-base: 1; --ts-hand: 1; --ts-ohand: 1; --ts-played: 1; --ts-disc: 1; }
+#screen-game { --ts-device: 1; --ts-fit: 1; --ts-handfit: 1; --ts-base: calc(var(--ts-device) * var(--ts-fit));
+  --ts-hand: 1; --ts-ohand: 1; --ts-played: 1; --ts-disc: 1; }
 /* Seat shape, rewritten by relayout() in app.js whenever the WINDOW changes (see
    there). These are the side-by-side defaults: a deep 6-wide pond and a sets
    column two melds across. Stacked, they widen to 8 or 12 pond columns and three
@@ -540,7 +546,10 @@ body {
   padding: 8px 12px; min-height: 60px; flex-wrap: wrap; touch-action: pan-y;
 }
 #hand .tile {
-  --u: calc(1px * var(--ts-base) * var(--ts-hand));
+  /* --ts-handfit is relayout()'s: the hand has to stay on one line (see there),
+     and it is sized for the longest hand the ruleset can produce, so calling a
+     meld never resizes the tiles you are looking at. */
+  --u: calc(1px * var(--ts-base) * var(--ts-hand) * var(--ts-handfit, 1));
   cursor: pointer; transition: transform .12s ease, box-shadow .1s;
 }
 #hand .tile:hover { transform: translateY(-4px); box-shadow: 0 4px 12px rgba(0,0,0,.3); }
@@ -889,12 +898,66 @@ body {
 }
 
 /* ================================================================ responsive */
+/* A phone is not a small table, it is a tall one. Two quadrants side by side
+   leave each player 131px of width for a tray that wants 198, so the melds ran
+   out past every seat and the pond with them. Stacked, each player gets the
+   whole width — nearly three times as much — and the table becomes four rows
+   read downward in turn order, with yours last so it sits against your hand.
+   --stacked tells relayout() which shape it is measuring; the breakpoint stays
+   here, in one place. */
 @media (max-width: 600px) {
   /* device factor shrinks every tile so the table fits a phone; the Size
-     sliders still scale on top of this. */
-  #screen-game { --ts-base: 0.66; }
-  #table { gap: 5px 6px; padding: var(--bubble-reserve) 4px 0; }
+     sliders still scale on top of this, and relayout() shrinks it further if
+     even this leaves a row wider than the column it has to sit in. */
+  #screen-game { --ts-device: 0.66; --stacked: 1; }
+  #table {
+    gap: 5px 6px; padding: var(--bubble-reserve) 4px 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: repeat(5, auto);
+    /* one column, so there is no dead felt beside a quadrant to bleed into */
+    --bubble-reserve: 26px;
+  }
+  .seat-tr { grid-column: 1; grid-row: 1; }
+  .seat-tl { grid-column: 1; grid-row: 2; }
+  .seat-bl { grid-column: 1; grid-row: 3; }
+  #center  { grid-column: 1; grid-row: 4; }
+  .seat-br { grid-column: 1; grid-row: 5; }
+
+  /* The left column's seats mirror themselves so their sets face the outside of
+     the table. In one column there is no outside: they all read the same way. */
+  .seat-tl .seat-board, .seat-bl .seat-board { flex-direction: row; }
+  .seat-tl .seat-hand, .seat-bl .seat-hand { align-self: center; justify-content: center; }
+  .seat-tr .seat-hand, #my-zone .seat-hand { align-self: center; justify-content: center; }
+
+  /* the centre was a column between two columns of seats; as a row between two
+     seats it costs a third of the height */
+  #center { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 8px 12px; padding: 2px 0; }
+  #center-info { flex-direction: row; gap: 8px; }
+
+  .seat { padding: 3px 4px; }
   .seat-name { max-width: 78px; font-size: 11px; }
+
+  /* one row: the bar cannot hold a room code, four buttons and the corner
+     buttons' reserved 76px, so the code gives up width before the buttons do */
+  /* stays with the gear and log buttons, which are fixed to the corner: half
+     the bar scrolling away while the other half sits still reads as a fault */
+  .topbar { flex-wrap: nowrap; gap: 5px; padding: 5px 10px; min-height: 0;
+    position: sticky; top: 0; }
+  .topbar #room-chip, .topbar > span:not(.spacer) { min-width: 0; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+  .topbar .btn { flex: none; padding: 5px 8px; font-size: 12px; white-space: nowrap; }
+
+  /* Four stacked quadrants are a page, not a screen, so your own hand would sit
+     nearly a thousand pixels below the top of the table. It stays put instead
+     and the board scrolls behind it — the one thing you always need in reach is
+     the one thing that never moves. Opaque, because tiles now pass underneath:
+     this is the colour the translucent panel already resolved to on the felt. */
+  #my-area { position: sticky; bottom: 0; z-index: 40; background: #1e4130;
+    box-shadow: 0 -8px 18px rgba(0,0,0,.35); }
+  /* the quadrant and the strip are no longer touching, so they stop pretending
+     to be one shape: yours is simply the seat with the lighter surface */
+  #my-zone::before { right: 0; border-radius: 10px; }
+  #screen-game.my-turn #my-area::before { display: none; }
 }
 
 /* the seat that is yours says so */

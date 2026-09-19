@@ -320,7 +320,29 @@ function setMatch(key, force = false) {
 // table is most of the screen, so the tiles simply stayed dark after you had
 // moved away from them.
 let matchClear = null;
+
+// A finger cannot hover. Its pointerover arrives on touchdown and its pointerout
+// on lift, so on a phone the highlight lived for exactly as long as you held the
+// tile down and then died a tenth of a second later — the one gesture that is no
+// use, since your own finger is over the tile you are trying to look at. A tap
+// latches it instead: tap the tile again, or anything that is not a tile, to put
+// it out. Nothing here consumes the tap, so it still selects and still discards.
+let touchLatch = null;
+function tileKeyAt(target) {
+  const t = target && target.closest ? target.closest('.tile[data-key]') : null;
+  return t && t.closest('#table, #hand') ? t.dataset.key : null;
+}
+document.addEventListener('pointerdown', (e) => {
+  if (e.pointerType !== 'touch') return;
+  const key = tileKeyAt(e.target);
+  touchLatch = key && key !== touchLatch ? key : null;
+  if (touchLatch) hideTip();
+  clearTimeout(matchClear);
+  setMatch(touchLatch);
+}, true);
+
 document.addEventListener('pointerover', (e) => {
+  if (e.pointerType === 'touch') return; // a tap latches it; see above
   const t = e.target && e.target.closest ? e.target.closest('.tile[data-key]') : null;
   const key = t && t.closest('#table, #hand') ? t.dataset.key : null;
   clearTimeout(matchClear);
@@ -330,6 +352,7 @@ document.addEventListener('pointerover', (e) => {
   matchClear = setTimeout(() => setMatch(null), 100);
 });
 document.addEventListener('pointerout', (e) => {
+  if (e.pointerType === 'touch') return; // a tap latches it; see above
   // A null relatedTarget means the pointer left the window — and it means the
   // same thing when the node under the pointer is taken out of the DOM and put
   // back, which is what a render does to the hand. Clearing at once treated the
@@ -444,22 +467,62 @@ function relayout() {
   if (!g) return;
   const maxMelds = layoutVariant === 'tw' ? 5 : 4;
   const hasFlowers = layoutVariant !== 'jp';
-  const base = parseFloat(getComputedStyle(g).getPropertyValue('--ts-base')) || 1;
+  const gcs = getComputedStyle(g);
+  const device = parseFloat(gcs.getPropertyValue('--ts-device')) || 1;
+  // one column of seats rather than two: see the responsive block in the CSS
+  const stacked = gcs.getPropertyValue('--stacked').trim() === '1';
+
+  // How wide a quadrant's CONTENT can be, worked out from the table's own width
+  // rather than from anything that depends on tile size — the clamp below feeds
+  // off this, and a clamp that measured something it had just shrunk would go
+  // on shrinking.
+  const tableEl = $('#table');
+  const tcs = tableEl && getComputedStyle(tableEl);
+  const seatEl = $('.seat-tl');
+  const seatCs = seatEl && getComputedStyle(seatEl);
+  // the seat's own padding is the turn halo's reserved room (see .seat in the CSS)
+  const pad = seatCs ? (parseFloat(seatCs.paddingLeft) + parseFloat(seatCs.paddingRight)) || 0 : 8;
+  const tPad = tcs ? (parseFloat(tcs.paddingLeft) + parseFloat(tcs.paddingRight)) || 0 : 8;
+  const tGap = tcs ? parseFloat(tcs.columnGap) || 8 : 8;
+  const vw = document.body.clientWidth || window.innerWidth;
+  const tInner = tableEl ? tableEl.clientWidth - tPad : vw - 8;
+  const availSeat = stacked ? tInner - pad : (tInner - 92 - 2 * tGap) / 2 - pad;
+
+  // Nothing may be wider than the column it has to sit in. The pond and the
+  // sets column each pick a shape that fits, but both have a narrowest shape
+  // they cannot go below: six discards across, and a sets row of two melds —
+  // which is also exactly the eight tiles a flower row needs. At 131px of seat,
+  // which is what two quadrants across a phone came to, that row wanted 198 and
+  // ran out over the player beside it. So the tiles come down until it fits.
+  // The sliders keep their meaning relative to one another; only the scale they
+  // are spent at changes.
+  // A row is tiles plus furniture, and only the tiles shrink: the gaps between
+  // them are the same 1 or 2px whatever the scale. So each constraint takes its
+  // fixed pixels off the room first and divides what is left among the tiles —
+  // dividing the whole width, gaps included, leaves the row still too wide by
+  // exactly the gaps.
+  const fitFor = (tilesAt1, fixed) => {
+    const room = availSeat - fixed;
+    if (!(tilesAt1 > 0)) return 1;
+    return room > 0 ? room / (device * tilesAt1) : 0;
+  };
+  const fit = Math.max(0.2, Math.min(
+    1,
+    hasFlowers ? fitFor(FLOWER_TILES * TILE_W * sizes.played, FLOWER_TILES - 1) : 1,
+    fitFor(2 * MELD_TILES * TILE_W * sizes.played, 8),
+    fitFor(6 * TILE_W * sizes.disc, 5 * TILE_GAP + 6),
+  ));
+  const base = device * fit;
+
   const pw = TILE_W * base * sizes.played;  // one played tile, in px
   const dw = TILE_W * base * sizes.disc;    // one discard tile, in px
 
-  // Width a single quadrant's CONTENT gets: the grid track less the seat's own
-  // padding, which is the turn halo's reserved room (see .seat in style.css).
-  // The track is minmax(0, --seat-max) so it never depends on what's inside it —
-  // measuring is exact and, unlike arithmetic on innerWidth, already accounts for
-  // the page's scrollbar. Fall back to the arithmetic (92px centre column,
-  // 2 x 8px gaps, 2 x 4px table padding) while the table is still hidden.
-  const seatEl = $('.seat-tl');
-  const seatCs = seatEl && getComputedStyle(seatEl);
-  const pad = seatCs ? (parseFloat(seatCs.paddingLeft) + parseFloat(seatCs.paddingRight)) || 0 : 8;
+  // Width a single quadrant's CONTENT gets. The track is minmax(0, --seat-max),
+  // so measuring is exact and — unlike arithmetic on innerWidth — already
+  // accounts for the page's scrollbar. Falls back to the arithmetic above while
+  // the table is still hidden and measures zero.
   const measured = seatEl ? seatEl.clientWidth - pad : 0;
-  const vw = document.body.clientWidth || window.innerWidth;
-  const seat = measured > 0 ? measured : (vw - 92 - 16 - 8) / 2 - pad;
+  const seat = measured > 0 ? measured : availSeat;
 
   const pondW = (cols) => cols * dw + (cols - 1) * TILE_GAP + 6;
   const pondH = (rows) => rows * 52 * base * sizes.disc + (rows - 1) * TILE_GAP + 6;
@@ -487,7 +550,27 @@ function relayout() {
     floor = 0;
   }
 
+  // Your own hand is one row or it is not a hand: wrapped across two, a drag to
+  // reorder it cannot tell which row you meant, because the drop index is read
+  // off clientX alone. So it gets a fit factor of its own — the board keeps its
+  // size and only the hand comes down, and it comes down far enough for the
+  // LONGEST hand the ruleset can hold, so calling a meld never resizes the
+  // tiles you are in the middle of reading.
+  const handEl = $('#hand');
+  const hcs = handEl && getComputedStyle(handEl);
+  const hPad = hcs ? (parseFloat(hcs.paddingLeft) + parseFloat(hcs.paddingRight)) || 0 : 24;
+  const hGap = hcs ? parseFloat(hcs.columnGap) || 3 : 3;
+  const handAvail = handEl ? handEl.clientWidth - hPad : vw - 24;
+  const handTiles = (layoutVariant === 'tw' ? 16 : 13) + 1;
+  const handTileW = handTiles * TILE_W * base * sizes.hand;
+  const handRoom = handAvail - (handTiles - 1) * hGap;
+  const handFit = handTileW > 0 && handRoom > 0
+    ? Math.max(0.2, Math.min(1, handRoom / handTileW))
+    : 1;
+
   const set = (k, v) => { if (g.style.getPropertyValue(k) !== String(v)) g.style.setProperty(k, v); };
+  set('--ts-fit', Math.round(fit * 1000) / 1000);
+  set('--ts-handfit', Math.round(handFit * 1000) / 1000);
   set('--pond-cols', pondCols);
   set('--pond-rows', Math.ceil(POND_TILES / pondCols));
   set('--played-cols', setsTiles(melds));
