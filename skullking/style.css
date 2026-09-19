@@ -1519,6 +1519,10 @@ a {
   #room-chip,
   #round-chip { font-size: 11px; padding: 4px 8px; letter-spacing: .04em; white-space: nowrap; }
   .topbar .btn.ghost { padding: 6px 9px; font-size: 12px; white-space: nowrap; }
+  /* nothing may reach under those two buttons, so when the bar runs out of
+     room the chips give up width and the buttons keep theirs */
+  .topbar > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar .btn { flex: none; }
 
   /* Seats were a fixed 168px, and two of them wanted 348 of the 347 going —
      one pixel short, so every player took a row of their own and the table ran

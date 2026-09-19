@@ -31,6 +31,9 @@
       #feed-toggle:hover { opacity: 1; }
       #feed-toggle.off { opacity: .95; border-color: #e0b34e; color: #e0b34e; }
       body.feed-hidden #feed { display: none !important; }
+      @media (max-width: 640px) {
+        #feed-toggle { width: 30px; height: 30px; font-size: 14px; right: 42px; top: 8px; }
+      }
     `;
     document.head.append(style);
 

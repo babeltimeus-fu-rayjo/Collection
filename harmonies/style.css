@@ -1694,8 +1694,70 @@ a {
      buttons already claim the right-hand 100px. */
   .topbar { flex-wrap: nowrap; gap: 6px; padding: 8px 10px; min-height: 0; }
   .topbar .btn.ghost { padding: 6px 9px; font-size: 12px; white-space: nowrap; }
+  /* nothing may reach under those two buttons, so when the bar runs out of
+     room the chips give up width and the buttons keep theirs */
+  .topbar > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar .btn { flex: none; }
 
   #feed { max-height: 74px; margin: 5px 8px; font-size: 11px; }
   /* room for the chat button to float over, and no more */
   #screen-game { padding-bottom: 44px; }
+
+  /* ---- the table ----------------------------------------------------- */
+
+  /* Two seats wanted 348px of the 347 going, so each took a row of its own.
+     And every seat carried a thumbnail of that player's landscape — 106px of
+     it, four times over. Tapping a seat already swaps the big board to that
+     player, which is the same picture at a size you can read. */
+  /* the scoreboard is what you read between turns, not what you act on, so it
+     goes under the board rather than above it — the market, the board and the
+     action bar then all fit the screen at once */
+  #seats { grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 6px;
+    padding: 4px 8px 0; order: 8; }
+  .seat { padding: 5px 7px; border-radius: 10px; }
+  .seat .miniboard { display: none; }
+  .seat-head { gap: 5px; }
+  .seat .av { width: 20px; height: 20px; font-size: 10px; }
+  .seat-head .nm { font-size: 12px; }
+  .seat-sub { font-size: 10px; gap: 5px; }
+  .seat-note { font-size: 10px; }
+
+  /* the market is a row you pick from, not a wall you read: the animal cards
+     scroll sideways instead of wrapping into three rows */
+  /* the tile slots and the animal cards are both things you pick from, and
+     stacked they cost 253px before the board even starts: one strip that
+     scrolls sideways instead, which is 122 */
+  #market { gap: 8px; padding: 6px 8px 0; flex-wrap: nowrap; overflow-x: auto;
+    align-items: flex-start; scrollbar-width: none; }
+  #market::-webkit-scrollbar { display: none; }
+  #slots { flex: none; }
+  #slots { gap: 5px; padding: 6px; border-radius: 11px; }
+  .slot { width: 42px; min-height: 84px; padding: 5px 0; gap: 3px; border-radius: 9px; }
+  #display { flex-wrap: nowrap; overflow-x: auto; gap: 6px; scrollbar-width: none; }
+  #display::-webkit-scrollbar { display: none; }
+  .acard { width: 112px; min-width: 112px; font-size: 10.5px; padding: 5px 6px; }
+  .acard .a-name { font-size: 11px; }
+
+  /* which side of the board you are playing is set once in the lobby and
+     printed on the board itself; the pouch count is in the log, and FINAL
+     ROUND still appears here when it runs out. That leaves the room code
+     enough room to be read out to somebody. */
+  #side-chip, #pouch-chip { display: none; }
+  #room-chip { font-size: 10px; padding: 3px 6px; flex: none; }
+  #last-chip { font-size: 10px; padding: 3px 6px; }
+  .topbar .btn.ghost { padding: 5px 8px; font-size: 11px; }
+
+  /* the board is the game; it only has to stop being wider than the phone */
+  #workspace { gap: 6px; padding: 4px 8px 0; }
+  #board-wrap { padding: 7px 8px 8px; border-radius: 14px; width: 100%; }
+  #board-owner { font-size: 12px; margin-bottom: 4px; }
+  #board { transform: scale(.85); transform-origin: top left; width: 303px; height: 281px; }
+  #tray { padding: 5px 10px; }
+  #tray .tray-tok .tok,
+  .tray-tok .tok { width: 38px; height: 38px; }
+  .cards-col { font-size: 11px; }
+
+  #action-bar { min-height: 0; padding: 5px 8px 8px; gap: 5px; }
+  #action-bar .abar-label,
+  .abar-label { font-size: 12px; line-height: 1.35; }
 }

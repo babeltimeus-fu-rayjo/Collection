@@ -1684,6 +1684,10 @@ button.wire.can:focus-visible .face {
      buttons already claim the right-hand 100px. */
   .topbar { flex-wrap: nowrap; gap: 6px; padding: 8px 10px; min-height: 0; }
   .topbar .btn.ghost { padding: 6px 9px; font-size: 12px; white-space: nowrap; }
+  /* nothing may reach under those two buttons, so when the bar runs out of
+     room the chips give up width and the buttons keep theirs */
+  .topbar > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar .btn { flex: none; }
 
   #feed { max-height: 74px; margin: 5px 8px; font-size: 11px; }
   /* room for the chat button to float over, and no more */

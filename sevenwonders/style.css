@@ -1615,8 +1615,58 @@ a {
      buttons already claim the right-hand 100px. */
   .topbar { flex-wrap: nowrap; gap: 6px; padding: 8px 10px; min-height: 0; }
   .topbar .btn.ghost { padding: 6px 9px; font-size: 12px; white-space: nowrap; }
+  /* nothing may reach under those two buttons, so when the bar runs out of
+     room the chips give up width and the buttons keep theirs */
+  .topbar > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar .btn { flex: none; }
 
   #feed { max-height: 74px; margin: 5px 8px; font-size: 11px; }
   /* room for the chat button to float over, and no more */
   #screen-game { padding-bottom: 44px; }
+
+  /* ---- the table ----------------------------------------------------- */
+
+  /* Cities wanted 210px each, so a phone showed one per row and eight players
+     ran the board four screens deep. Two per row, and the wonder and its
+     stacks sized to that width. */
+  /* these blocks size to their contents on a centring column, so a grid told
+     to fit two columns was still handed one column's worth of width */
+  #cities, #me, #hand, #action-bar, #waiting { width: 100%; }
+  #cities { grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 6px; padding: 6px 8px; }
+  .city { padding: 6px 7px; font-size: 11px; border-radius: 10px; }
+  .city-head { gap: 5px; margin-bottom: 3px; }
+  .city .av { width: 20px; height: 20px; font-size: 10px; }
+  .city-name { font-size: 12px; }
+  .city-stat { gap: 4px; margin-bottom: 3px; }
+  .city-wonder { gap: 4px; margin-bottom: 3px; }
+  .pip { width: 7px; height: 7px; }
+  .stack { font-size: 9.5px; padding: 0 4px; }
+  .stack-card { max-width: 5.5em; }
+  .res-chip { width: 13px; height: 13px; font-size: 9px; }
+  #me { padding: 0 8px 6px; }
+
+  /* The hand is a row that scrolls — it says so two hundred lines further up,
+     but the earlier rule's flex-wrap survived into it, so seven cards stacked
+     into a 720px column instead. */
+  #hand { flex-wrap: nowrap; min-height: 0; padding: 6px 8px; gap: 6px;
+    scrollbar-width: none; }
+  #hand::-webkit-scrollbar { display: none; }
+  .hand-card { min-width: 138px; gap: 4px; }
+  .swcard { min-height: 0; padding: 6px; gap: 3px; }
+  .swcard .sw-name { font-size: 12px; }
+  .swcard .sw-gist { font-size: 10px; line-height: 1.3; }
+  .btn.tiny { font-size: 10.5px; padding: 2px 5px; }
+  .card-acts { gap: 2px; }
+
+  /* the age, the turn and which way the hands are passing are three chips
+     that do not fit beside a room code and two buttons. The age and turn are
+     one chip; which way it passes is drawn on every card row anyway. */
+  #age-chip, #turn-chip, #pass-chip { font-size: 10px; padding: 3px 6px; white-space: nowrap; }
+  #pass-chip { display: none; }
+  #room-chip { font-size: 10px; padding: 3px 6px; letter-spacing: .03em; }
+  .topbar .btn.ghost { padding: 5px 8px; font-size: 11px; }
+
+  #waiting { min-height: 0; font-size: 12px; padding: 2px 8px; }
+  #action-bar { min-height: 0; padding: 6px 8px 8px; gap: 6px; }
+  .act-note { font-size: 11px; }
 }

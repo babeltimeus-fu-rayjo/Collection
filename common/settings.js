@@ -107,6 +107,13 @@ export function initSettings(stem, defs) {
    there, and only there. This rule is injected at runtime, which puts it after
    the game's stylesheet and lets it win at equal specificity. */
 @media (max-width: 900px) { .topbar { padding-right: 100px; } }
+/* On a phone the bar has barely 260px for a room code, the game's own chips
+   and two buttons, so these two shrink and hand 24px of it back. */
+@media (max-width: 640px) {
+  #cfg-gear { width: 30px; height: 30px; font-size: 15px; right: 8px; top: 8px; }
+  #cfg-drawer { top: 44px; right: 8px; }
+  .topbar { padding-right: 76px; }
+}
 #cfg-drawer { position: fixed; right: 12px; top: 56px; z-index: 96; width: min(352px, calc(100vw - 24px));
   max-height: min(74vh, 640px); overflow-y: auto; overscroll-behavior: contain; border-radius: 14px;
   background: rgba(14,17,25,.97); border: 1px solid rgba(255,255,255,.16);
