@@ -108,14 +108,23 @@
     .mjtiles { display: flex; gap: 5px; }
 
     .mjtiles .tile {
+      /* The page sets Avenir Next, which has no CJK glyphs, so 中 發 白 fell
+         through to a different fallback face than the game's system-ui picks —
+         the same characters drawn in two different typefaces. The tile carries
+         the game's stack so the card and the table agree on the letterform. */
+      font-family: system-ui, -apple-system, sans-serif;
       width: 40px;
       height: 52px;
       font-size: 52px;
       border-radius: 4px;
       background: linear-gradient(165deg, #fdf9ee, #ece1c6);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75), 0 5px 12px rgba(0, 0, 0, 0.4);
+      /* the game's own shadow: a tile seated on felt, not floating above it */
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75), 0 1px 2px rgba(0, 0, 0, 0.3);
+      color: #1a1a1a;
       position: relative;
+      overflow: hidden;
       line-height: 1;
+      text-align: center;
       flex-shrink: 0;
     }
 

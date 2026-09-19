@@ -15,8 +15,11 @@ body {
 .back-home { align-self: flex-start; color: #8ab89a; text-decoration: none; font-size: 13px; margin-bottom: 16px; }
 .logo { font-size: clamp(28px, 6vw, 44px); letter-spacing: 4px; text-align: center; margin: 12px 0 8px; color: #e8d5a3;
         display: flex; align-items: center; justify-content: center; gap: 14px; }
-/* the same tile the game deals, at wordmark scale */
-.logo-tile { --u: calc(1px * clamp(.62, .13vw + .5, .92)); cursor: default; }
+/* The same tile the game deals, at the size it deals it — which is also the
+   size the Collection card uses, so the two agree. (An earlier --u override
+   here never applied: .tile sets its own --u later in this file at the same
+   specificity, so the rule was dead and the tile was always full size.) */
+.logo-tile { cursor: default; }
 .tagline { max-width: 520px; text-align: center; font-size: 14px; line-height: 1.55; color: #b0c8a8; margin-bottom: 24px; }
 .field { width: 100%; max-width: 320px; padding: 10px 14px; border: 2px solid #2a6b45; border-radius: 8px; background: #0a2a1a; color: #e8e0d0; font-size: 16px; text-align: center; outline: none; }
 .field:focus { border-color: #4db87a; }
