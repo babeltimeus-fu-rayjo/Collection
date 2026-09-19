@@ -13,8 +13,13 @@ body {
 
 /* ================================================================ home */
 .back-home { align-self: flex-start; color: #8ab89a; text-decoration: none; font-size: 13px; margin-bottom: 16px; }
-.logo { font-size: clamp(28px, 6vw, 44px); letter-spacing: 4px; text-align: center; margin: 12px 0 8px; color: #e8d5a3;
+.logo { --logo-track: 4px;
+        font-size: clamp(28px, 6vw, 44px); letter-spacing: var(--logo-track); text-align: center; margin: 12px 0 8px; color: #e8d5a3;
         display: flex; align-items: center; justify-content: center; gap: 14px; }
+/* Tracking is added after every letter including the last, so the word's box is
+   4px wider than the word looks and centring the box leaves the letters 2px
+   left. Take the phantom column back off the end. */
+.logo-word { margin-right: calc(-1 * var(--logo-track)); }
 /* The same tile the game deals, at the size it deals it — which is also the
    size the Collection card uses, so the two agree. (An earlier --u override
    here never applied: .tile sets its own --u later in this file at the same
@@ -454,7 +459,13 @@ body {
 .face.man { flex-direction: column; gap: .01em; color: #17439b; }
 .face.man .mnum { font-size: .36em; font-weight: 800; line-height: 1; }
 .face.man .msuit { font-size: .46em; font-weight: 800; line-height: 1; color: #b0202a; }
-.face .honor { font-size: .66em; font-weight: 800; line-height: 1; }
+/* Optical centring. Flex centres the LINE BOX, but the ink inside it is not
+   centred on that box: these glyphs sit low. Measured on system-ui at 34.32px,
+   font ascent 33 / descent 7, and 中's ink 26.62 above the baseline and 3.57
+   below — so the ink's middle lands (33-7)/2 - (26.62-3.57)/2 = 1.47px below
+   the line box's middle, which is 0.043em at any size. 發 and 白 measure the
+   same to within a tenth of a pixel. Nudged back up by that much. */
+.face .honor { font-size: .66em; font-weight: 800; line-height: 1; transform: translateY(-.043em); }
 .face.wind .honor { color: #27324a; }
 .face.dragon-R .honor { color: #c62828; }
 .face.dragon-G .honor { color: #1a7d31; }
