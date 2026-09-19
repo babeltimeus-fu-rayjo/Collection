@@ -562,6 +562,32 @@ a {
   text-overflow: ellipsis;
 }
 
+/* where this player comes in the current trick (see orderChip) */
+.seat-head .ord {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--dim);
+}
+
+.seat-head .ord.lead {
+  background: var(--gold-dim);
+  color: var(--gold);
+}
+
+/* played already: their place in the order has stopped mattering */
+.seat-head .ord.done {
+  opacity: 0.3;
+}
+
 .seat-score {
   margin-left: auto;
   font-weight: 800;
@@ -1522,6 +1548,8 @@ a {
      in the rules and on every round-end panel, so its chip is the one to go. */
   .topbar { flex-wrap: nowrap; gap: 6px; padding: 8px 10px; min-height: 0; }
   #scoring-chip { display: none; }
+  /* tableRows() reads this: the seats are dealt into a list here, not a table */
+  #screen-game { --stacked: 1; }
   #room-chip,
   #round-chip { font-size: 11px; padding: 4px 8px; letter-spacing: .04em; white-space: nowrap; }
   .topbar .btn.ghost { padding: 6px 9px; font-size: 12px; white-space: nowrap; }

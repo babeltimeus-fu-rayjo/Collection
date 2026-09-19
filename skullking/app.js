@@ -1260,6 +1260,8 @@ function seatTile(view, p) {
   const tile = el('div', `seat${isTurn ? ' turn' : ''}${p.seat === view.you ? ' me' : ''}${p.connected ? '' : ' offline'}`);
   tile.dataset.seat = String(p.seat);
   const head = el('div', 'seat-head');
+  const ord = orderChip(view, p);
+  if (ord) head.append(ord);
   head.append(avatarEl(p.name, p.seat, p.bot));
   head.append(el('span', 'nm', p.seat === view.you ? `${p.name} (you)` : p.name));
   head.append(el('span', 'seat-score', `${p.score}`));
@@ -1274,15 +1276,48 @@ function seatTile(view, p) {
   return tile;
 }
 
+// Are the seats laid out as a table, or as a list? The phone block in the CSS
+// says which; the breakpoint stays there, in one place.
+function stackedTable() {
+  const g = $('#screen-game');
+  return !!g && getComputedStyle(g).getPropertyValue('--stacked').trim() === '1';
+}
+
 // Long rectangular table: you sit on the bottom edge and the turn order
 // runs CLOCKWISE on screen — from you leftward along the bottom, up the
 // left side, left-to-right across the top, down the right side back to you.
+//
+// None of which survives a phone. Two seats do not fit across one, so the rows
+// wrap into a grid and that shape says nothing: with four players it read 3rd,
+// 4th, 2nd, you down the screen. A list has its own order — down the page — so
+// on a phone the seats are simply dealt into it in the order they play, from
+// whoever goes after you, with you last against your own hand.
 function tableRows(view) {
-  const seats = view.players.map((p) => p.seat).sort((a, b) => a - b);
+  const seats = view.players.map((p) => p.seat);
   const myIdx = Math.max(0, seats.indexOf(view.you));
   const S = seats.map((_, k) => seats[(myIdx + k) % seats.length]);
+  if (stackedTable()) return { top: S.slice(1), bottom: [S[0]] };
   const bottomN = Math.max(1, Math.floor(S.length / 2));
   return { bottom: S.slice(0, bottomN).reverse(), top: S.slice(bottomN) };
+}
+
+// Where this player comes in THIS trick: the leader is 1 and it counts round
+// from there. The seating says the same thing, but only once you have worked
+// out which way the table runs and where the count starts this time — and a
+// wrapped grid cannot say it at all. The number says both, and goes quiet once
+// that player has played and their place in the order stops mattering.
+function orderChip(view, p) {
+  if (view.phase !== 'play' || !view.trick) return null;
+  const seats = view.players.map((q) => q.seat);
+  const li = seats.indexOf(view.trick.leader);
+  const pi = seats.indexOf(p.seat);
+  if (li < 0 || pi < 0) return null;
+  const n = seats.length;
+  const pos = (((pi - li) % n) + n) % n;
+  const played = (view.trick.plays || []).some((x) => x.seat === p.seat);
+  const chip = el('span', `ord${played ? ' done' : ''}${pos === 0 ? ' lead' : ''}`, String(pos + 1));
+  chip.title = pos === 0 ? 'Leads this trick' : `Plays ${pos + 1}${['st', 'nd', 'rd'][pos] || 'th'} this trick`;
+  return chip;
 }
 
 // The card a player has thrown into the current trick sits in a slot on
@@ -2098,6 +2133,17 @@ function init() {
   $('#btn-rules-close').addEventListener('click', () => $('#modal-rules').classList.add('hidden'));
   $('#modal-rules').addEventListener('click', (e) => {
     if (e.target === $('#modal-rules')) $('#modal-rules').classList.add('hidden');
+  });
+
+  // Crossing the phone breakpoint changes which shape the seats are dealt into
+  // (a table or a list), and that is decided when they are drawn — so a window
+  // that crosses it has to draw them again.
+  let wasStacked = stackedTable();
+  window.addEventListener('resize', () => {
+    const now = stackedTable();
+    if (now === wasStacked) return;
+    wasStacked = now;
+    if (lastView) renderTable(lastView);
   });
 
   window.addEventListener('beforeunload', () => {
