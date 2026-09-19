@@ -1583,6 +1583,10 @@ a {
   .pick.go, .pick.escape-go, .pick.pirate-go { padding: 8px 15px; min-width: 0; }
 
   #feed { max-height: 74px; margin: 5px 8px; font-size: 11px; }
-  /* room for the chat button to float over, and no more */
-  #screen-game { padding-bottom: 44px; }
+  /* Room for the chat button and no more. A 46px button 10px off the bottom
+     needs 56 of reserve and was getting 44, so its top twelve pixels sat on the
+     log; here it is the same size as the gear and the log toggle in the other
+     corner, and the reserve actually covers it. */
+  #chat-toggle { width: 38px; height: 38px; font-size: 17px; }
+  #screen-game { padding-bottom: 52px; }
 }

@@ -954,6 +954,13 @@ body {
      this is the colour the translucent panel already resolved to on the felt. */
   #my-area { position: sticky; bottom: 0; z-index: 40; background: #1e4130;
     box-shadow: 0 -8px 18px rgba(0,0,0,.35); }
+  /* The strip is pinned to the bottom right, which is where the chat button
+     floats — so the two were sharing a corner and the button was sitting on
+     "ways to win". Chat moves to the same 10px offset the other games use, and
+     the faan line stops short of it instead of running underneath. */
+  #chat { right: 10px; bottom: 10px; }
+  #chat-toggle { width: 38px; height: 38px; font-size: 17px; }
+  #faan-bar { padding-right: 52px; padding-left: 12px; }
   /* the quadrant and the strip are no longer touching, so they stop pretending
      to be one shape: yours is simply the seat with the lighter surface */
   #my-zone::before { right: 0; border-radius: 10px; }
