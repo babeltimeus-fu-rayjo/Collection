@@ -6,6 +6,7 @@
 
 import {
   hkFaanToPoints,
+  HK_MIN_FAAN,
   PROTO,
   NUM_PLAYERS,
   WINDS,
@@ -37,8 +38,10 @@ import '../common/feedtoggle.js';
 import '../common/version.js';
 
 const cfg = initSettings('mjg', [
-  { key: 'stepBots', label: 'Step bots (click to continue)', def: false, bool: true, section: 'Testing', host: true, hint: 'Bots stop before every action and wait for you to click the table. Use it to watch one move at a time and judge whether they are playing well. Your own hand and the action buttons still work normally — click the felt, not a tile, to let the next bot go.' },
+  { key: 'faanLimit', label: 'Hong Kong house limit', def: 0, min: 0, max: 20, step: 1, unit: 'faan', ms: false, section: 'Scoring', host: true,
+    hint: 'Caps what a hand can pay: at the limit and above, every hand pays what the limit pays. 0 is no limit, which is what the table does on its own — it doubles from 7 faan up with nothing to stop it, so a very big hand pays a silly number. 8, 10 and 13 are the usual house answers. Hong Kong only, and it is fixed when the game starts, so changing it applies to the next one.' },
   { key: 'dimOthers', label: 'Hover dims the rest', def: true, bool: true, section: 'Table', hint: 'Hovering a tile fades every tile that is not a copy of it, instead of only ringing the copies. Much easier to pick a tile out of a full pond.' },
+  { key: 'stepBots', label: 'Step bots (click to continue)', def: false, bool: true, section: 'Testing', host: true, hint: 'Bots stop before every action and wait for you to click the table. Use it to watch one move at a time and judge whether they are playing well. Your own hand and the action buttons still work normally — click the felt, not a tile, to let the next bot go.' },
   { key: 'revealBots', label: "Reveal bots' hands", def: false, bool: true, section: 'Testing', host: true, hint: 'Turn the bots\' concealed tiles face up while the hand is still being played, so you can see what they are holding. Only the host builds views, so this reveals them to everyone at the table.' },
   { key: 'botDelay', label: 'Bot thinking delay', def: [1200, 800], section: 'Host pacing', host: true },
   { key: 'claimTimeout', label: 'Claim timeout (0 = off)', def: 0, section: 'Host pacing', host: true, hint: 'Auto-pass a player who hasn\'t responded to a claim after this long. 0 waits indefinitely (the default).' },
@@ -882,7 +885,7 @@ class HostSession {
 
   start() {
     if (this.roster.length < NUM_PLAYERS) return;
-    this.G = newMatch(this.roster, this.selectedVariant);
+    this.G = newMatch(this.roster, this.selectedVariant, { faanLimit: cfg.raw('faanLimit') });
     saveRejoin(this.code, this.roster[0].token);
     this.broadcast();
   }
@@ -1713,29 +1716,39 @@ function renderFeed(view) {
 // copying it out: the two cannot drift apart that way, and the table has no end
 // to copy anyway — it doubles from 7 up for as long as the faan keep coming.
 const HK_LADDER_CELLS = 8;
-function hkLadder(total) {
+function hkLadder(total, limit = 0) {
+  // A house limit gives the table a last row, so the row ends rather than
+  // trailing off, and the last cell reads "10+" because everything above it
+  // pays the same.
+  const capped = limit >= HK_MIN_FAAN;
+  const top = capped ? limit : Math.max(9, total + 1);
   const all = [];
-  for (let f = 3; f <= Math.max(9, total + 1); f++) all.push({ faan: f, pts: hkFaanToPoints(f) });
+  for (let f = 3; f <= Math.max(HK_MIN_FAAN, top); f++) {
+    all.push({ faan: f, pts: hkFaanToPoints(f, limit), label: capped && f === limit ? `${f}+` : `${f}` });
+  }
+  const hit = capped ? Math.min(total, limit) : total;
   // A hand big enough to run off the end of the row keeps its own step in view,
   // with the next one beside it to show what one more faan would pay.
   let show = all, cut = false;
   if (all.length > HK_LADDER_CELLS) {
-    const i = Math.max(0, all.findIndex((x) => x.faan === total));
+    const i = Math.max(0, all.findIndex((x) => x.faan === hit));
     const start = Math.min(all.length - HK_LADDER_CELLS, Math.max(0, i - HK_LADDER_CELLS + 2));
     show = all.slice(start, start + HK_LADDER_CELLS);
     cut = start > 0;
   }
   const wrap = el('div', 'he-ladder');
-  wrap.append(el('div', 'he-ladder-cap', 'faan \u2192 points \u00b7 doubles from 7 up, no limit'));
+  wrap.append(el('div', 'he-ladder-cap', capped
+    ? `faan \u2192 points \u00b7 house limit ${limit} faan`
+    : 'faan \u2192 points \u00b7 doubles from 7 up, no limit'));
   const row = el('div', 'he-ladder-row');
   if (cut) row.append(el('div', 'he-step he-step-more', '\u2026'));
   for (const step of show) {
-    const cell = el('div', 'he-step' + (step.faan === total ? ' hit' : ''));
-    cell.append(el('span', 'he-step-faan', `${step.faan}`));
+    const cell = el('div', 'he-step' + (step.faan === hit ? ' hit' : ''));
+    cell.append(el('span', 'he-step-faan', step.label));
     cell.append(el('span', 'he-step-pts', `${step.pts}`));
     row.append(cell);
   }
-  row.append(el('div', 'he-step he-step-more', '\u2026'));
+  if (!capped) row.append(el('div', 'he-step he-step-more', '\u2026'));
   wrap.append(row);
   return wrap;
 }
@@ -1913,7 +1926,7 @@ function showHandEnd(view, sess) {
     // it, "6 faan" turning into 48 points is a number out of nowhere — and the
     // jumps are the whole reason one more faan is sometimes worth chasing and
     // sometimes not. So show the table, with the row you landed on marked.
-    if (view.variant === 'hk') detail.append(hkLadder(sc.total || 0));
+    if (view.variant === 'hk') detail.append(hkLadder(sc.total || 0, view.faanLimit || 0));
     detail.append(heRow('Hand value', `${sc.points ?? 0} pts`, 'he-total'));
 
     // 3) how that value is paid out
@@ -2603,7 +2616,7 @@ function showGameOver(view, sess) {
     $('#btn-golobby').classList.remove('hidden');
     $('#go-wait').classList.add('hidden');
     $('#btn-again').onclick = () => {
-      sess.G = newMatch(sess.roster, sess.selectedVariant);
+      sess.G = newMatch(sess.roster, sess.selectedVariant, { faanLimit: cfg.raw('faanLimit') });
       sess.broadcast();
     };
     $('#btn-golobby').onclick = () => {

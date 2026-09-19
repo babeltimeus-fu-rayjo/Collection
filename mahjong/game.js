@@ -175,7 +175,11 @@ function seatWind(G, seat) {
 
 // ---------------------------------------------------------------- setup
 
-export function newMatch(roster, variantKey) {
+// opts.faanLimit — a Hong Kong house limit, in faan. Anything at or above it
+// pays what that many faan pays. 0 is no limit, which is what the table does on
+// its own. It is fixed for the whole match on purpose: what a hand is worth
+// should not change between one hand and the next.
+export function newMatch(roster, variantKey, opts = {}) {
   const variant = variantByKey(variantKey).key;
   const players = roster.map((r) => ({
     seat: r.seat,
@@ -215,6 +219,7 @@ export function newMatch(roster, variantKey) {
     kanThisTurn: false,
     riichiSticks: 0,
     honba: 0,
+    faanLimit: Math.max(0, Math.round(Number(opts.faanLimit) || 0)),
     // what the END of a hand decided about the NEXT one, held until it is dealt
     pendingDeal: null,
     handsPlayed: 0,
@@ -1198,7 +1203,7 @@ export const SCORING_GUIDE = [
     key: 'hk',
     name: 'Hong Kong',
     unit: 'faan',
-    note: '13-tile hand: 4 sets + a pair. Minimum 3 faan to win. Faan → points: 3→8, 4→16, 5→32, 6→48, 7→64, and doubling every faan after that — 8→128, 9→256, 10→512, with no limit.',
+    note: '13-tile hand: 4 sets + a pair. Minimum 3 faan to win. Faan → points: 3→8, 4→16, 5→32, 6→48, 7→64, and doubling every faan after that — 8→128, 9→256, 10→512. The host can cap it with a house limit, in which case every hand at or above the limit pays the same.',
     rows: [
       ['Self-draw', '1', 'Win on the tile you drew yourself'],
       ['Concealed hand', '1', 'Win on a discard with no open melds'],
@@ -1309,7 +1314,7 @@ function scoreHK(G, winnerSeat, loserSeat, isTsumo) {
   if (flowerFaan > 0) faan.push({ name: `${flowerFaan} flower${flowerFaan > 1 ? 's' : ''}`, val: flowerFaan });
 
   const total = faan.reduce((s, f) => s + f.val, 0);
-  const points = hkFaanToPoints(total);
+  const points = hkFaanToPoints(total, G.faanLimit);
   return { faan, total, points, summary: `${total} faan (${points} pts)`, yaku: faan };
 }
 
@@ -1359,8 +1364,11 @@ function hkLockedFaan(pos) {
 // A limit is the usual house rule and there is none here on purpose: a big hand
 // is paid what the table says it is worth, which for a 20-faan hand is 8388608
 // points. Anything that rare is a story rather than a score.
-export function hkFaanToPoints(faan) {
+export function hkFaanToPoints(faan, limit = 0) {
   if (faan < HK_MIN_FAAN) return 0; // below the minimum — not a declarable win
+  // A house limit is the usual answer to a table with no ceiling: at the limit
+  // and above, every hand pays the same.
+  if (limit >= HK_MIN_FAAN && faan > limit) faan = limit;
   if (faan === 3) return 8;
   if (faan === 4) return 16;
   if (faan === 5) return 32;
@@ -2921,6 +2929,7 @@ export function viewFor(G, seat, code, opts = {}) {
     actions,
     riichiSticks: G.riichiSticks,
     honba: G.honba,
+    faanLimit: G.faanLimit,
     handResult: G.handResult,
     readyNext: G.readyNext || [],
     waitingNext: waitingOnNext(G),
