@@ -1758,3 +1758,105 @@ a {
    one height between them — an emoji in one label made its line box 2px taller
    than the other's and everything below twitched as they swapped. */
 #btn-add-bot, #btn-start { min-height: 42px; line-height: 1.2; }
+
+/* ---------------------------------------------------------------- phones
+   (keep this block at the END of the file: it must win the cascade)
+
+   Every screen here was drawn for a desktop window and then left to stack when
+   the window narrowed, so on a 375x667 phone the important half of each one
+   sat below the fold. Nothing below changes the design; it is the same layout
+   at phone scale. */
+@media (max-width: 640px) {
+  #screen-home,
+  #screen-lobby { padding: 14px; gap: 9px; }
+  /* the Collection pill is fixed at the top left, so the screen has to start
+     below it rather than behind it */
+  #screen-home { padding-top: 52px; }
+
+  .tagline { font-size: 13.5px; line-height: 1.5; margin-bottom: 0; }
+  /* 16px is the floor: anything smaller and iOS zooms the page on focus */
+  .field { font-size: 16px; padding: 11px 14px; }
+  .btn { padding: 11px 18px; font-size: 16px; }
+  .btn.ghost { padding: 8px 14px; font-size: 13.5px; }
+  .divider { font-size: 12px; }
+  #home-status { min-height: 18px; font-size: 13px; }
+  .small-print { font-size: 11.5px; line-height: 1.45; }
+
+  .lobby-panel { padding: 14px 12px; gap: 8px; border-radius: 18px; }
+  .lobby-label { font-size: 11px; }
+  #lobby-code { font-size: 28px; }
+  /* Every seat is listed, filled or not, so a full room was taller than the
+     phone and the rest of the lobby sat below the fold. Two columns puts the
+     whole table on screen instead of behind a scrollbar. */
+  #lobby-players { display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+    max-height: none; overflow: visible; margin-top: 0; }
+  .seat-row { gap: 7px; padding: 6px 8px; min-width: 0; }
+  .seat-row .av { width: 24px; height: 24px; font-size: 11px; }
+  .seat-name { font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip { font-size: 9px; padding: 1px 5px; letter-spacing: 0; }
+  /* the avatar is already a bot's, so the chip repeating it only costs the
+     name the room it needs in half a column */
+  .seat-row .chip.bot { display: none; }
+  .kick { width: 20px; height: 20px; font-size: 10px; }
+  #lobby-hint { font-size: 12.5px; }
+
+  /* One line. A wrapped topbar costs three of them, and the gear and log
+     buttons already claim the right-hand 100px. */
+  .topbar { flex-wrap: nowrap; gap: 6px; padding: 8px 10px; min-height: 0; }
+  .topbar .btn.ghost { padding: 6px 9px; font-size: 12px; white-space: nowrap; }
+
+  #feed { max-height: 74px; margin: 5px 8px; font-size: 11px; }
+  /* room for the chat button to float over, and no more */
+  #screen-game { padding-bottom: 44px; }
+
+  /* ---- the table ----------------------------------------------------- */
+
+  /* Seats were a fixed 190px wide and 176 tall — two would not fit across a
+     phone, so every player took a row of their own and eight of them ran the
+     table 1626px past the fold. Three to a row, and each one as tall as the
+     name and the pile inside it rather than as tall as a desktop seat. */
+  .prow { gap: 6px; padding: 0 8px; }
+  .prow .seat,
+  .seat { width: auto; min-width: 78px; min-height: 0; flex: 1 1 78px;
+    max-width: calc(33.33% - 4px); padding: 6px 7px; gap: 4px; border-radius: 11px; }
+  .seat-meta { min-width: 0; }
+  .seat-name-row .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* at eight players a seat is a quarter of a phone, and the avatar was half
+     of what the name had to fit in */
+  .seat-head { gap: 4px; }
+  .seat .av { width: 18px; height: 18px; font-size: 9px; }
+  /* the YOU chip beside your own name was squeezing it to "R." — it drops to
+     its own line instead, which costs one row eleven pixels */
+  .seat-name-row { gap: 3px; flex-wrap: wrap; }
+  .seat-name-row .nm { font-size: 11.5px; }
+  .seat-name-row > :not(.nm) { font-size: 8.5px; padding: 1px 4px; }
+  .hearts { font-size: 10px; }
+  .pile { gap: 3px; }
+  .card.mini { width: 26px; height: 35px; }
+  .card.mini .card-val { font-size: 13px; }
+  .card.mini .card-name { font-size: 6px; }
+  .pile-empty { font-size: 10px; }
+  /* headroom for table talk above the top row: a phone cannot spare 84px of
+     it, and the bubbles sit on a fixed overlay that can overlap instead */
+  #row-top { margin-top: 8px; }
+
+  #middle { gap: 12px; padding: 2px 8px; }
+  #deck .stack { transform: scale(.82); transform-origin: center; }
+  /* the discard tracker is a reference, not a control: one row that scrolls
+     rather than four that push the hand off the screen */
+  #tracker { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start;
+    width: 100%; max-width: 100%; padding: 0 8px; scrollbar-width: none; }
+  #tracker::-webkit-scrollbar { display: none; }
+  #intel { min-height: 0; gap: 5px; }
+
+  #hand { min-height: 0; padding-top: 6px; gap: 9px; }
+  /* the narrow-screen block above sets a min-height, which an ordinary height
+     cannot argue with */
+  .card.big { width: 104px; height: 146px; min-height: 0; }
+  .card.big .card-val { font-size: 26px; }
+  .card.big .card-name { font-size: 11px; }
+  .card.big .card-text { font-size: 9.5px; line-height: 1.25; }
+
+  #action-bar { min-height: 0; gap: 6px; }
+  #action-bar .ask { font-size: 12.5px; }
+}

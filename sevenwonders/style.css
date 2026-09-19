@@ -1569,3 +1569,54 @@ a {
    one height between them — an emoji in one label made its line box 2px taller
    than the other's and everything below twitched as they swapped. */
 #btn-add-bot, #btn-start { min-height: 42px; line-height: 1.2; }
+
+/* ---------------------------------------------------------------- phones
+   (keep this block at the END of the file: it must win the cascade)
+
+   Every screen here was drawn for a desktop window and then left to stack when
+   the window narrowed, so on a 375x667 phone the important half of each one
+   sat below the fold. Nothing below changes the design; it is the same layout
+   at phone scale. */
+@media (max-width: 640px) {
+  #screen-home,
+  #screen-lobby { padding: 14px; gap: 9px; }
+  /* the Collection pill is fixed at the top left, so the screen has to start
+     below it rather than behind it */
+  #screen-home { padding-top: 52px; }
+
+  .tagline { font-size: 13.5px; line-height: 1.5; margin-bottom: 0; }
+  /* 16px is the floor: anything smaller and iOS zooms the page on focus */
+  .field { font-size: 16px; padding: 11px 14px; }
+  .btn { padding: 11px 18px; font-size: 16px; }
+  .btn.ghost { padding: 8px 14px; font-size: 13.5px; }
+  .divider { font-size: 12px; }
+  #home-status { min-height: 18px; font-size: 13px; }
+  .small-print { font-size: 11.5px; line-height: 1.45; }
+
+  .lobby-panel { padding: 14px 12px; gap: 8px; border-radius: 18px; }
+  .lobby-label { font-size: 11px; }
+  #lobby-code { font-size: 28px; }
+  /* Every seat is listed, filled or not, so a full room was taller than the
+     phone and the rest of the lobby sat below the fold. Two columns puts the
+     whole table on screen instead of behind a scrollbar. */
+  #lobby-players { display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+    max-height: none; overflow: visible; margin-top: 0; }
+  .seat-row { gap: 7px; padding: 6px 8px; min-width: 0; }
+  .seat-row .av { width: 24px; height: 24px; font-size: 11px; }
+  .seat-name { font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip { font-size: 9px; padding: 1px 5px; letter-spacing: 0; }
+  /* the avatar is already a bot's, so the chip repeating it only costs the
+     name the room it needs in half a column */
+  .seat-row .chip.bot { display: none; }
+  .kick { width: 20px; height: 20px; font-size: 10px; }
+  #lobby-hint { font-size: 12.5px; }
+
+  /* One line. A wrapped topbar costs three of them, and the gear and log
+     buttons already claim the right-hand 100px. */
+  .topbar { flex-wrap: nowrap; gap: 6px; padding: 8px 10px; min-height: 0; }
+  .topbar .btn.ghost { padding: 6px 9px; font-size: 12px; white-space: nowrap; }
+
+  #feed { max-height: 74px; margin: 5px 8px; font-size: 11px; }
+  /* room for the chat button to float over, and no more */
+  #screen-game { padding-bottom: 44px; }
+}
