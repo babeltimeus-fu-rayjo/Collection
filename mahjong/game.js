@@ -610,8 +610,8 @@ function doRiichi(G, p, move) {
   G.lastDiscard = tile;
   G.lastDiscardSeat = p.seat;
 
-  addLog(G, `${p.name} declares Riichi! 🀄`);
-  say(G, p.seat, 'Riichi! 🀄');
+  addLog(G, `${p.name} declares Riichi!`);
+  say(G, p.seat, 'Riichi!');
   setFx(G, { kind: 'riichi', seat: p.seat });
 
   enterClaimPhase(G);
