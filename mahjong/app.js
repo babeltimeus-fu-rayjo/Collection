@@ -1387,11 +1387,20 @@ function renderGame(view, sess) {
     hideHandEnd();
   }
 
-  // game over
+  // Game over. The same tuck-away the hand-end panel has: a final board is the
+  // one you most want to look at, and this panel used to sit over it with no way
+  // past — every button on it starts or leaves a game.
   if (view.phase === 'over') {
-    showGameOver(view, sess);
+    if (overHidden) {
+      $('#gameover').classList.add('hidden');
+      $('#he-peek').classList.remove('hidden');
+    } else {
+      $('#he-peek').classList.add('hidden');
+      showGameOver(view, sess);
+    }
   } else {
     $('#gameover').classList.add('hidden');
+    overHidden = false;
   }
 
   chatSetVisible(true);
@@ -1849,6 +1858,7 @@ function renderCheatsheet() {
 // this long before covering the table with it.
 const REVEAL_MS = 2600;
 let handEndKey = null, handEndReady = false, handEndTimer = null, scoreHidden = false;
+let overHidden = false;
 
 function hideHandEnd() {
   $('#handend').classList.add('hidden');
@@ -1869,16 +1879,29 @@ function paintHandEnd() {
   }
 }
 
-// Tucked away, a click anywhere on the board brings the score back. Chrome that
-// exists to show you MORE of the game — the log, chat, the top bar — is exempt,
-// since dismissing the score to open the log only to have it reappear would be
-// self-defeating. Capture phase, so this runs before the hide button's own
-// handler sets the flag and can't immediately undo it.
+// Tucked away, a click on the BOARD brings the score back — the board, not
+// anything you can operate. The exemption used to be a short list of panels,
+// which was already self-defeating for the log and became more so once the
+// settings and log buttons moved to their corner: hiding the score to reach a
+// button meant the score came straight back the moment you pressed it. So the
+// rule is the other way round now. Anything with a handler on it — a button, a
+// field, a term, a tile — is something you meant to press, and the felt around
+// them is what counts as putting the score back.
+//
+// Capture phase, so this runs before the hide button's own handler sets the
+// flag and cannot immediately undo it.
+const KEEPS_SCORE_HIDDEN = 'button, a, input, select, textarea, label, .term, .tile, '
+  + '#chat, #feed, #cfg-drawer, #cfg-gear, #feed-toggle, .topbar, #size-popover, .modal';
 document.addEventListener('click', (e) => {
-  if (!scoreHidden) return;
-  if (e.target.closest && e.target.closest('#chat, #feed, .topbar, #size-popover, .modal')) return;
+  if (!scoreHidden && !overHidden) return;
+  const t = e.target;
+  if (!t || !t.closest) return;
+  // the peek line is the one control whose whole job is bringing it back
+  if (!t.closest('#he-peek') && t.closest(KEEPS_SCORE_HIDDEN)) return;
   scoreHidden = false;
-  paintHandEnd();
+  overHidden = false;
+  if (lastView && lastView.phase === 'over') { if (lastView) renderGame(lastView, session); }
+  else paintHandEnd();
 }, true);
 
 function showHandEnd(view, sess) {
@@ -1972,6 +1995,7 @@ function showHandEnd(view, sess) {
 
   const hide = $('#btn-he-hide');
   if (hide) hide.onclick = () => { scoreHidden = true; paintHandEnd(); };
+
 
   // Everyone reads the score at their own pace, so everyone gets the button and
   // the deal waits for the last of them.
@@ -2682,6 +2706,7 @@ function leaveRoom() {
   handEndKey = null;
   handEndReady = false;
   scoreHidden = false;
+  overHidden = false;
   hideHandEnd();
   paintStep();
   // and the board itself: hand tiles are reused by tile id, which repeat every
@@ -2700,6 +2725,10 @@ $('#btn-create').addEventListener('click', createRoom);
 $('#btn-join').addEventListener('click', joinRoom);
 $('#code-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') joinRoom(); });
 $('#name-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btn-create').click(); });
+$('#btn-go-hide')?.addEventListener('click', () => {
+  overHidden = true;
+  if (lastView) renderGame(lastView, session);
+});
 $('#btn-routes').addEventListener('click', toggleRoutes);
 $('#btn-add-bot').addEventListener('click', () => session?.addBot());
 $('#btn-start').addEventListener('click', () => session?.start());

@@ -220,6 +220,8 @@ export function newMatch(roster, variantKey, opts = {}) {
     riichiSticks: 0,
     honba: 0,
     faanLimit: Math.max(0, Math.round(Number(opts.faanLimit) || 0)),
+    // the tile a player has just taken off a discard, until they discard again
+    justClaimed: null,
     // what the END of a hand decided about the NEXT one, held until it is dealt
     pendingDeal: null,
     handsPlayed: 0,
@@ -246,6 +248,7 @@ function dealHand(G) {
   G.claimPhase = null;
   G.kanThisTurn = false;
   G.handResult = null;
+  G.justClaimed = null;
   G.turn = G.dealer;
 
   const deck = shuffle(buildDeck(G.variant));
@@ -439,6 +442,13 @@ function canRon(G, seat) {
 
 function canTsumo(G, seat) {
   if (G.phase !== 'discard' || G.turn !== seat) return false;
+  // A self-draw means a tile you DREW. After a pon or a chi you are sitting in
+  // the discard phase with a full hand and nothing drawn behind you — the hand
+  // may well be complete, but the tile that completed it came off somebody's
+  // discard, and taking it that way is a ron, which you either called or did
+  // not. doPon and doChi clear lastDraw for exactly this reason; a kan's
+  // replacement tile sets it again, so winning on one still counts.
+  if (!G.lastDraw) return false;
   const p = playerBySeat(G, seat);
   // concealed hand shrinks by 3 for every meld — a melded player still has the
   // one extra (just-drawn) tile, so compare against that adjusted size
@@ -558,6 +568,7 @@ function doDiscard(G, p, move) {
   p.hand = p.hand.filter((t) => t.id !== tile.id);
   p.discards.push(tile);
   p.lastAction = `discarded ${tileShort(tile)}`;
+  G.justClaimed = null;
 
   // JP furiten: if you discard a tile you could win on, you're furiten
   if (G.variant === 'jp') {
@@ -830,6 +841,7 @@ function resolveClaims(G) {
     G.phase = 'discard';
     G.lastDraw = null;
     G.lastDiscard = null;
+    G.justClaimed = { seat: p.seat, key: tile.key };
     return;
   }
 
@@ -844,6 +856,7 @@ function resolveClaims(G) {
     G.phase = 'discard';
     G.lastDraw = null;
     G.lastDiscard = null;
+    G.justClaimed = { seat: p.seat, key: tile.key };
     return;
   }
 }
@@ -1869,8 +1882,18 @@ function botPickDiscard(G, p) {
   // a tile and then immediately discard the identical one.
   const meldKeys = p.melds.flatMap((m) => m.tiles.map((t) => t.key));
 
+  // Claiming a tile and then throwing the same tile away is never right: leaving
+  // it alone would have done the same job and kept the hand closed, which is a
+  // faan in itself. The weight above pushes against it but only as a tie-break
+  // — in Hong Kong the route solver sorts first and is perfectly happy to shed
+  // the spare copy — so this is a rule instead. It is dropped from the
+  // candidates outright, unless it is the whole hand.
+  const claimed = G.justClaimed && G.justClaimed.seat === p.seat ? G.justClaimed.key : null;
+  const kept = claimed ? hand.filter((t) => t.key !== claimed) : hand;
+  const candidates = kept.length ? kept : hand;
+
   // score each tile by "usefulness"
-  const scored = hand.map((t) => {
+  const scored = candidates.map((t) => {
     let score = 0;
     const same = hand.filter((h) => h.key === t.key).length
       + meldKeys.filter((k) => k === t.key).length;
