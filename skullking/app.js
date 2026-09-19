@@ -1294,8 +1294,11 @@ function stackedTable() {
 // None of which survives a phone. Two seats do not fit across one, so the rows
 // wrap into a grid and that shape says nothing: with four players it read 3rd,
 // 4th, 2nd, you down the screen. A list has its own order — down the page — so
-// on a phone the seats are dealt into one grid in the order they play, you
-// first and the rest following round.
+// on a phone the seats are dealt into one grid in the order they play, ending
+// with you: the player who follows you leads the grid and it comes back round
+// to your box last, at the bottom right. That is where you sit at the desktop
+// table and in Mahjong, DNUP and Love Letter, and a seat that moves between
+// layouts is one more thing to re-find.
 //
 // You are IN that grid, not set apart below it. Your own seat sat alone under
 // the trick panel for a while, which is how DNUP and Love Letter do it — but
@@ -1306,7 +1309,7 @@ function tableRows(view) {
   const seats = view.players.map((p) => p.seat);
   const myIdx = Math.max(0, seats.indexOf(view.you));
   const S = seats.map((_, k) => seats[(myIdx + k) % seats.length]);
-  if (stackedTable()) return { top: S, bottom: [] };
+  if (stackedTable()) return { top: [...S.slice(1), S[0]], bottom: [] };
   const bottomN = Math.max(1, Math.floor(S.length / 2));
   return { bottom: S.slice(0, bottomN).reverse(), top: S.slice(bottomN) };
 }
