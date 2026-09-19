@@ -32,6 +32,8 @@ const SUITS = ['m', 'p', 's'];
 export const SUIT_WORD = { m: 'Man', p: 'Pin', s: 'Sou' };
 // likewise the three dragons, glossed as colours wherever they are introduced
 export const DRAGON_WORD = { R: 'Chun', G: 'Hatsu', W: 'Haku' };
+// the glossary key for each, so a scoring line can point at the actual tile
+const DRAGON_TERM = { R: 'chun', G: 'hatsu', W: 'haku' };
 const HONOR_WINDS = ['E', 'S', 'W', 'N'];
 const HONOR_DRAGONS = ['R', 'G', 'W'];
 // Haku -> Hatsu -> Chun -> Haku: the order a dora indicator walks, which is not
@@ -894,7 +896,12 @@ function resolveExhaustiveDraw(G) {
   }
   const delta = {};
   for (const p of G.players) delta[p.seat] = p.score - before[p.seat];
-  G.handResult = { type: 'draw', exhaustive: true, tenpai, delta };
+  // The winds the hand was PLAYED under. advanceDealer runs a few lines below,
+  // so by the time anyone reads the result the seats have already turned — and
+  // the score panel was labelling every player with next hand's wind while
+  // showing this hand's scoring. A West pung scored by the West seat came back
+  // as a South player who had somehow been paid for a seat wind.
+  G.handResult = { type: 'draw', exhaustive: true, tenpai, delta, dealer: G.dealer, roundWind: G.roundWind };
   setFx(G, { kind: 'handEnd', result: 'draw' });
   // dealer stays if tenpai (JP) or always for HK/TW draw
   const dealerTenpai = isTenpai(playerBySeat(G, G.dealer).hand, G.variant, playerBySeat(G, G.dealer).melds);
@@ -967,6 +974,9 @@ function resolveWin(G, winnerSeat, loserSeat, isTsumo) {
     payments,
     bonus,
     delta,
+    // the winds this hand was scored under — see the note on the draw above
+    dealer: G.dealer,
+    roundWind: G.roundWind,
   };
   setFx(G, { kind: 'handEnd', result: 'win', seat: winnerSeat });
 
@@ -1325,8 +1335,11 @@ function hkLockedFaan(pos) {
     // seat wind and round wind score separately, so the same pung can pay twice
     if (t.kind === 'wind' && t.v === sw) parts.push({ term: 'seatwind', name: 'Seat wind', val: 1 });
     if (t.kind === 'wind' && t.v === pos.roundWind) parts.push({ term: 'roundwind', name: 'Round wind', val: 1 });
+    // point at the dragon itself, not at "a dragon pung": the line already
+    // names which one, and a note that explains all three is no answer to
+    // "what is this tile?"
     if (t.kind === 'dragon') {
-      parts.push({ term: 'dragonpung', name: DRAGON_WORD[t.v], val: 1 });
+      parts.push({ term: DRAGON_TERM[t.v], name: DRAGON_WORD[t.v], val: 1 });
     }
   }
   const total = parts.reduce((a, f) => a + f.val, 0);
@@ -2302,8 +2315,11 @@ function jpLockedHan(pos) {
     if (!t) continue;
     if (t.kind === 'wind' && t.v === sw) parts.push({ term: 'seatwind', name: 'Seat wind', val: 1 });
     if (t.kind === 'wind' && t.v === pos.roundWind) parts.push({ term: 'roundwind', name: 'Round wind', val: 1 });
+    // point at the dragon itself, not at "a dragon pung": the line already
+    // names which one, and a note that explains all three is no answer to
+    // "what is this tile?"
     if (t.kind === 'dragon') {
-      parts.push({ term: 'dragonpung', name: DRAGON_WORD[t.v], val: 1 });
+      parts.push({ term: DRAGON_TERM[t.v], name: DRAGON_WORD[t.v], val: 1 });
     }
   }
   // dora sitting inside a declared meld can't be discarded away either. Dora is
@@ -2875,12 +2891,18 @@ export function viewFor(G, seat, code, opts = {}) {
     };
   }
 
+  // While the result is up, the board still belongs to the hand that just
+  // finished: its seat winds, its round. The next hand's dealer is already set
+  // by then, so reporting it here renamed every seat under a score panel that
+  // had not changed.
+  const shownDealer = handOver && G.handResult && G.handResult.dealer != null ? G.handResult.dealer : G.dealer;
+  const shownRound = handOver && G.handResult && G.handResult.roundWind ? G.handResult.roundWind : G.roundWind;
   return {
     variant: G.variant,
     phase: G.phase,
-    roundWind: G.roundWind,
+    roundWind: shownRound,
     handNum: G.handNum,
-    dealer: G.dealer,
+    dealer: shownDealer,
     turn: G.turn,
     mySeat: seat,
     players,

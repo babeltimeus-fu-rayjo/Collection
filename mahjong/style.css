@@ -639,6 +639,23 @@ body {
 }
 #feed div { padding: 1px 0; }
 
+/* Hong Kong's faan table, on the score panel. The step the hand landed on is
+   lit; the rest are there so the jumps are visible — 4 to 5 doubles, 5 to 6
+   adds half as much again, and 8 and 9 pay the same. */
+.he-ladder { margin: 8px 0 4px; }
+.he-ladder-cap { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: #7fa38c; margin-bottom: 4px; }
+.he-ladder-row { display: flex; gap: 3px; }
+.he-step {
+  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 3px 2px; border-radius: 5px; background: rgba(255,255,255,.04);
+  border: 1px solid transparent; font-variant-numeric: tabular-nums;
+}
+.he-step.hit { background: rgba(232,213,163,.16); border-color: rgba(232,213,163,.55); }
+.he-step-faan { font-size: 10px; color: #7fa38c; }
+.he-step.hit .he-step-faan { color: #e8d5a3; }
+.he-step-pts { font-size: 12px; font-weight: 700; color: #cfe3d5; }
+.he-step.hit .he-step-pts { color: #f4e6bf; }
+
 /* ================================================================ modals */
 .modal { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.65); padding: 16px; overflow-y: auto; }
 .panel { background: #122e20; border: 1px solid #2a6b45; border-radius: 12px; padding: 24px; max-width: 420px; width: 100%; }

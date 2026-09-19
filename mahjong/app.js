@@ -1707,6 +1707,32 @@ function renderFeed(view) {
 }
 
 // one label:value line in the hand-end breakdown
+// Hong Kong's faan-to-points table, laid out so you can see where the hand
+// landed and what the next faan would have been worth.
+const HK_LADDER = [
+  { from: 3, to: 3, pts: 8, label: '3' },
+  { from: 4, to: 4, pts: 16, label: '4' },
+  { from: 5, to: 5, pts: 32, label: '5' },
+  { from: 6, to: 6, pts: 48, label: '6' },
+  { from: 7, to: 7, pts: 64, label: '7' },
+  { from: 8, to: 9, pts: 128, label: '8\u20139' },
+  { from: 10, to: 99, pts: 256, label: '10+' },
+];
+function hkLadder(total) {
+  const wrap = el('div', 'he-ladder');
+  wrap.append(el('div', 'he-ladder-cap', 'faan \u2192 points'));
+  const row = el('div', 'he-ladder-row');
+  for (const step of HK_LADDER) {
+    const hit = total >= step.from && total <= step.to;
+    const cell = el('div', 'he-step' + (hit ? ' hit' : ''));
+    cell.append(el('span', 'he-step-faan', step.label));
+    cell.append(el('span', 'he-step-pts', `${step.pts}`));
+    row.append(cell);
+  }
+  wrap.append(row);
+  return wrap;
+}
+
 function heRow(label, value, cls) {
   const row = el('div', 'he-row' + (cls ? ' ' + cls : ''));
   row.append(el('span', 'he-label', label));
@@ -1875,6 +1901,12 @@ function showHandEnd(view, sess) {
       ? `${sc.han || 0} han · ${sc.fu || 0} fu`
       : `${sc.total || 0} ${unit}`;
     detail.append(heRow('Total', totalStr, 'he-total'));
+    // Hong Kong does not multiply anything out: the faan total is looked up in
+    // a table, and every step of that table is a different size. Without seeing
+    // it, "6 faan" turning into 48 points is a number out of nowhere — and the
+    // jumps are the whole reason one more faan is sometimes worth chasing and
+    // sometimes not. So show the table, with the row you landed on marked.
+    if (view.variant === 'hk') detail.append(hkLadder(sc.total || 0));
     detail.append(heRow('Hand value', `${sc.points ?? 0} pts`, 'he-total'));
 
     // 3) how that value is paid out
@@ -1945,6 +1977,35 @@ function showHandEnd(view, sess) {
 // learning the game — so every one of them explains itself on hover, with real
 // tiles where a sentence alone wouldn't land.
 const T_ = (kind, v) => ({ kind, v, key: kind === 'wind' ? `w${v}` : kind === 'dragon' ? `d${v}` : `${kind}${v}` });
+
+const WIND_NAME = { E: 'East', S: 'South', W: 'West', N: 'North' };
+
+// A wind is the one tile whose worth you cannot read off the tile. Three West
+// are four faan to the West seat in a West round and nothing at all to anybody
+// else, so the note works out which of those you are looking at rather than
+// reciting the rule and leaving you to do it.
+function windNote(v, name, glyph) {
+  const rule = 'A pung of a wind pays only for the seat wind of the player holding it, and for the wind of the round — and both at once when they are the same tile.';
+  return {
+    title: `${name} Wind`,
+    tiles: [T_('wind', v)],
+    links: { pung: 'pung', faan: 'faan', han: 'han', 'seat wind': 'seatwind', 'round wind': 'roundwind' },
+    body: () => {
+      const view = lastView;
+      const lead = `${glyph}, the ${name.toLowerCase()} wind. `;
+      if (!view || view.dealer == null) return lead + rule;
+      const unit = view.variant === 'jp' ? 'han' : 'faan';
+      const mine = WINDS[((view.mySeat - view.dealer) % 4 + 4) % 4];
+      const isSeat = mine === v, isRound = view.roundWind === v;
+      if (isSeat && isRound) {
+        return `${lead}It is your own seat wind AND the round wind this hand, so a pung of it is worth 2 ${unit} — the seat wind and the round wind are counted separately even when they are the same tile.`;
+      }
+      if (isSeat) return `${lead}It is your seat wind this hand, so a pung of it is worth 1 ${unit}. The round wind is ${WIND_NAME[view.roundWind]}.`;
+      if (isRound) return `${lead}It is the round wind, so a pung of it is worth 1 ${unit} to anybody. Your own seat wind is ${WIND_NAME[mine]}.`;
+      return `${lead}This hand it is neither your seat wind (${WIND_NAME[mine]}) nor the round wind (${WIND_NAME[view.roundWind]}), so a pung of it scores nothing on its own — though it is still a set, and still counts toward a flush or all-triplets. It pays the ${WIND_NAME[v]} seat, not you.`;
+    },
+  };
+}
 const GLOSSARY = {
   faan: { title: 'Faan',
     body: "Hong Kong's scoring unit. Three is the minimum to declare a win at all — a complete hand worth less than that cannot be taken, so you keep playing. Above three, each faan roughly doubles the payout." },
@@ -2051,6 +2112,22 @@ const GLOSSARY = {
       { label: 'winds', wraps: true, tiles: [T_('wind', 'E'), T_('wind', 'S'), T_('wind', 'W'), T_('wind', 'N'), T_('wind', 'E')] },
       { label: 'dragons', wraps: true, tiles: [T_('dragon', 'W'), T_('dragon', 'G'), T_('dragon', 'R'), T_('dragon', 'W')] },
     ] },
+  haku: { title: 'Haku — the white dragon',
+    body: 'The blank one: a plain framed tile, no character on it. A pung of Haku is worth 1 faan in Hong Kong and 1 han in riichi, to anybody — unlike the winds, a dragon pays whoever collects it, whatever seat they are in and whatever the round.',
+    links: { pung: 'pung', faan: 'faan', han: 'han', winds: 'roundwind', dragon: 'dragons' },
+    tiles: [T_('dragon', 'W')] },
+  hatsu: { title: 'Hatsu — the green dragon',
+    body: '發, the green one. A pung of Hatsu is worth 1 faan in Hong Kong and 1 han in riichi, to anybody — unlike the winds, a dragon pays whoever collects it, whatever seat they are in and whatever the round.',
+    links: { pung: 'pung', faan: 'faan', han: 'han', winds: 'roundwind', dragon: 'dragons' },
+    tiles: [T_('dragon', 'G')] },
+  chun: { title: 'Chun — the red dragon',
+    body: '中, the red one. A pung of Chun is worth 1 faan in Hong Kong and 1 han in riichi, to anybody — unlike the winds, a dragon pays whoever collects it, whatever seat they are in and whatever the round.',
+    links: { pung: 'pung', faan: 'faan', han: 'han', winds: 'roundwind', dragon: 'dragons' },
+    tiles: [T_('dragon', 'R')] },
+  windE: windNote('E', 'East', '東'),
+  windS: windNote('S', 'South', '南'),
+  windW: windNote('W', 'West', '西'),
+  windN: windNote('N', 'North', '北'),
   dragons: { title: 'Haku, Hatsu, Chun — the dragons',
     body: 'The three dragon tiles: Haku the white one, Hatsu the green, Chun the red. A triplet of any of them pays in every ruleset here, and for dora they cycle in this order, Chun leading back round to Haku.',
     links: { triplet: 'pung', dora: 'dora' },
@@ -2212,7 +2289,13 @@ const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 function bodyEl(g, depth) {
   const div = el('div', 'tip-body');
   const map = g.links;
-  if (!map) { div.textContent = g.body; return div; }
+  // A note may compute what it says. A wind is worth a faan or nothing at all
+  // depending on where you are sitting and what round it is, and a note that
+  // recites the rule instead of answering the question is the reason hovering
+  // one used to tell you nothing.
+  const text = typeof g.body === 'function' ? g.body() : g.body;
+  g = { ...g, body: text };
+  if (!map) { div.textContent = text; return div; }
   const phrases = Object.keys(map).sort((a, b) => b.length - a.length);
   // \b so a phrase has to start a word. Without it "chi" turned the middle of
   // "reaching" into a link to Chi. No boundary at the END, though: a note that
@@ -2236,7 +2319,7 @@ function showTip(anchor, key, depth = 0) {
   closeFrom(depth + 1);
   const tip = tipAt(depth);
   tip.replaceChildren();
-  tip.append(el('div', 'tip-title', g.title));
+  tip.append(el('div', 'tip-title', typeof g.title === 'function' ? g.title() : g.title));
   tip.append(bodyEl(g, depth));
   const ex = exampleEl(g);
   if (ex) tip.append(ex);
@@ -2338,8 +2421,10 @@ function tileNameEl(name, depth = 0) {
     return wrap;
   }
   if (SUIT_TERM[name]) { wrap.append(term(SUIT_TERM[name], name, depth)); return wrap; }
-  if (['Haku', 'Hatsu', 'Chun'].includes(name)) { wrap.append(term('dragons', name, depth)); return wrap; }
-  if (/^(East|South|West|North) Wind$/.test(name)) { wrap.append(term('honours', name, depth)); return wrap; }
+  const dragon = { Haku: 'haku', Hatsu: 'hatsu', Chun: 'chun' }[name];
+  if (dragon) { wrap.append(term(dragon, name, depth)); return wrap; }
+  const wind = name.match(/^(East|South|West|North) Wind$/);
+  if (wind) { wrap.append(term(`wind${wind[1][0]}`, name, depth)); return wrap; }
   wrap.textContent = name;
   return wrap;
 }
