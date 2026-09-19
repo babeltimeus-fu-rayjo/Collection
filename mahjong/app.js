@@ -1158,6 +1158,14 @@ function renderGame(view, sess) {
   const seatOrder = [(my + 2) % 4, (my + 1) % 4, (my + 3) % 4];
   const seatEls = ['.seat-tl', '.seat-tr', '.seat-bl'];
 
+  // Who won, marked on the board itself. The score panel says so, but the whole
+  // point of tucking it away is to look at the board — and the board had no
+  // idea. Only while the result is up: a chip that outlived the hand would be
+  // labelling the wrong seat by the next one.
+  const wonSeat = view.phase === 'handEnd' && view.handResult && view.handResult.type === 'win'
+    ? view.handResult.winner : null;
+  const winChip = () => el('span', 'win-chip', '\ud83c\udfc6 WON');
+
   for (let i = 0; i < 3; i++) {
     const s = seatOrder[i];
     const p = view.players.find((q) => q.seat === s);
@@ -1165,6 +1173,9 @@ function renderGame(view, sess) {
     el_.dataset.seat = s;
     el_.classList.toggle('active-turn', !!p && s === view.turn && view.phase !== 'over');
     el_.querySelector('.seat-name').textContent = p ? p.name : '';
+    const info = el_.querySelector('.seat-info');
+    info.querySelector('.win-chip')?.remove();
+    if (p && s === wonSeat) info.insertBefore(winChip(), el_.querySelector('.seat-wind'));
     const wind = WINDS[(s - view.dealer + 4) % 4];
     const windEl = el_.querySelector('.seat-wind');
     windEl.textContent = wind;
@@ -1264,6 +1275,7 @@ function renderGame(view, sess) {
   const nameEl = $('#my-name');
   nameEl.replaceChildren();
   if (me) { nameEl.append(el('span', '', me.name), el('span', 'you-chip', 'YOU')); }
+  if (me && my === wonSeat) nameEl.append(winChip());
   const myWind = WINDS[(my - view.dealer + 4) % 4];
   const myWindEl = $('#my-wind');
   myWindEl.textContent = myWind;
