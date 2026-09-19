@@ -1692,4 +1692,37 @@ button.wire.can:focus-visible .face {
   #feed { max-height: 74px; margin: 5px 8px; font-size: 11px; }
   /* room for the chat button to float over, and no more */
   #screen-game { padding-bottom: 44px; }
+
+  /* ---- the table ----------------------------------------------------- */
+
+  /* The number strip is twelve cells of 1fr, and 1fr will not go below its
+     contents: a number and four pips would not shrink, so the strip ran 159px
+     off the right of the screen. The pips shrink and the track is allowed to. */
+  #board { gap: 8px; padding: 4px 8px 0; }
+  #strip { flex: 1 1 100%; padding: 7px 9px 12px; border-radius: 11px; }
+  .strip-cells { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 3px; }
+  .cell { padding: 3px 1px; border-radius: 6px; }
+  .cell .cv { font-size: 12px; }
+  .cell .pips { gap: 1.5px; margin-top: 2px; }
+  .cell .pip { width: 4px; height: 4px; }
+  .gapmarks { left: 9px; right: 9px; }
+  #board-side { flex: 1 1 100%; gap: 6px; }
+
+  /* Twelve wires at 34px wanted 408 of the 347 going, so every rack broke into
+     two rows — twice per player, on every player. */
+  #table { gap: 6px; padding: 6px 8px 0; }
+  .seat { padding: 6px 8px 7px; min-height: 0; border-radius: 11px; }
+  .seat-head { gap: 5px; }
+  .seat .av { width: 22px; height: 22px; font-size: 11px; }
+  .seat-head .nm { font-size: 12.5px; }
+  .seat-head .tag { font-size: 9.5px; padding: 1px 5px; }
+  .stands { gap: 5px; }
+  .stand { min-height: 0; gap: 2px; flex-wrap: nowrap; }
+  .stand-label { font-size: 9px; padding: 1px 4px; margin-right: 3px; }
+  .wire { width: 24px; height: 36px; margin-bottom: 9px; border-radius: 5px; }
+  .wire .face { font-size: 13px; border-radius: 5px; }
+  .wire .sub { font-size: 8px; }
+
+  #my-zone { padding: 0 8px; }
+  #action-bar { min-height: 0; padding: 6px 8px 8px; gap: 6px; }
 }
