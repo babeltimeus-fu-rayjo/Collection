@@ -5,6 +5,7 @@
 //   - Guests connect straight to the host (peer-to-peer); no game server.
 
 import {
+  hkFaanToPoints,
   PROTO,
   NUM_PLAYERS,
   WINDS,
@@ -1707,28 +1708,34 @@ function renderFeed(view) {
 }
 
 // one label:value line in the hand-end breakdown
-// Hong Kong's faan-to-points table, laid out so you can see where the hand
-// landed and what the next faan would have been worth.
-const HK_LADDER = [
-  { from: 3, to: 3, pts: 8, label: '3' },
-  { from: 4, to: 4, pts: 16, label: '4' },
-  { from: 5, to: 5, pts: 32, label: '5' },
-  { from: 6, to: 6, pts: 48, label: '6' },
-  { from: 7, to: 7, pts: 64, label: '7' },
-  { from: 8, to: 9, pts: 128, label: '8\u20139' },
-  { from: 10, to: 99, pts: 256, label: '10+' },
-];
+// Hong Kong's faan-to-points table, so you can see where the hand landed and
+// what the next faan would have been worth. Built by asking the scorer, not by
+// copying it out: the two cannot drift apart that way, and the table has no end
+// to copy anyway — it doubles from 7 up for as long as the faan keep coming.
+const HK_LADDER_CELLS = 8;
 function hkLadder(total) {
+  const all = [];
+  for (let f = 3; f <= Math.max(9, total + 1); f++) all.push({ faan: f, pts: hkFaanToPoints(f) });
+  // A hand big enough to run off the end of the row keeps its own step in view,
+  // with the next one beside it to show what one more faan would pay.
+  let show = all, cut = false;
+  if (all.length > HK_LADDER_CELLS) {
+    const i = Math.max(0, all.findIndex((x) => x.faan === total));
+    const start = Math.min(all.length - HK_LADDER_CELLS, Math.max(0, i - HK_LADDER_CELLS + 2));
+    show = all.slice(start, start + HK_LADDER_CELLS);
+    cut = start > 0;
+  }
   const wrap = el('div', 'he-ladder');
-  wrap.append(el('div', 'he-ladder-cap', 'faan \u2192 points'));
+  wrap.append(el('div', 'he-ladder-cap', 'faan \u2192 points \u00b7 doubles from 7 up, no limit'));
   const row = el('div', 'he-ladder-row');
-  for (const step of HK_LADDER) {
-    const hit = total >= step.from && total <= step.to;
-    const cell = el('div', 'he-step' + (hit ? ' hit' : ''));
-    cell.append(el('span', 'he-step-faan', step.label));
+  if (cut) row.append(el('div', 'he-step he-step-more', '\u2026'));
+  for (const step of show) {
+    const cell = el('div', 'he-step' + (step.faan === total ? ' hit' : ''));
+    cell.append(el('span', 'he-step-faan', `${step.faan}`));
     cell.append(el('span', 'he-step-pts', `${step.pts}`));
     row.append(cell);
   }
+  row.append(el('div', 'he-step he-step-more', '\u2026'));
   wrap.append(row);
   return wrap;
 }

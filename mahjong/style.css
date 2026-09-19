@@ -654,6 +654,8 @@ body {
 .he-step-faan { font-size: 10px; color: #7fa38c; }
 .he-step.hit .he-step-faan { color: #e8d5a3; }
 .he-step-pts { font-size: 12px; font-weight: 700; color: #cfe3d5; }
+/* the table has no last row, so the row says so */
+.he-step-more { flex: 0 0 auto; align-self: center; padding: 3px 4px; background: none; color: #7fa38c; font-size: 12px; }
 .he-step.hit .he-step-pts { color: #f4e6bf; }
 
 /* ================================================================ modals */

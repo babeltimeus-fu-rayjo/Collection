@@ -215,6 +215,8 @@ export function newMatch(roster, variantKey) {
     kanThisTurn: false,
     riichiSticks: 0,
     honba: 0,
+    // what the END of a hand decided about the NEXT one, held until it is dealt
+    pendingDeal: null,
     handsPlayed: 0,
     maxHands: variant === 'jp' ? 8 : 16,
     log: [],
@@ -901,14 +903,11 @@ function resolveExhaustiveDraw(G) {
   // the score panel was labelling every player with next hand's wind while
   // showing this hand's scoring. A West pung scored by the West seat came back
   // as a South player who had somehow been paid for a seat wind.
-  G.handResult = { type: 'draw', exhaustive: true, tenpai, delta, dealer: G.dealer, roundWind: G.roundWind };
+  G.handResult = { type: 'draw', exhaustive: true, tenpai, delta };
   setFx(G, { kind: 'handEnd', result: 'draw' });
   // dealer stays if tenpai (JP) or always for HK/TW draw
   const dealerTenpai = isTenpai(playerBySeat(G, G.dealer).hand, G.variant, playerBySeat(G, G.dealer).melds);
-  if (G.variant === 'jp' && !dealerTenpai) {
-    advanceDealer(G);
-  }
-  G.honba += 1;
+  G.pendingDeal = { rotate: G.variant === 'jp' && !dealerTenpai, honba: G.honba + 1 };
   G.phase = 'handEnd';
   G.readyNext = [];
 }
@@ -974,21 +973,29 @@ function resolveWin(G, winnerSeat, loserSeat, isTsumo) {
     payments,
     bonus,
     delta,
-    // the winds this hand was scored under — see the note on the draw above
-    dealer: G.dealer,
-    roundWind: G.roundWind,
   };
   setFx(G, { kind: 'handEnd', result: 'win', seat: winnerSeat });
 
-  // dealer rotation: dealer stays if they won
-  if (winnerSeat === G.dealer) {
-    G.honba += 1;
-  } else {
-    advanceDealer(G);
-    G.honba = 0;
-  }
+  // The deal passes unless the dealer won — but not yet. See pendingDeal.
+  const keeps = winnerSeat === G.dealer;
+  G.pendingDeal = { rotate: !keeps, honba: keeps ? G.honba + 1 : 0 };
   G.phase = 'handEnd';
   G.readyNext = [];
+}
+
+// Rotating the seats the moment a hand ends is a lie told to everybody still
+// looking at the result: the score panel is the hand that was just played, and
+// under it every player had already been renamed with the wind they will hold
+// NEXT hand. A West seat paid for a West pung came back as a South player who
+// had somehow been credited with a seat wind. So the hand keeps its own dealer,
+// its own round and its own honba until the next hand is dealt, and what
+// changes is recorded rather than applied.
+function applyPendingDeal(G) {
+  const pend = G.pendingDeal;
+  G.pendingDeal = null;
+  if (!pend) return;
+  if (pend.rotate) advanceDealer(G);
+  G.honba = pend.honba;
 }
 
 function advanceDealer(G) {
@@ -1019,6 +1026,7 @@ export function nextHand(G) {
     endGame(G);
     return true;
   }
+  applyPendingDeal(G);
   dealHand(G);
   return true;
 }
@@ -1190,7 +1198,7 @@ export const SCORING_GUIDE = [
     key: 'hk',
     name: 'Hong Kong',
     unit: 'faan',
-    note: '13-tile hand: 4 sets + a pair. Minimum 3 faan to win. Faan → points: 3→8, 4→16, 5→32, 6→48, 7→64, 8–9→128, 10+→256.',
+    note: '13-tile hand: 4 sets + a pair. Minimum 3 faan to win. Faan → points: 3→8, 4→16, 5→32, 6→48, 7→64, and doubling every faan after that — 8→128, 9→256, 10→512, with no limit.',
     rows: [
       ['Self-draw', '1', 'Win on the tile you drew yourself'],
       ['Concealed hand', '1', 'Win on a discard with no open melds'],
@@ -1346,15 +1354,18 @@ function hkLockedFaan(pos) {
   return { total, yakuHan: total, parts, minToWin: HK_MIN_FAAN, unit: 'faan', goal: `${HK_MIN_FAAN}+ faan` };
 }
 
-function hkFaanToPoints(faan) {
+// The bottom of the table has its own shape — the step from 5 to 6 is half a
+// double, not a whole one — and from 7 up it simply doubles, with no ceiling.
+// A limit is the usual house rule and there is none here on purpose: a big hand
+// is paid what the table says it is worth, which for a 20-faan hand is 8388608
+// points. Anything that rare is a story rather than a score.
+export function hkFaanToPoints(faan) {
   if (faan < HK_MIN_FAAN) return 0; // below the minimum — not a declarable win
-  if (faan <= 3) return 8;
+  if (faan === 3) return 8;
   if (faan === 4) return 16;
   if (faan === 5) return 32;
   if (faan === 6) return 48;
-  if (faan === 7) return 64;
-  if (faan >= 8 && faan <= 9) return 128;
-  return 256; // 10+ faan: max
+  return 64 * Math.pow(2, faan - 7);
 }
 
 // ---- Japanese scoring (han + fu)
@@ -2891,18 +2902,12 @@ export function viewFor(G, seat, code, opts = {}) {
     };
   }
 
-  // While the result is up, the board still belongs to the hand that just
-  // finished: its seat winds, its round. The next hand's dealer is already set
-  // by then, so reporting it here renamed every seat under a score panel that
-  // had not changed.
-  const shownDealer = handOver && G.handResult && G.handResult.dealer != null ? G.handResult.dealer : G.dealer;
-  const shownRound = handOver && G.handResult && G.handResult.roundWind ? G.handResult.roundWind : G.roundWind;
   return {
     variant: G.variant,
     phase: G.phase,
-    roundWind: shownRound,
+    roundWind: G.roundWind,
     handNum: G.handNum,
-    dealer: shownDealer,
+    dealer: G.dealer,
     turn: G.turn,
     mySeat: seat,
     players,
