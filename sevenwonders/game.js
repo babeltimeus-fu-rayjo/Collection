@@ -499,7 +499,16 @@ function resolveTurn(G) {
     for (const q of G.players) {
       if (q.seat === p.seat) continue;         // never the player who played it
       const owed = card.loss ? card.loss : countOwned(q, card.perLoss.of) * card.perLoss.coins;
-      if (owed <= 0) continue;
+      if (owed === 0) continue;
+      // A negative loss is the mirror of the usual one: Customs, Trade Center
+      // and the Mint are paid for by putting money into everybody ELSE's hand.
+      // Nobody can go into debt over a card that gives them coins, so this is
+      // the whole of that case.
+      if (owed < 0) {
+        q.coins += -owed;
+        addLog(G, `${q.name} gains ${-owed} from ${card.n}.`);
+        continue;
+      }
       const paid = Math.min(q.coins, owed);
       q.coins -= paid;
       const short = owed - paid;

@@ -233,68 +233,110 @@ export const SCIENCE_SET_BONUS = 7;
 
 // ---------------------------------------------------------------- Cities
 //
-// ⚠ COSTS ARE NOT YET VERIFIED. Everything else here — the names, the Ages, the
-// points, the shields and the effects — comes from the Cities rulebook. The
-// resource costs came from a third-party implementation and are visibly filler:
-// every Age II card costing papyrus+textile and every Age III card costing
-// glass+papyrus+textile is not how the real cards are printed. Five cards
-// (Villa, Smugglers' Wharf, Hidden Cache, Tribute, Treasury) are not described
-// individually in the rulebook either, so their effects are a guess as well.
-// All of it is one table to correct against the physical cards.
+// Source: the 7 Wonders wiki's List of Cards, read as wikitext rather than as
+// the rendered page — the tables draw every cost as an icon, and the icons are
+// lazy-loaded, so scraping the page gives you names and nothing else. In the
+// wikitext they are file links ([[File:Coin-2.png]], [[File:Resource-Wood.png]],
+// [[File:Victory-4.png]]) and map straight onto the fields below. Costs are
+// written in sorted letter order so they are easy to diff against that source.
 //
-// Structure IS right: 27 black cards, nine per Age, and a game shuffles as many
-// into each Age deck as there are players (seven of them at an eight-player
-// table). New effect keys, all handled in game.js:
-//   mask           copy a science symbol from a neighbour, scored at the end
-//   loss           every OTHER player pays this many coins, or takes the debt
+// The expansion has 42 black cards, fourteen per Age. Thirty-two are here: the
+// ten missing ones need mechanics the engine does not have yet, and are listed
+// at the bottom of this block rather than faked. What was here before was a
+// third-party table whose costs were visibly filler — every Age II card cost
+// papyrus+textile, every Age III card glass+papyrus+textile — plus five cards
+// (Villa, Smugglers' Wharf, Hidden Cache, Tribute, Treasury) that are not in
+// the expansion at all.
+//
+// A fan wiki is not the publisher and is not always right: its base-game
+// Craftsmens Guild reads 1 ore + 2 stone where the printed card is 2 and 2, so
+// nothing outside this block was touched on its say-so. What protects this
+// block is that the engine still asserts its own structure — an Age deals seven
+// cards per player, and at most seven black cards are drawn into each Age, so
+// every Age here needs at least seven and has ten or more.
+//
+// Effect keys, all handled in game.js:
+//   mask           copy one science symbol off a neighbour's green card
+//   loss           every OTHER player pays this many coins, or takes the debt;
+//                  a NEGATIVE loss hands coins out instead (Customs, Mint)
 //   perLoss        every other player pays per something they own
 //   diplo          take a diplomacy token: sit out one conflict
 //   nbCoins        each of your neighbours also takes this from the bank
-//   rebate         one coin off the first resource bought from that side
+//   rebate         one coin off resources bought from that side
 //   produceMissing produces any resource your city does not already make
 //   freeStages     wonder stages stop costing resources
 
 export const CITY_CARDS = [
   // ---- Age I
-  { n: 'Pigeon Loft',          c: 'black', age: 1, cost: 'CG',  mask: 1 },
-  { n: 'Militia',              c: 'black', age: 1, cost: 'CT',  shield: 2 },
-  { n: 'Hideout',              c: 'black', age: 1, cost: 'CT',  vp: 2, loss: 1 },
-  { n: 'Gambling Den',         c: 'black', age: 1, cost: '',    coins: 6, nbCoins: 1 },
-  { n: 'Clandestine Dock West', c: 'black', age: 1, cost: 'T',  rebate: { with: 'left' } },
-  { n: 'Clandestine Dock East', c: 'black', age: 1, cost: 'T',  rebate: { with: 'right' } },
-  { n: 'Secret Warehouse',     c: 'black', age: 1, cost: 'G',   produceMissing: true },
-  { n: 'Black Market',         c: 'black', age: 1, cost: 'P',   produceMissing: true },
-  { n: 'Architect Cabinet',    c: 'black', age: 1, cost: 'T',   freeStages: true },
+  { n: 'West Clandestine Wharf', c: 'black', age: 1, coin: 1,              rebate: { with: 'left' } },
+  { n: 'East Clandestine Wharf', c: 'black', age: 1, coin: 1,              rebate: { with: 'right' } },
+  { n: 'City Gates',             c: 'black', age: 1, coin: 1, cost: 'W',   vp: 4 },
+  { n: 'Customs',                c: 'black', age: 1,                       vp: 4, loss: -1 },
+  { n: 'Dive',                   c: 'black', age: 1,                       coins: 6, nbCoins: 1 },
+  { n: 'Opium Stash',            c: 'black', age: 1,                       coins: 3, loss: 1 },
+  { n: 'Hideout',                c: 'black', age: 1,                       vp: 2, loss: 1 },
+  { n: 'Militia',                c: 'black', age: 1, coin: 3,              shield: 2 },
+  { n: 'Residence',              c: 'black', age: 1, cost: 'C',            vp: 1, diplo: 1 },
+  { n: 'Pigeonhole',             c: 'black', age: 1, coin: 1, cost: 'O',   mask: 1 },
 
   // ---- Age II
-  { n: 'Spy Ring',             c: 'black', age: 2, cost: 'GT',  mask: 2 },
-  { n: 'Mercenaries',          c: 'black', age: 2, cost: 'PT',  shield: 3 },
-  { n: 'Lair',                 c: 'black', age: 2, cost: 'PT',  vp: 3, loss: 2 },
-  { n: 'Gambling House',       c: 'black', age: 2, cost: 'PT',  coins: 9, nbCoins: 2 },
-  { n: 'Residence',            c: 'black', age: 2, cost: 'PT',  vp: 3, diplo: 1 },
-  { n: 'Sepulcher',            c: 'black', age: 2, cost: 'PT',  vp: 2, perLoss: { of: 'victory', coins: 1 } },
-  { n: 'Villa',                c: 'black', age: 2, cost: 'PT',  vp: 4, diplo: 1 },
-  { n: "Smugglers' Wharf",     c: 'black', age: 2, cost: 'GT',  rebate: { with: 'both' } },
-  { n: 'Hidden Cache',         c: 'black', age: 2, cost: 'GT',  produceMissing: true },
+  { n: 'Black Market',    c: 'black', age: 2,          cost: 'OT',    produceMissing: true },
+  { n: 'Architect Firm',  c: 'black', age: 2, coin: 1, cost: 'P',     vp: 2, freeStages: true },
+  { n: 'Tabularium',      c: 'black', age: 2, coin: 2, cost: 'OTW',   vp: 6 },
+  { n: 'Trade Center',    c: 'black', age: 2,          cost: 'CPS',   vp: 6, loss: -2 },
+  { n: 'Gambling Den',    c: 'black', age: 2, coin: 1,                coins: 9, nbCoins: 2 },
+  { n: 'Opium Den',       c: 'black', age: 2,          cost: 'P',     coins: 4, loss: 3 },
+  { n: 'Lair',            c: 'black', age: 2,          cost: 'GW',    vp: 3, loss: 2 },
+  { n: 'Sepulcher',       c: 'black', age: 2,          cost: 'GST',   vp: 4, perLoss: { of: 'victory', coins: 1 } },
+  { n: 'Mercenaries',     c: 'black', age: 2, coin: 4, cost: 'P',     shield: 3 },
+  { n: 'Consulate',       c: 'black', age: 2,          cost: 'CP',    vp: 2, diplo: 1 },
+  { n: 'Band of Spies',   c: 'black', age: 2, coin: 2, cost: 'CS',    mask: 1 },
 
   // ---- Age III
-  { n: 'Torture Chamber',      c: 'black', age: 3, cost: 'GPT', mask: 3 },
-  { n: 'Contingent',           c: 'black', age: 3, cost: 'GPT', shield: 5 },
-  { n: 'Brotherhood',          c: 'black', age: 3, cost: 'GPT', vp: 4, loss: 3 },
-  { n: 'Consulate',            c: 'black', age: 3, cost: 'GPT', vp: 4, diplo: 1 },
-  { n: 'Embassy',              c: 'black', age: 3, cost: 'GPT', vp: 5, diplo: 1 },
-  { n: 'Cenotaph',             c: 'black', age: 3, cost: 'GPT', vp: 3, perLoss: { of: 'victory', coins: 1 } },
-  { n: "Builders' Union",      c: 'black', age: 3, cost: 'GPT', vp: 4, perLoss: { of: 'stage', coins: 1 } },
-  { n: 'Tribute',              c: 'black', age: 3, cost: 'GPT', vp: 5, loss: 2 },
-  { n: 'Treasury',             c: 'black', age: 3, cost: 'GPT', vp: 4, coins: 9 },
+  { n: 'Capitol',             c: 'black', age: 3, coin: 2, cost: 'CCGPSS', vp: 8 },
+  { n: 'Mint',                c: 'black', age: 3,          cost: 'CGTWW',  vp: 8, loss: -3 },
+  { n: 'Opium Distillery',    c: 'black', age: 3,          cost: 'GW',     coins: 5, loss: 5 },
+  { n: 'Brotherhood',         c: 'black', age: 3,          cost: 'OTWW',   vp: 4, loss: 3 },
+  { n: 'Chamber of Builders', c: 'black', age: 3,          cost: 'CGPW',   vp: 4, perLoss: { of: 'stage', coins: 1 } },
+  { n: 'Cenotaph',            c: 'black', age: 3,          cost: 'CCGST',  vp: 5, perLoss: { of: 'victory', coins: 1 } },
+  { n: 'Secret Network',      c: 'black', age: 3,          cost: 'PS',     per: { coins: 1, vp: 1, of: 'black', from: 'self' } },
+  { n: 'Slave Market',        c: 'black', age: 3,          cost: 'OOWW',   per: { coins: 1, vp: 1, of: 'victory', from: 'self' } },
+  { n: 'Contingent',          c: 'black', age: 3, coin: 5, cost: 'T',      shield: 5 },
+  { n: 'Embassy',             c: 'black', age: 3,          cost: 'PST',    vp: 2, diplo: 1 },
+  { n: 'Torture Chamber',     c: 'black', age: 3, coin: 3, cost: 'GOO',    mask: 1 },
 ];
+
+// The ten black cards NOT above, and the mechanic each one is waiting on. They
+// are left out rather than approximated, because a card that silently does
+// nothing is worse than a card that is not in the deck.
+//
+//   Smuggler's Cache  I    a rebate on the STARTING resource, not a bought one
+//   Secret Warehouse  I    an extra copy of a resource you already produce
+//                          (produceMissing covers the opposite case)
+//   Raider Camp       I    grant yourself an Age I military victory token, and
+//   Raider Fort       II   hand each neighbour a debt — no card grants a token
+//   Raider Garrison   III  today, and debt is only ever taken, never given
+//   Cells             I    end-game points per victory token OF A GIVEN AGE;
+//   Guardhouse        II   tokens are currently counted but not dated
+//   Prison            III
+//   Forging Agency    II   take the whole discard and build one card free —
+//                          needs a new choice in the protocol, not just data
+//   Memorial          III  cash in your defeat tokens and discard them: the
+//                          first card that would REMOVE tokens from a board
 
 // The three guilds Cities adds. They join the same pile, and the number drawn
 // is unchanged — still player count plus two.
+//
+// Two of the three carried the same filler cost as the black cards did. The
+// wiki lists them under different translations — Forgers Guild and Shadow
+// Guild — but the effects match exactly, so the costs are theirs. The third has
+// no counterpart on that list under any name, so its cost is still a guess and
+// is marked as one.
 export const CITY_GUILDS = [
-  { n: 'Counterfeiters Guild', c: 'purple', cost: 'GPT', vp: 5, loss: 3 },
-  { n: 'Guild Of Shadows',     c: 'purple', cost: 'GPT', per: { vp: 1, of: 'black', from: 'neighbours' } },
-  { n: 'Mourners Guild',       c: 'purple', cost: 'GPT', per: { vp: 1, of: 'victory', from: 'neighbours' } },
+  { n: 'Counterfeiters Guild', c: 'purple', cost: 'GOOOT', vp: 5, loss: 3 },
+  { n: 'Guild Of Shadows',     c: 'purple', cost: 'PSSW',  per: { vp: 1, of: 'black', from: 'neighbours' } },
+  // ⚠ cost unverified: no guild on the wiki's list scores victory tokens
+  { n: 'Mourners Guild',       c: 'purple', cost: 'GPT',   per: { vp: 1, of: 'victory', from: 'neighbours' } },
 ];
 
 // Debt is measured in victory points, one per coin you could not pay.
