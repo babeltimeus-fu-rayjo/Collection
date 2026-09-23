@@ -17,6 +17,7 @@
 import {
   RAW, MANUFACTURED, RESOURCES, RES_NAME, COLOUR_NAME,
   BASE_AGES, GUILDS, WONDERS, CITY_CARDS, CITY_GUILDS, DEBT_VP,
+  LEADERS, LEADERS_PER_PLAYER,
   START_COINS, START_COINS_LEADERS, CARDS_PER_AGE,
   MILITARY_WIN, MILITARY_LOSS, SCIENCE_SET_BONUS,
 } from './cards.js';
@@ -217,6 +218,12 @@ export function payFor(G, seat, cost, extraGens = []) {
       supplies.push({ opts: g.opts, cap: g.n, from: side, price: (r) => tradePrice(me, side, r) });
     }
   }
+  // Leaders: Bilkis sells you one resource a turn out of the bank, at a coin
+  // each. It is a supply like any other — the flow decides whether it is worth
+  // using — and the coin goes to nobody, so it never shows up in the split.
+  const bank = me.built.reduce((a, c) => a + (c.bankBuy || 0), 0);
+  if (bank) supplies.push({ opts: RESOURCES.split(''), cap: bank, from: 'bank', price: () => 1 });
+
   const bill = minCostAssign(supplies, need, totalNeed);
   if (!bill) return null;
 
@@ -231,6 +238,22 @@ export function payFor(G, seat, cost, extraGens = []) {
     bill.coins -= 1;
   }
   return bill;
+}
+
+// "Pay 1 fewer resource" — Imhotep on wonder stages, Hammurabi, Leonidas and
+// Archimedes on a colour each. WHICH resource you drop is yours to choose, and
+// the cheapest choice is not always the dearest letter: a stone you already
+// quarry is free, so dropping it saves nothing. There are at most seven
+// distinct letters in a cost, so ask the flow about each and keep the best.
+export function payWithDiscount(G, seat, cost, on) {
+  const me = playerBySeat(G, seat);
+  if (!cost || !me.built.some((c) => c.discount && c.discount.of === on)) return payFor(G, seat, cost);
+  let best = payFor(G, seat, cost);
+  for (const r of new Set(cost)) {
+    const bill = payFor(G, seat, cost.replace(r, ''));
+    if (bill && (!best || bill.coins < best.coins)) best = bill;
+  }
+  return best;
 }
 
 // Successive shortest paths. The graph is tiny — a few dozen supplies against
@@ -335,7 +358,10 @@ export function newMatch(roster, opts = {}) {
         tokens: [],            // military results, one entry per resolution
         debt: 0,
         diplo: 0,          // Cities: unspent diplomacy tokens
-        freeAgeUsed: {},       // Olympia: the one free build per age
+        freeAgeUsed: {},       // Olympia, and Caligula: one free build an age
+        leaders: [],           // Leaders: recruited one an Age, four drafted
+        draft: [],             // ... and what is still going round the table
+        bonusUsed: false,      // Berenice: her extra coin, once a turn
         hand: [],
       };
     }),
@@ -348,9 +374,175 @@ export function newMatch(roster, opts = {}) {
     chatter: [], chatSeq: 0,
     fx: null, fxSeq: 0,
   };
-  dealAge(G);
-  addLog(G, `Age I begins. Cards pass to the left.`);
+  if (o.leaders) dealLeaders(G);
+  else beginAge(G);
   return G;
+}
+
+// ---------------------------------------------------------------- leaders
+//
+// Two phases the base game does not have. Before Age I everyone is dealt four
+// leaders and drafts four, keeping one and passing the rest to the right; then
+// at the start of every Age one of those four is recruited, spent on a wonder
+// stage, or sold for three coins. Three Ages against four leaders is why the
+// fourth is never played.
+//
+// Both phases are simultaneous, like an ordinary turn, so they reuse G.picks
+// and the same "everybody has chosen" trigger.
+
+const leaderDeck = (opts) => LEADERS
+  .map((l, i) => ({ ...l, c: 'white', id: `L${i}` }))
+  .filter((l) => l.set !== 'cities' || opts.cities);
+
+function dealLeaders(G) {
+  const deck = shuffle(leaderDeck(G.opts));
+  for (const p of G.players) p.draft = deck.splice(0, LEADERS_PER_PLAYER);
+  G.draftRound = 1;
+  G.phase = 'draft';
+  G.picks = {};
+  addLog(G, `Leader draft: keep one, pass the rest to the right.`);
+}
+
+function doDraft(G, p, move) {
+  if (G.picks[p.seat]) return { ok: false, error: 'You have already chosen' };
+  const card = p.draft.find((c) => c.id === move.cardId);
+  if (!card) return { ok: false, error: 'That leader is not in your hand' };
+  G.picks[p.seat] = { seat: p.seat, cardId: card.id };
+  if (Object.keys(G.picks).length === G.nPlayers) resolveDraft(G);
+  return { ok: true };
+}
+
+function resolveDraft(G) {
+  for (const p of G.players) {
+    const id = G.picks[p.seat].cardId;
+    p.leaders.push(p.draft.find((c) => c.id === id));
+    p.draft = p.draft.filter((c) => c.id !== id);
+  }
+  G.picks = {};
+  if (G.draftRound >= LEADERS_PER_PLAYER) {
+    addLog(G, `Everyone has four leaders.`);
+    return beginAge(G);
+  }
+  const next = {};
+  for (const p of G.players) next[rightOf(G, p.seat)] = p.draft;
+  for (const p of G.players) p.draft = next[p.seat] || [];
+  G.draftRound += 1;
+  bumpFx(G, { kind: 'draft', round: G.draftRound });
+}
+
+// A leader whose cost is the Age costs 1, 2 or 3 — cheap early, dear late.
+export function coinCost(card, age) {
+  return card.coin === 'age' ? age : (card.coin || 0);
+}
+
+// The same shape optionsFor returns, so one renderer draws both. The
+// difference is that a leader's price is always coins and never resources.
+export function leaderOptionsFor(G, seat) {
+  const p = playerBySeat(G, seat);
+  if (!p) return [];
+  const free = p.built.some((c) => c.freeLeaders);          // Maecenas
+  const stage = nextStage(p);
+  const freeStages = p.built.some((c) => c.freeStages);
+  const stagePay = stage
+    ? (freeStages ? { coins: 0, left: 0, right: 0 } : payWithDiscount(G, seat, stage.cost, 'stage'))
+    : null;
+  const canStage = !!(stage && stagePay && stagePay.coins <= p.coins);
+  return p.leaders.map((card) => {
+    const price = free ? 0 : coinCost(card, G.age);
+    return {
+      id: card.id, name: card.n, colour: 'white',
+      play: price <= p.coins ? { coins: price, left: 0, right: 0, coin: price } : null,
+      why: price <= p.coins ? null : 'You cannot pay for it',
+      wonder: canStage ? { ...stagePay } : null,
+      wonderWhy: !stage ? 'Your wonder is finished' : (canStage ? null : 'You cannot pay for it'),
+    };
+  });
+}
+
+function doRecruit(G, p, move) {
+  if (G.picks[p.seat]) return { ok: false, error: 'You have already chosen' };
+  const card = p.leaders.find((c) => c.id === move.cardId);
+  if (!card) return { ok: false, error: 'That leader is not in your hand' };
+  if (!['play', 'wonder', 'discard'].includes(move.how)) return { ok: false, error: 'Unknown action' };
+  const opt = leaderOptionsFor(G, p.seat).find((o) => o.id === card.id);
+  if (move.how === 'play' && !opt.play) return { ok: false, error: opt.why || 'You cannot recruit that' };
+  if (move.how === 'wonder' && !opt.wonder) return { ok: false, error: opt.wonderWhy || 'You cannot build a stage' };
+  G.picks[p.seat] = {
+    seat: p.seat, how: move.how, cardId: card.id,
+    pay: move.how === 'play' ? opt.play : move.how === 'wonder' ? opt.wonder : { coins: 0, left: 0, right: 0 },
+  };
+  if (Object.keys(G.picks).length === G.nPlayers) resolveRecruit(G);
+  return { ok: true };
+}
+
+function resolveRecruit(G) {
+  for (const q of G.players) q.bonusUsed = false;
+  const shown = [];
+  const charges = [];
+  for (const p of G.players) {
+    const pick = G.picks[p.seat];
+    if (!pick) continue;
+    const card = p.leaders.find((c) => c.id === pick.cardId);
+    p.leaders = p.leaders.filter((c) => c.id !== pick.cardId);
+    shown.push({ seat: p.seat, how: pick.how, name: card.n, colour: 'white' });
+    if (pick.how === 'discard') {
+      gainCoins(G, p, 3);
+      addLog(G, `${p.name} sends a leader away for 3 coins.`);
+      continue;
+    }
+    p.coins -= pick.pay.coins;
+    if (pick.pay.left) playerBySeat(G, leftOf(G, p.seat)).coins += pick.pay.left;
+    if (pick.pay.right) playerBySeat(G, rightOf(G, p.seat)).coins += pick.pay.right;
+    if (pick.how === 'wonder') {
+      buildStage(G, p, card, charges);
+    } else {
+      p.built.push(card);
+      applyImmediate(G, p, card);
+      recruitEffects(G, p, card);
+      chargeFor(G, p, card, charges);
+      addLog(G, `${p.name} recruits ${card.n}${pick.pay.coins ? ` for ${pick.pay.coins}` : ''}.`);
+    }
+  }
+  applyCharges(G, charges);
+  G.revealed = shown;
+  G.picks = {};
+  bumpFx(G, { kind: 'recruited', plays: shown });
+  dealAge(G);
+}
+
+// The things a leader does the moment it arrives and never again.
+function recruitEffects(G, p, card) {
+  if (card.token) {
+    winToken(G, p, MILITARY_WIN[G.age]);
+    addLog(G, `${p.name} claims an Age ${'I'.repeat(G.age)} victory without a fight.`);
+  }
+  if (card.purge) {
+    // Telesilla: your defeats are struck off, and everyone else gives up a
+    // victory "of their choice" — which is always their cheapest one.
+    p.tokens = p.tokens.filter((t) => t > 0);
+    for (const q of G.players) {
+      if (q.seat === p.seat) continue;
+      let lo = -1;
+      q.tokens.forEach((t, i) => { if (t > 0 && (lo < 0 || t < q.tokens[lo])) lo = i; });
+      if (lo >= 0) q.tokens.splice(lo, 1);
+    }
+    addLog(G, `${p.name} rewrites the histories: their defeats are gone, everyone else loses a victory.`);
+  }
+}
+
+// The start of an Age. With Leaders, recruitment comes before the cards are
+// dealt — so the coins a leader costs are coins you do not have for the first
+// card of the Age, which is the whole tension of the phase.
+function beginAge(G) {
+  addLog(G, `Age ${'I'.repeat(G.age)} begins. Cards pass to the ${passDir(G.age)}.`);
+  if (G.opts.leaders) {
+    G.phase = 'recruit';
+    G.picks = {};
+    addLog(G, `Recruitment: play one of your leaders.`);
+    bumpFx(G, { kind: 'recruit', age: G.age });
+    return;
+  }
+  dealAge(G);
 }
 
 function dealAge(G) {
@@ -388,16 +580,29 @@ export function optionsFor(G, seat) {
   if (!p) return [];
   const unlocked = chainUnlocks(p);
   const stage = nextStage(p);
-  const freeStages = p.built.some((c) => c.freeStages);   // Cities: Architect Cabinet
-  const stagePay = stage ? (freeStages ? { coins: 0, left: 0, right: 0 } : payFor(G, seat, stage.cost)) : null;
+  const freeStages = p.built.some((c) => c.freeStages);   // Cities: Architect Firm
+  const stagePay = stage
+    ? (freeStages ? { coins: 0, left: 0, right: 0 } : payWithDiscount(G, seat, stage.cost, 'stage'))
+    : null;
+
+  // Leaders: Ramses waives a whole colour for good, Caligula one card of a
+  // colour per Age. The pay object carries the colour back so resolveTurn
+  // knows which allowance was just spent.
+  const freeCol = new Set(), freeOnce = new Set();
+  for (const c of p.built) {
+    if (c.freeColour) freeCol.add(c.freeColour);
+    if (c.freeColourAge && !p.freeAgeUsed[`${c.freeColourAge}-${G.age}`]) freeOnce.add(c.freeColourAge);
+  }
 
   return p.hand.map((card) => {
     const dup = alreadyBuilt(p, card.n);
     let play = null;
     if (!dup) {
       if (unlocked.has(card.n)) play = { coins: 0, left: 0, right: 0, chain: true };
+      else if (freeCol.has(card.c)) play = { coins: 0, left: 0, right: 0, gift: card.c };
+      else if (freeOnce.has(card.c)) play = { coins: 0, left: 0, right: 0, gift: card.c, once: true };
       else {
-        const pay = payFor(G, seat, card.cost);
+        const pay = payWithDiscount(G, seat, card.cost, card.c);
         if (pay) {
           const total = pay.coins + (card.coin || 0);
           if (total <= p.coins) play = { ...pay, coin: card.coin || 0, coins: total };
@@ -421,6 +626,13 @@ export function applyMove(G, seat, move) {
   const p = playerBySeat(G, seat);
   if (!p) return { ok: false, error: 'Not at the table' };
   if (G.phase === 'over') return { ok: false, error: 'The game is over' };
+  if (G.phase === 'draft') {
+    return move.kind === 'draft' || move.kind === 'pick'
+      ? doDraft(G, p, move) : { ok: false, error: 'Pick a leader to keep' };
+  }
+  if (G.phase === 'recruit') {
+    return move.kind === 'pick' ? doRecruit(G, p, move) : { ok: false, error: 'Play one of your leaders' };
+  }
   if (move.kind === 'pick') return doPick(G, p, move);
   return { ok: false, error: 'Unknown action' };
 }
@@ -444,8 +656,10 @@ function doPick(G, p, move) {
   return { ok: true };
 }
 
+const SIMULTANEOUS = ['play', 'draft', 'recruit'];
+
 export function waitingOn(G) {
-  if (G.phase !== 'play') return [];
+  if (!SIMULTANEOUS.includes(G.phase)) return [];
   return G.players.filter((p) => !G.picks[p.seat]).map((p) => p.seat);
 }
 
@@ -457,6 +671,8 @@ export function waitingOn(G) {
 function resolveTurn(G) {
   const picks = G.players.map((p) => G.picks[p.seat]).filter(Boolean);
   const shown = [];
+  const charges = [];                       // "everyone else pays", settled below
+  for (const q of G.players) q.bonusUsed = false;
 
   for (const pick of picks) {
     const p = playerBySeat(G, pick.seat);
@@ -466,7 +682,7 @@ function resolveTurn(G) {
 
     if (pick.how === 'discard') {
       G.discard.push(card);
-      p.coins += 3;
+      gainCoins(G, p, 3);
       addLog(G, `${p.name} sells a card for 3 coins.`);
       continue;
     }
@@ -476,46 +692,18 @@ function resolveTurn(G) {
     if (pick.pay.right) playerBySeat(G, rightOf(G, p.seat)).coins += pick.pay.right;
 
     if (pick.how === 'wonder') {
-      const stage = nextStage(p);
-      // the card goes face down under the board — out of the game, and NOT into
-      // the discard pile, which Halikarnassos is allowed to dig through
-      p.stagesBuilt.push({ ...stage, buried: card.n });
-      applyImmediate(G, p, stage);
-      addLog(G, `${p.name} completes stage ${p.stagesBuilt.length} of ${p.wonder}.`);
+      buildStage(G, p, card, charges);
     } else {
+      if (pick.pay.once) p.freeAgeUsed[`${pick.pay.gift}-${G.age}`] = true;
       p.built.push(card);
       applyImmediate(G, p, card);
+      buildEffects(G, p, card, pick);
+      chargeFor(G, p, card, charges);
       addLog(G, `${p.name} builds ${card.n}${pick.pay.coins ? ` for ${pick.pay.coins}` : ''}.`);
     }
   }
 
-  // Cities: losses land after everyone has played and paid for their trades, so
-  // the money you just earned this turn is money you can be made to lose.
-  for (const pick of picks) {
-    if (pick.how !== 'play') continue;
-    const p = playerBySeat(G, pick.seat);
-    const card = (p.built[p.built.length - 1] || {});
-    if (!card.loss && !card.perLoss) continue;
-    for (const q of G.players) {
-      if (q.seat === p.seat) continue;         // never the player who played it
-      const owed = card.loss ? card.loss : countOwned(q, card.perLoss.of) * card.perLoss.coins;
-      if (owed === 0) continue;
-      // A negative loss is the mirror of the usual one: Customs, Trade Center
-      // and the Mint are paid for by putting money into everybody ELSE's hand.
-      // Nobody can go into debt over a card that gives them coins, so this is
-      // the whole of that case.
-      if (owed < 0) {
-        q.coins += -owed;
-        addLog(G, `${q.name} gains ${-owed} from ${card.n}.`);
-        continue;
-      }
-      const paid = Math.min(q.coins, owed);
-      q.coins -= paid;
-      const short = owed - paid;
-      if (short > 0) q.debt += short;          // one debt token per coin unpaid
-      if (owed) addLog(G, `${q.name} loses ${owed} to ${card.n}${short ? ` (${short} as debt)` : ''}.`);
-    }
-  }
+  applyCharges(G, charges);
 
   G.revealed = shown;
   G.picks = {};
@@ -527,21 +715,103 @@ function resolveTurn(G) {
   G.turn += 1;
 }
 
+// Every coin the BANK hands you arrives through here, because Berenice takes
+// one more the first time that happens each turn. Coins a neighbour pays you
+// for a trade are not the bank's and do not count.
+function gainCoins(G, p, n) {
+  if (!n) return;
+  p.coins += n;
+  if (n > 0 && !p.bonusUsed && p.built.some((c) => c.bonusCoin)) {
+    p.coins += 1;
+    p.bonusUsed = true;
+  }
+}
+
+// Military victory tokens are handed out in exactly two places — the end of an
+// Age, and Nitocris — and Nero is paid for both.
+function winToken(G, p, value) {
+  p.tokens.push(value);
+  const fee = p.built.reduce((a, c) => a + (c.onWin ? c.onWin.coins : 0), 0);
+  if (fee) gainCoins(G, p, fee);
+}
+
 function applyImmediate(G, p, thing) {
   if (thing.shield) p.shields += thing.shield;
-  if (thing.coins) p.coins += thing.coins;
+  if (thing.coins) gainCoins(G, p, thing.coins);
   if (thing.diplo) p.diplo += thing.diplo;
   if (thing.nbCoins) {
     // a gambling den pays the house AND the people either side of it
     for (const s of [leftOf(G, p.seat), rightOf(G, p.seat)]) {
       const q = playerBySeat(G, s);
-      if (q && q.seat !== p.seat) q.coins += thing.nbCoins;
+      if (q && q.seat !== p.seat) gainCoins(G, q, thing.nbCoins);
     }
   }
   if (thing.per && thing.per.coins) {
     const n = countFor(G, p.seat, thing.per);
-    p.coins += n * thing.per.coins;
+    gainCoins(G, p, n * thing.per.coins);
     if (n) addLog(G, `${p.name} collects ${n * thing.per.coins} coins.`);
+  }
+}
+
+// A wonder stage, however it was paid for and whatever card was buried under
+// it. The card goes face down under the board — out of the game, and NOT into
+// the discard pile, which Halikarnassos is allowed to dig through.
+function buildStage(G, p, card, charges) {
+  const stage = nextStage(p);
+  p.stagesBuilt.push({ ...stage, buried: card.n });
+  applyImmediate(G, p, stage);
+  for (const c of p.built) {            // Leaders: Octavia throws a parade
+    if (!c.onStage) continue;
+    gainCoins(G, p, c.onStage.coins);
+    if (c.onStage.others) charges.push({ by: p, name: c.n, flat: c.onStage.others });
+  }
+  addLog(G, `${p.name} completes stage ${p.stagesBuilt.length} of ${p.wonder}.`);
+}
+
+// Leaders who are paid for what you build rather than for being built.
+function buildEffects(G, p, card, pick) {
+  let fee = 0;
+  for (const c of p.built) {
+    if (c === card) continue;
+    if (c.onBuild && c.onBuild.of === card.c) fee += c.onBuild.coins;
+    if (c.onChain && pick.pay.chain) fee += c.onChain.coins;
+  }
+  if (fee) {
+    gainCoins(G, p, fee);
+    addLog(G, `${p.name} takes ${fee} coins for building ${card.n}.`);
+  }
+}
+
+// "Everyone else loses N." Cities puts them on black cards, Leaders on Octavia
+// and Arsinoe; they are collected while the turn resolves and settled after it,
+// so the money you earned this turn is money you can be made to lose.
+function chargeFor(G, p, card, charges) {
+  if (card.loss) charges.push({ by: p, name: card.n, flat: card.loss });
+  if (card.lossAge) charges.push({ by: p, name: card.n, flat: G.age });
+  if (card.perLoss) charges.push({ by: p, name: card.n, per: card.perLoss });
+}
+
+function applyCharges(G, charges) {
+  for (const ch of charges) {
+    for (const q of G.players) {
+      if (q.seat === ch.by.seat) continue;      // never the player who played it
+      const owed = ch.flat != null ? ch.flat : countOwned(q, ch.per.of) * ch.per.coins;
+      if (owed === 0) continue;
+      // A negative charge is the mirror of the usual one: Customs, Trade Center
+      // and the Mint are paid for by putting money into everybody ELSE's hand.
+      // Nobody goes into debt over a card that gives them coins, so that is the
+      // whole of that case.
+      if (owed < 0) {
+        gainCoins(G, q, -owed);
+        addLog(G, `${q.name} gains ${-owed} from ${ch.name}.`);
+        continue;
+      }
+      const paid = Math.min(q.coins, owed);
+      q.coins -= paid;
+      const short = owed - paid;
+      if (short > 0) q.debt += short;           // one debt token per coin unpaid
+      addLog(G, `${q.name} loses ${owed} to ${ch.name}${short ? ` (${short} as debt)` : ''}.`);
+    }
   }
 }
 
@@ -568,15 +838,21 @@ function endAge(G) {
   }
 
   const win = MILITARY_WIN[G.age];
+  for (const p of G.players) p.bonusUsed = false;   // the conflict is its own event
 
   // Diplomacy removes you from the table for one conflict: you take nothing,
   // and the two cities either side of you are treated as neighbours and fight
   // each other instead. So the conflict is fought around the circle of players
   // who are actually PRESENT, which is the whole rule in one line. A token must
   // be spent whenever you hold one, even when you would have won.
+  // Leaders: Tomyris does not take defeats, she posts them to whoever won.
+  const lose = (a, b) => {
+    if (b && a.built.some((c) => c.deflect)) { b.tokens.push(MILITARY_LOSS); return; }
+    a.tokens.push(MILITARY_LOSS);
+  };
   const fight = (a, b, tokens) => {
-    if (a.shields > b.shields) for (let i = 0; i < tokens; i++) a.tokens.push(win);
-    else if (a.shields < b.shields) for (let i = 0; i < tokens; i++) a.tokens.push(MILITARY_LOSS);
+    if (a.shields > b.shields) for (let i = 0; i < tokens; i++) winToken(G, a, win);
+    else if (a.shields < b.shields) for (let i = 0; i < tokens; i++) lose(a, b);
   };
   const spend = (p) => { if (p.diplo > 0) { p.diplo -= 1; return true; } return false; };
 
@@ -621,8 +897,7 @@ function endAge(G) {
 
   if (G.age === 3) return endGame(G);
   G.age += 1;
-  dealAge(G);
-  addLog(G, `Age ${'I'.repeat(G.age)} begins. Cards pass to the ${passDir(G.age)}.`);
+  beginAge(G);
 }
 
 function bumpFx(G, fx) { G.fx = fx; G.fxSeq += 1; }
@@ -665,24 +940,47 @@ const ALL_SYMBOLS = [0, 1, 2];
 // Each entry of `choices` is one symbol you get to place, listed as the symbols
 // it is allowed to be. A guild wildcard may be anything; a Cities mask may only
 // copy a symbol a neighbour actually has, which is sometimes nothing at all.
-function bestScienceOf(counts, choices) {
-  if (!choices.length) {
-    const [a, b, c] = counts;
-    return a * a + b * b + c * c + SCIENCE_SET_BONUS * Math.min(a, b, c);
-  }
+function bestScienceOf(counts, choices, opt = {}) {
+  if (!choices.length) return scienceValue(counts, opt);
   const [first, ...rest] = choices;
-  if (!first.length) return bestScienceOf(counts, rest);
+  if (!first.length) return bestScienceOf(counts, rest, opt);
   let best = 0;
   for (const i of first) {
     counts[i] += 1;
-    best = Math.max(best, bestScienceOf(counts, rest));
+    best = Math.max(best, bestScienceOf(counts, rest, opt));
     counts[i] -= 1;
   }
   return best;
 }
 
-function bestScience(counts, wild) {
-  return bestScienceOf(counts.slice(), new Array(Math.max(0, wild)).fill(ALL_SYMBOLS));
+// What a finished row of symbols is worth, and the three Leaders who get to
+// argue with it after the fact: Aristotle pays more for a complete set,
+// Enheduania adds one more of whatever you have most of, and Aganice turns any
+// one symbol into any other. Enheduania goes first because she reads what you
+// have; Aganice edits the result.
+function scienceValue(counts, opt) {
+  const bonus = SCIENCE_SET_BONUS + (opt.setBonus || 0);
+  const flat = (c) => c[0] * c[0] + c[1] * c[1] + c[2] * c[2] + bonus * Math.min(c[0], c[1], c[2]);
+  const cands = [counts];
+  if (opt.most) {
+    const top = Math.max(...counts);
+    for (let i = 0; i < 3; i++) if (counts[i] === top) cands.push(counts.map((v, k) => (k === i ? v + 1 : v)));
+  }
+  if (opt.swap) {
+    for (const c of cands.slice()) {
+      for (let i = 0; i < 3; i++) {
+        if (!c[i]) continue;
+        for (let j = 0; j < 3; j++) {
+          if (i !== j) cands.push(c.map((v, k) => v - (k === i ? 1 : 0) + (k === j ? 1 : 0)));
+        }
+      }
+    }
+  }
+  return Math.max(...cands.map(flat));
+}
+
+function bestScience(counts, wild, opt) {
+  return bestScienceOf(counts.slice(), new Array(Math.max(0, wild)).fill(ALL_SYMBOLS), opt);
 }
 
 const SCI_INDEX = { compass: 0, gear: 1, tablet: 2 };
@@ -711,6 +1009,35 @@ export function scoreFor(G, seat) {
 
   const perVp = (list) => list.reduce((a, c) => a + (c.per && c.per.vp ? countFor(G, seat, c.per) * c.per.vp : 0), 0);
 
+  // Leaders. Most of them are ordinary cards that happen to be white, but a
+  // dozen score off conditions no other card has: a complete set of colours, a
+  // strict lead over BOTH neighbours, a clean sheet of defeats.
+  const whites = p.built.filter((c) => c.c === 'white');
+  const sciOpt = {
+    setBonus: whites.reduce((a, c) => a + (c.sciSetVp || 0), 0),
+    most: whites.some((c) => c.sciMost),
+    swap: whites.some((c) => c.sciSwap),
+  };
+  const countOf = (q, of) => (of === 'coins' ? q.coins : q.built.filter((c) => c.c === of).length);
+  const aheadOfBoth = (of) => [leftOf(G, seat), rightOf(G, seat)].every((sn) => {
+    const q = playerBySeat(G, sn);
+    return !q || q.seat === seat || countOf(p, of) > countOf(q, of);
+  });
+  let lead = perVp(whites);
+  for (const c of whites) {
+    lead += c.vp || 0;
+    if (c.setVp) lead += c.setVp.vp * Math.min(...c.setVp.of.map((col) => countOf(p, col)));
+    if (c.vpPerCoins) lead += Math.floor(p.coins / c.vpPerCoins);
+    if (c.mostVp && aheadOfBoth(c.mostVp.of)) lead += c.mostVp.vp;
+    if (c.cleanVp && !p.tokens.some((t) => t < 0)) lead += c.cleanVp;
+    if (c.loneVp && whites.length === 1) lead += c.loneVp;
+    if (c.pairVp) {
+      const seen = {};
+      for (const t of p.tokens) if (t > 0) seen[t] = (seen[t] || 0) + 1;
+      for (const v of Object.keys(seen)) lead += Math.floor(seen[v] / 2) * Number(v);
+    }
+  }
+
   const parts = {
     military: p.tokens.reduce((a, b) => a + b, 0),
     coins: Math.floor(p.coins / 3),
@@ -718,7 +1045,8 @@ export function scoreFor(G, seat) {
     civilian: p.built.filter((c) => c.c === 'blue').reduce((a, c) => a + (c.vp || 0), 0),
     commercial: perVp(p.built.filter((c) => c.c === 'yellow')),
     guild: perVp(p.built.filter((c) => c.c === 'purple')),
-    science: bestScienceOf(counts.slice(), choices),
+    leaders: lead,
+    science: bestScienceOf(counts.slice(), choices, sciOpt),
     debt: -p.debt,
   };
   parts.total = Object.values(parts).reduce((a, b) => a + b, 0);
@@ -771,12 +1099,17 @@ export function viewFor(G, seat, code) {
     iPicked: !!G.picks[seat],
     hand: me ? me.hand : [],
     options: G.phase === 'play' && me && !G.picks[seat] ? optionsFor(G, seat) : [],
+    draftRound: G.draftRound || 0,
+    draftHand: G.phase === 'draft' && me ? me.draft : [],
+    myLeaders: me ? me.leaders : [],
+    leaderOptions: G.phase === 'recruit' && me && !G.picks[seat] ? leaderOptionsFor(G, seat) : [],
     players: G.players.map((p) => ({
       seat: p.seat, name: p.name, bot: p.bot, connected: p.connected, team: p.team,
       wonder: p.wonder, side: p.side, wonderRes: p.wonderRes,
       stages: p.stages, stagesBuilt: p.stagesBuilt.length,
       nextStageCost: nextStage(p) ? nextStage(p).cost : null,
       coins: p.coins, shields: p.shields, tokens: p.tokens, debt: p.debt, diplo: p.diplo,
+      leaders: p.leaders.length,
       built: p.built, handCount: p.hand.length,
       picked: !!G.picks[p.seat],
     })),
@@ -818,7 +1151,15 @@ export function viewFor(G, seat, code) {
 // variety and plausibility rather than strength — a bot that valued cards by
 // what they add today was not weaker, it was just strange to play against,
 // building libraries next to nobody and never a second compass.
-export const BOT = { scienceFaith: 0.3 };
+// How keen a bot is to sell a leader rather than recruit it: the sell option is
+// worth three coins times this. Swept head-to-head at 0, 0.5, 1 and 1.5, 500
+// games each at 4 and 6 players with a same-against-same control — every
+// setting came back inside noise of even, so it does not change how well a bot
+// plays. It changes what you SEE: at 1 a bot sells anything it values under a
+// point and a half, and a third of the deck never reaches a table. 0.5 sells
+// only the leaders that are genuinely no use, which costs nothing and means
+// most of the fifty-four turn up.
+export const BOT = { scienceFaith: 0.3, leaderSell: 0.5 };
 
 function scienceRoom(G) {
   const perAge = (G.handSize || CARDS_PER_AGE) - 1;
@@ -897,7 +1238,146 @@ function militaryWorth(G, seat) {
   return worth / 2;
 }
 
+// ---------------------------------------------------------------- leader bots
+
+// How much of the game is still ahead, as a fraction: 1 while drafting, 0 on
+// the last turn. A leader is bought for what it will be worth later, so nearly
+// every judgement below leans on this.
+function gameLeft(G) {
+  const perAge = (G.handSize || CARDS_PER_AGE) - 1;
+  if (G.phase === 'draft') return 1;
+  const done = (G.age - 1) * perAge + (G.phase === 'play' ? G.turn - 1 : 0);
+  return Math.max(0, 1 - done / (3 * perAge));
+}
+
+// What a city of this kind actually finishes with — measured over four hundred
+// bot cities rather than guessed, because a leader that pays per card is bought
+// on exactly this number and nothing else. In Age I your city is empty and
+// Phidias is worth nothing yet; what he is worth is this table.
+const TYPICAL = { brown: 3.0, grey: 1.6, blue: 3.3, yellow: 2.8, red: 2.2, green: 2.1, purple: 1.0, black: 1.4, stage: 2.1, victory: 1.5 };
+
+// A city comes out of a game with no defeat tokens at all about a quarter of
+// the time, which over three conflicts is a shade under two thirds each. That
+// is the price of Cynisca's promise, and it gets better as the conflicts you
+// have already survived come off the count.
+const CLEAN_ODDS = 0.62;
+
+// What a coin is worth in points. Three coins are a point at the end, but a
+// coin in Age I buys a card you could not otherwise build, so it is worth more
+// than a coin in Age III — which is also why leaders are expensive early.
+const coinWorth = (left) => 0.33 + 0.17 * left;
+
+// The honest half of a leader's worth: what it would add to the final score if
+// the game ended now. Add it, score, take it away again — which is exact for
+// everything that counts what is already on the table, and blind to everything
+// still to come. The rest of leaderValue is that blind spot, priced by hand.
+function scoreDelta(G, seat, card) {
+  const p = playerBySeat(G, seat);
+  const before = scoreFor(G, seat).total;
+  p.built.push(card);
+  const after = scoreFor(G, seat).total;
+  p.built.pop();
+  return after - before;
+}
+
+function leaderValue(G, seat, card) {
+  const p = playerBySeat(G, seat);
+  const left = gameLeft(G);
+  const ages = Math.max(1, 4 - G.age);          // conflicts still to be fought
+  const cw = coinWorth(left);
+  const ahead = (of) => (TYPICAL[of] || 1) * left;   // more of these still to come
+
+  // Three fields are held back from scoreDelta: a science symbol is worth more
+  // than it looks because you keep collecting, and the two conditional leaders
+  // are worth LESS than they look because today's clean sheet is not the end of
+  // the game. Everything else scoreDelta prices exactly.
+  const { sci, cleanVp, loneVp, ...rest } = card;
+  let v = scoreDelta(G, seat, rest);
+  if (sci) v += scienceGain(G, seat, sci);
+  if (cleanVp && !p.tokens.some((t) => t < 0)) v += cleanVp * Math.pow(CLEAN_ODDS, 4 - G.age);
+  if (loneVp && !p.built.some((c) => c.c === 'white')) v += loneVp * (0.25 + 0.5 * (1 - left));
+
+  if (card.shield) v += card.shield * militaryWorth(G, seat) * ages;
+  if (card.token) v += MILITARY_WIN[G.age];
+  if (card.coins) v += card.coins * cw;
+  if (card.per && card.per.vp) v += ahead(card.per.of) * card.per.vp;
+  if (card.setVp) {
+    const now = Math.min(...card.setVp.of.map((c) => p.built.filter((x) => x.c === c).length));
+    const then = Math.min(...card.setVp.of.map((c) => p.built.filter((x) => x.c === c).length + ahead(c)));
+    v += card.setVp.vp * (then - now);
+  }
+  if (card.vpPerCoins) v += 2 * left;
+  if (card.sciSetVp) v += card.sciSetVp * 0.7 * left;
+  if (card.sciMost || card.sciSwap) v += 1.2 * left;
+  if (card.mostVp) v += card.mostVp.vp * 0.35 * left;
+  if (card.pairVp) v += 1.5 * left;
+
+  // The coin engines: how often the thing happens, times what it pays. The
+  // counts are measured too — a bot city pays its neighbours about 14 coins a
+  // game, spread over 6 of its 18 turns, and follows a chain 2.6 times.
+  if (card.onBuild) v += ahead(card.onBuild.of) * card.onBuild.coins * cw;
+  if (card.onChain) v += 2.6 * left * card.onChain.coins * cw;
+  if (card.onStage) v += ahead('stage') * card.onStage.coins * cw + (card.onStage.others || 0) * (G.nPlayers - 1) * 0.15 * left;
+  if (card.onWin) v += ahead('victory') * card.onWin.coins * cw;
+  if (card.bonusCoin) v += 6 * left * cw;
+  if (card.bankBuy) v += 8 * left * cw;
+  if (card.rebate) v += (card.rebate.with === 'both' ? 6 : 3.5) * left * cw;
+  if (card.lossAge) v += (G.nPlayers - 1) * G.age * cw * 0.25;
+
+  // and the ones that stop you paying at all: a resource saved is two coins
+  if (card.discount) v += ahead(card.discount.of) * 2 * cw;
+  if (card.freeColour) v += 4.0 * left;
+  if (card.freeColourAge) v += 3.5 * left;
+  if (card.freeLeaders) v += 6 * left * cw;
+  if (card.purge) v += p.tokens.filter((t) => t < 0).length + 0.3 * (G.nPlayers - 1);
+  if (card.deflect) v += 1.0 * ages;
+  return v;
+}
+
+function botDraft(G, seat) {
+  const p = playerBySeat(G, seat);
+  if (!p || !p.draft.length) return null;
+  let best = null;
+  for (const card of p.draft) {
+    const v = leaderValue(G, seat, card) - coinCost(card, 1) * 0.3;
+    if (!best || v > best.v) best = { v, cardId: card.id };
+  }
+  return { kind: 'draft', cardId: best.cardId };
+}
+
+function botRecruit(G, seat) {
+  const p = playerBySeat(G, seat);
+  const opts = leaderOptionsFor(G, seat);
+  if (!opts.length) return null;
+  const cw = coinWorth(gameLeft(G));
+  const scored = [];
+  for (const o of opts) {
+    const card = p.leaders.find((c) => c.id === o.id);
+    const worth = leaderValue(G, seat, card);
+    // Coins spent on a leader are coins not spent on the Age about to start,
+    // which is dearer than the same coin mid-turn.
+    if (o.play) scored.push({ how: 'play', cardId: o.id, v: worth - o.play.coins * cw * 1.15 });
+    if (o.wonder) {
+      const stage = nextStage(p);
+      let v = (stage.vp || 0) + (stage.shield || 0) * militaryWorth(G, seat) * Math.max(1, 4 - G.age) + (stage.coins || 0) * cw;
+      if (stage.sci) v += scienceGain(G, seat, stage.sci);
+      if (stage.act || stage.give || stage.trade) v += 3;
+      // Which leader goes under the stage matters; that a leader does is the
+      // same value whichever one it is, so the subtraction is a tiebreak only.
+      scored.push({ how: 'wonder', cardId: o.id, v: v - o.wonder.coins * cw * 1.15 - worth * 0.02 });
+    }
+    // Selling is the floor: three coins, the same three coins whichever leader
+    // it was. So the value does not depend on the card at all, and the tiny
+    // subtraction is only there to make the worst one in hand the one that goes.
+    scored.push({ how: 'discard', cardId: o.id, v: 3 * cw * BOT.leaderSell - worth * 0.02 });
+  }
+  scored.sort((a, b) => b.v - a.v);
+  return { kind: 'pick', how: scored[0].how, cardId: scored[0].cardId };
+}
+
 export function botChoose(G, seat) {
+  if (G.phase === 'draft') return G.picks[seat] ? null : botDraft(G, seat);
+  if (G.phase === 'recruit') return G.picks[seat] ? null : botRecruit(G, seat);
   if (G.phase !== 'play') return null;
   const p = playerBySeat(G, seat);
   if (!p || G.picks[seat]) return null;

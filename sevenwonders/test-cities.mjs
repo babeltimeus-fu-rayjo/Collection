@@ -5,7 +5,11 @@ let fails = 0;
 const ok = (c, m) => { console.log(`${c ? 'PASS' : '**FAIL**'}  ${m}`); if (!c) fails++; };
 const mk = (n, opts = { cities: true }) =>
   SW.newMatch(Array.from({ length: n }, (_, s) => ({ seat: s, name: 'P' + s, bot: true })), opts);
-const card = (name) => CITY_CARDS.find((c) => c.n === name);
+const card = (name) => {
+  const c = CITY_CARDS.find((x) => x.n === name);
+  if (!c) { console.log(`**FAIL**  no such card: ${name}`); fails++; return { n: name, c: 'black' }; }
+  return c;
+};
 // put a chosen card in a seat's hand, and make sure they can pay for it
 const give = (G, seat, name) => {
   const p = SW.playerBySeat(G, seat);
@@ -78,7 +82,7 @@ const everyoneElsePasses = (G, except) => {
 {
   const G = mk(3);
   const [me, r, l] = G.players;
-  me.built = [{ ...card('Torture Chamber') }];    // 3 masks
+  me.built = [1, 2, 3].map(() => ({ ...card('Torture Chamber') }));   // 3 masks
   r.built = []; l.built = [];
   ok(SW.scoreFor(G, 0).science === 0, 'masks score nothing when no neighbour has science');
   r.built = [{ n: 'Workshop', c: 'green', sci: 'gear' }, { n: 'Apothecary', c: 'green', sci: 'compass' }];
@@ -97,10 +101,10 @@ const everyoneElsePasses = (G, except) => {
   me.wonderRes = 'W'; me.built = [];
   for (const q of G.players) if (q.seat) { q.wonderRes = ''; q.built = []; }   // nobody to buy from
   ok(SW.payFor(G, 0, 'G') === null, 'without a warehouse, a resource you lack is simply unavailable');
-  me.built = [{ ...card('Secret Warehouse') }];
-  ok(SW.payFor(G, 0, 'G') && SW.payFor(G, 0, 'G').coins === 0, 'a warehouse supplies a resource your city lacks');
+  me.built = [{ ...card('Black Market') }];
+  ok(SW.payFor(G, 0, 'G') && SW.payFor(G, 0, 'G').coins === 0, 'a black market supplies a resource your city lacks');
   ok(SW.payFor(G, 0, 'W') && SW.payFor(G, 0, 'W').coins === 0, 'and your own board still covers what it makes');
-  ok(SW.payFor(G, 0, 'WW') === null, 'but the warehouse cannot make what you already produce');
+  ok(SW.payFor(G, 0, 'WW') === null, 'but it cannot make what you already produce');
 }
 
 // ---- the dock takes a coin off one purchase
@@ -110,8 +114,8 @@ const everyoneElsePasses = (G, except) => {
   me.wonderRes = ''; me.built = [];
   SW.playerBySeat(G, 1).built = [{ n: 'Quarry', c: 'brown', give: 'SS' }];
   ok(SW.payFor(G, 0, 'SS').coins === 4, 'two stone from a neighbour costs 4');
-  me.built = [{ ...card('Clandestine Dock East') }];
-  ok(SW.payFor(G, 0, 'SS').coins === 3, 'the dock takes a coin off the first one (3)');
+  me.built = [{ ...card('East Clandestine Wharf') }];
+  ok(SW.payFor(G, 0, 'SS').coins === 3, 'the wharf takes a coin off the first one (3)');
 }
 
 // ---- the architect stops paying for stages
@@ -120,9 +124,9 @@ const everyoneElsePasses = (G, except) => {
   const me = SW.playerBySeat(G, 0);
   me.wonderRes = ''; me.built = []; me.coins = 0;
   const before = SW.optionsFor(G, 0)[0];
-  me.built = [{ ...card('Architect Cabinet') }];
+  me.built = [{ ...card('Architect Firm') }];
   const after = SW.optionsFor(G, 0)[0];
-  ok(!!after.wonder && after.wonder.coins === 0, 'the Architect Cabinet builds wonder stages for nothing');
+  ok(!!after.wonder && after.wonder.coins === 0, 'the Architect Firm builds wonder stages for nothing');
   ok(before.wonder === null || before.wonder.coins >= 0, 'and it was not free before it was built');
 }
 

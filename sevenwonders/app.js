@@ -678,7 +678,7 @@ class HostSession {
   // bot-covered seat that has not chosen yet is fair game.
   botActor() {
     const g = this.G;
-    if (!g || g.phase !== 'play') return null;
+    if (!g || !['play', 'draft', 'recruit'].includes(g.phase)) return null;
     const pending = waitingOn(g).filter((seat) => this.seatCovered(seat));
     return pending.length ? pending[0] : null;
   }
@@ -715,13 +715,12 @@ class HostSession {
       if (move) {
         const res = applyMove(this.G, seat, move);
         if (!res.ok) {
-          // never stall the table: simplest legal fallback
-          if (this.G.phase === 'bid') applyMove(this.G, seat, { kind: 'bid', n: 0 });
-          else {
-            const p = this.G.players.find((q) => q.seat === seat);
-            const legal = p && p.hand[0];
-            if (legal) applyMove(this.G, seat, { kind: 'play', cardId: legal.id, as: 'escape' });
-          }
+          // never stall the table: the simplest legal move in this phase
+          const p = this.G.players.find((q) => q.seat === seat);
+          const ph = this.G.phase;
+          if (ph === 'draft' && p.draft[0]) applyMove(this.G, seat, { kind: 'draft', cardId: p.draft[0].id });
+          else if (ph === 'recruit' && p.leaders[0]) applyMove(this.G, seat, { kind: 'pick', how: 'discard', cardId: p.leaders[0].id });
+          else if (p.hand[0]) applyMove(this.G, seat, { kind: 'pick', how: 'discard', cardId: p.hand[0].id });
         }
       }
       this.broadcast();
@@ -1161,7 +1160,7 @@ function ensureResignBtn(sess) {
 
 const EXPANSIONS = [
   { key: 'cities', name: 'Cities', blurb: 'Black cards, debt and diplomacy. Hands are eight cards, so you play seven an Age instead of six — and it brings the eighth seat, which the base box cannot deal.' },
-  { key: 'leaders', name: 'Leaders', blurb: 'Draft four leaders before Age I and hire one at the start of each Age. Everyone starts with 6 coins instead of 3.' },
+  { key: 'leaders', name: 'Leaders', blurb: 'Draft four leaders before Age I, then play one at the start of every Age: recruit it for coins, bury it under your wonder, or sell it for 3. Everyone starts with 6 coins instead of 3, and the fourth leader is never played. The six Cities leaders join the deck only when Cities does.' },
   { key: 'teams', name: 'Teams', blurb: 'Pairs sitting side by side, scoring together. You never fight your partner, so the one border you do have counts double. 4, 6 or 8 players.' },
 ];
 
@@ -1285,6 +1284,29 @@ function cardGist(c) {
   if (c.rebate) bits.push(`1 off the first buy (${c.rebate.with})`);
   if (c.produceMissing) bits.push('produces what your city cannot');
   if (c.freeStages) bits.push('wonder stages cost no resources');
+  if (c.discount) bits.push(`one fewer resource for ${c.discount.of === 'stage' ? 'wonder stages' : c.discount.of + ' cards'}`);
+  if (c.freeColour) bits.push(`${c.freeColour} cards cost nothing`);
+  if (c.freeColourAge) bits.push(`one free ${c.freeColourAge} card an Age`);
+  if (c.freeLeaders) bits.push('later leaders cost nothing');
+  if (c.bankBuy) bits.push('one resource a turn from the bank, for 1');
+  if (c.bonusCoin) bits.push('once a turn, one extra coin from the bank');
+  if (c.onBuild) bits.push(`${c.onBuild.coins} coins for every ${c.onBuild.of} card you build`);
+  if (c.onChain) bits.push(`${c.onChain.coins} coins every time a chain makes a card free`);
+  if (c.onStage) bits.push(`${c.onStage.coins} coins a wonder stage${c.onStage.others ? `, everyone else loses ${c.onStage.others}` : ''}`);
+  if (c.onWin) bits.push(`${c.onWin.coins} coins for every victory token`);
+  if (c.token) bits.push('a victory token for the current Age, without a fight');
+  if (c.purge) bits.push('burn your defeats; everyone else gives up a victory');
+  if (c.deflect) bits.push('your defeats go to whoever beat you');
+  if (c.lossAge) bits.push('everyone else loses coins equal to the Age');
+  if (c.sciSwap) bits.push('turn one science symbol into another at the end');
+  if (c.sciMost) bits.push('one more of whichever science symbol you have most of');
+  if (c.sciSetVp) bits.push(`${c.sciSetVp} VP per complete science set`);
+  if (c.setVp) bits.push(`${c.setVp.vp} VP per set of ${c.setVp.of.join(' + ')}`);
+  if (c.vpPerCoins) bits.push(`1 VP per ${c.vpPerCoins} coins, on top of the usual`);
+  if (c.mostVp) bits.push(`${c.mostVp.vp} VP for more ${c.mostVp.of} than BOTH neighbours`);
+  if (c.cleanVp) bits.push(`${c.cleanVp} VP if you never lose a conflict`);
+  if (c.loneVp) bits.push(`${c.loneVp} VP if this stays your only leader`);
+  if (c.pairVp) bits.push('VP per matching pair of victory tokens, at their value');
   if (c.per) {
     const per = [];
     if (c.per.coins) per.push(`${c.per.coins} coin${c.per.coins > 1 ? 's' : ''}`);
@@ -1294,7 +1316,7 @@ function cardGist(c) {
   return bits.join(' · ');
 }
 
-function cardEl(c, { mini = false } = {}) {
+function cardEl(c, { mini = false, age = 0 } = {}) {
   const d = el('div', `swcard ${c.c}${mini ? ' mini' : ''}`);
   d.append(el('div', 'sw-name', c.n));
   if (!mini) {
@@ -1302,7 +1324,11 @@ function cardEl(c, { mini = false } = {}) {
     const gist = cardGist(c);
     if (gist) d.append(el('div', 'sw-gist', gist));
     const cost = el('div', 'sw-cost');
-    if (c.coin) cost.append(el('span', 'coin-chip', `${c.coin}`));
+    if (c.coin === 'age') {
+      const chip = el('span', 'coin-chip', `${age || '?'}`);
+      chip.title = 'Costs the current Age: 1 in Age I, 2 in Age II, 3 in Age III';
+      cost.append(chip);
+    } else if (c.coin) cost.append(el('span', 'coin-chip', `${c.coin}`));
     if (c.cost) cost.append(resRow(c.cost));
     if (!c.coin && !c.cost) cost.append(el('span', 'sw-free', 'free'));
     d.append(cost);
@@ -1348,6 +1374,7 @@ function cityEl(view, p, tag) {
   if (wins || losses) stat.append(el('span', 'tok-chip', `${wins ? '+' + wins : ''}${losses ? ' −' + losses : ''}`.trim()));
   if (p.debt) stat.append(el('span', 'debt-chip', `debt ${p.debt}`));
   if (p.diplo) stat.append(el('span', 'diplo-chip', `☮ ${p.diplo}`));
+  if (p.leaders) stat.append(el('span', 'lead-chip', `👤 ${p.leaders}`));
   box.append(stat);
 
   const w = el('div', 'city-wonder');
@@ -1364,7 +1391,7 @@ function cityEl(view, p, tag) {
 
   // built cards, grouped the way they fan out on the table
   const cards = el('div', 'city-cards');
-  const order = ['brown', 'grey', 'blue', 'yellow', 'red', 'green', 'purple', 'black'];
+  const order = ['brown', 'grey', 'blue', 'yellow', 'red', 'green', 'purple', 'black', 'white'];
   for (const colour of order) {
     const of = p.built.filter((c) => c.c === colour);
     if (!of.length) continue;
@@ -1381,14 +1408,60 @@ function cityEl(view, p, tag) {
 
 // ---------------------------------------------------------------- hand
 
+// A row of leaders with buttons under each: the draft offers one button, the
+// recruitment phase the same three an Age card gets. The cards themselves are
+// drawn by the same cardEl as everything else — a leader is a white card.
+function leaderRow(view, cards, buttons) {
+  const hand = $('#hand');
+  for (const c of cards) {
+    const wrap = el('div', 'hand-card');
+    wrap.append(cardEl(c, { age: view.age }));
+    const acts = el('div', 'card-acts');
+    for (const b of buttons(c)) acts.append(b);
+    wrap.append(acts);
+    hand.append(wrap);
+  }
+}
+
+function actBtn(label, cls, move, why) {
+  const b = el('button', `btn tiny ${cls}`, label);
+  b.type = 'button';
+  b.disabled = !move;
+  if (why) b.title = why;
+  if (move) b.addEventListener('click', () => sendMove(move));
+  return b;
+}
+
+function renderDraft(view) {
+  leaderRow(view, view.draftHand, (c) => [
+    actBtn('Keep', 'go', { kind: 'draft', cardId: c.id }),
+  ]);
+}
+
+function renderRecruit(view) {
+  const byId = new Map(view.leaderOptions.map((o) => [o.id, o]));
+  leaderRow(view, view.myLeaders, (c) => {
+    const o = byId.get(c.id) || {};
+    return [
+      actBtn(o.play ? (o.play.coins ? `Recruit · ${o.play.coins}` : 'Recruit · free') : 'Recruit',
+             'go', o.play && { kind: 'pick', how: 'play', cardId: c.id }, o.play ? null : o.why),
+      actBtn(o.wonder ? (o.wonder.coins ? `Wonder · ${o.wonder.coins}` : 'Wonder · free') : 'Wonder',
+             '', o.wonder && { kind: 'pick', how: 'wonder', cardId: c.id }, o.wonder ? null : o.wonderWhy),
+      actBtn('Sell · +3', 'sell', { kind: 'pick', how: 'discard', cardId: c.id }),
+    ];
+  });
+}
+
 function renderHand(view) {
   const hand = $('#hand');
   hand.replaceChildren();
-  if (view.phase !== 'play') return;
+  if (!['play', 'draft', 'recruit'].includes(view.phase)) return;
   if (view.iPicked) {
     hand.append(el('div', 'hand-note', 'Chosen — waiting for the others…'));
     return;
   }
+  if (view.phase === 'draft') return renderDraft(view);
+  if (view.phase === 'recruit') return renderRecruit(view);
   const byId = new Map(view.options.map((o) => [o.id, o]));
   for (const c of view.hand) {
     const o = byId.get(c.id) || {};
@@ -1431,9 +1504,19 @@ function renderGame(view, sess) {
   lastView = view;
   lastSess = sess;
   $('#room-chip').textContent = view.code;
-  $('#age-chip').textContent = `Age ${AGE_ROMAN[view.age]}`;
-  $('#turn-chip').textContent = view.phase === 'over' ? 'finished' : `Turn ${view.turn} of ${view.turnsPerAge}`;
-  $('#pass-chip').textContent = `passing ${view.passDir}`;
+  if (view.phase === 'draft') {
+    $('#age-chip').textContent = 'Leader draft';
+    $('#turn-chip').textContent = `Round ${view.draftRound} of 4`;
+    $('#pass-chip').textContent = 'passing right';
+  } else if (view.phase === 'recruit') {
+    $('#age-chip').textContent = `Age ${AGE_ROMAN[view.age]}`;
+    $('#turn-chip').textContent = 'Recruitment';
+    $('#pass-chip').textContent = `${view.myLeaders.length} in hand`;
+  } else {
+    $('#age-chip').textContent = `Age ${AGE_ROMAN[view.age]}`;
+    $('#turn-chip').textContent = view.phase === 'over' ? 'finished' : `Turn ${view.turn} of ${view.turnsPerAge}`;
+    $('#pass-chip').textContent = `passing ${view.passDir}`;
+  }
 
   // Neighbours first — they are the only two people you can trade with, and the
   // only two you fight — then everybody else in seating order.
@@ -1455,14 +1538,19 @@ function renderGame(view, sess) {
 
   const waiting = $('#waiting');
   waiting.replaceChildren();
-  if (view.phase === 'play' && view.waiting.length) {
+  if (['play', 'draft', 'recruit'].includes(view.phase) && view.waiting.length) {
     const names = view.waiting
       .filter((s) => s !== view.mySeat)
       .map((s) => (view.players.find((q) => q.seat === s) || {}).name)
       .filter(Boolean);
+    const ask = view.phase === 'draft'
+      ? 'Keep one leader — the rest pass to your right.'
+      : view.phase === 'recruit'
+        ? 'Recruit one leader, bury one under your wonder, or sell one for 3.'
+        : 'Choose a card.';
     waiting.textContent = view.iPicked
       ? (names.length ? `Waiting for ${names.join(', ')}…` : 'Resolving…')
-      : 'Choose a card.';
+      : ask;
   }
 
   renderHand(view);
@@ -1481,7 +1569,7 @@ function renderGame(view, sess) {
 function renderActions(view, sess) {
   const bar = $('#action-bar');
   bar.replaceChildren();
-  if (view.phase !== 'play') return;
+  if (!['play', 'recruit'].includes(view.phase)) return;
   const me = view.players.find((q) => q.seat === view.mySeat);
   if (!me) return;
   const note = el('span', 'act-note');
@@ -1492,6 +1580,19 @@ function renderActions(view, sess) {
     note.append(resRow(stageCost));
   } else {
     note.append(el('span', '', 'Your wonder is finished.'));
+  }
+  // Which leaders you are still holding matters while you play the Age: the
+  // one you want in Age III is the one you have to afford by then.
+  if (view.phase === 'play' && view.myLeaders.length) {
+    const held = el('span', 'act-leaders');
+    held.append(el('span', 'dim', ' · Still in hand: '));
+    view.myLeaders.forEach((c, i) => {
+      if (i) held.append(el('span', 'dim', ' · '));
+      const name = el('span', 'lead-name', c.n);
+      name.title = cardGist(c) || c.n;
+      held.append(name);
+    });
+    note.append(held);
   }
   bar.append(note);
 }
@@ -1658,18 +1759,31 @@ function showGameOver(view, sess) {
 
   const t = $('#go-table');
   t.replaceChildren();
+  // Leaders get their own column, and debt gets one whenever anybody actually
+  // owes something — it comes off the total either way, so it has to be visible.
   const cols = [
     ['', 'name'], ['⚔', 'military'], ['🪙', 'coins'], ['wonder', 'wonder'],
-    ['civil', 'civilian'], ['comm', 'commercial'], ['guild', 'guild'], ['sci', 'science'], ['total', 'total'],
+    ['civil', 'civilian'], ['comm', 'commercial'], ['guild', 'guild'],
   ];
+  if (view.opts && view.opts.leaders) cols.push(['lead', 'leaders']);
+  cols.push(['sci', 'science']);
+  if (r.scores.some((x) => x.debt)) cols.push(['debt', 'debt']);
+  cols.push(['total', 'total']);
+  t.style.setProperty('--go-cols', String(cols.length - 1));
   const head = el('div', 'go-row head');
   for (const [label] of cols) head.append(el('span', '', label));
   t.append(head);
+  // Each figure carries its own label. On a wide screen the header row names
+  // the columns and the labels stay hidden; on a phone there is no room for ten
+  // columns, the header goes, and each figure wears its label instead.
+  const SHORT = { '⚔': 'mil', '🪙': 'coin' };
   for (const s of r.ranked) {
     const row = el('div', `go-row${r.winners.includes(s.name) ? ' win' : ''}`);
-    for (const [, key] of cols) {
+    for (const [label, key] of cols) {
       const v = s[key];
-      row.append(el('span', key === 'name' ? 'go-name' : key === 'total' ? 'go-total' : '', String(v)));
+      const cell = el('span', key === 'name' ? 'go-name' : key === 'total' ? 'go-total' : '', String(v));
+      if (key !== 'name') cell.dataset.k = SHORT[label] || label;
+      row.append(cell);
     }
     t.append(row);
   }

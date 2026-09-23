@@ -347,3 +347,128 @@ export const CITY_GUILDS = [
 
 // Debt is measured in victory points, one per coin you could not pay.
 export const DEBT_VP = -1;
+
+// ---------------------------------------------------------------- Leaders
+//
+// Source: the same wiki, read the same way — Leader_Cards?action=raw, whose
+// table is three columns of name, {{Coin|N}} and effect text. Its contents page
+// for the expansion gives the deck as 55 cards in three labelled groups —
+// 34 Standard, 15 Expert, 6 Cities bonus — and the table turns out to be in
+// exactly that order, 34 then 15 then 6, which is what `set` below records. The
+// six Cities cards are the ones that read black cards, debt and diplomacy, so
+// the split is corroborated by what the cards actually do rather than only by
+// where they sit in a table.
+//
+// A leader is a white card that costs coins and nothing else. Four are dealt to
+// each player and drafted before Age I; one is played at the start of each Age,
+// so the fourth is never played. {{Coin|A}} means the cost is the current Age:
+// 1, 2 or 3 — written here as coin: 'age'.
+//
+// The Cities six are dealt only when Cities is switched on. They are printed as
+// bonus cards for that box, and three of them (Caligula, Diocletian, Darius)
+// read a colour that is not in the deck without it.
+//
+// Effect keys beyond the ones the Age cards already use:
+//   discount     pay one fewer resource for that colour, or for wonder stages;
+//                which resource is yours to choose, so the engine drops the one
+//                that makes the bill cheapest
+//   freeColour   that colour costs no resources at all
+//   freeColourAge  ... once per Age
+//   freeLeaders  later leaders are recruited for nothing
+//   bankBuy      buy this many resources a turn from the bank at 1 coin each
+//   bonusCoin    once a turn, take an extra coin whenever the bank pays you
+//   onBuild      coins each time you build a card of that colour
+//   onChain      coins each time a chain makes a card free
+//   onStage      coins each time you finish a wonder stage; others may pay
+//   onWin        coins each time you take a military victory token
+//   token        take a victory token now, worth the current Age
+//   purge        throw away your defeat tokens; everyone else loses a victory
+//   deflect      a defeat token you would take goes to the winner instead
+//   sciSwap      at the end, one science symbol may become another
+//   sciMost      at the end, one more of whichever symbol you have most of
+//   sciSetVp     extra points per complete set of three symbols
+//   setVp        points per complete set of one card of each listed colour
+//   vpPerCoins   points per this many coins — a second helping of the usual one
+//   mostVp       points for having strictly more than BOTH neighbours
+//   cleanVp      points for holding no defeat tokens
+//   loneVp       points for this being your only leader
+//   pairVp       points per matching pair of victory tokens, worth their value
+//   lossAge      everyone else loses coins equal to the current Age
+
+export const LEADERS_PER_PLAYER = 4;
+
+export const LEADERS = [
+  // ---- Standard (34)
+  { n: 'Maecenas',       set: 'standard', coin: 1, freeLeaders: true },
+  { n: 'Imhotep',        set: 'standard', coin: 3, discount: { of: 'stage' } },
+  { n: 'Hammurabi',      set: 'standard', coin: 2, discount: { of: 'blue' } },
+  { n: 'Leonidas',       set: 'standard', coin: 2, discount: { of: 'red' } },
+  { n: 'Archimedes',     set: 'standard', coin: 4, discount: { of: 'green' } },
+  { n: 'Ramses',         set: 'standard', coin: 5, freeColour: 'purple' },
+  { n: 'Croesus',        set: 'standard', coin: 1, coins: 6 },
+  { n: 'Xenophon',       set: 'standard', coin: 2, onBuild: { of: 'yellow', coins: 2 } },
+  { n: 'Vitruvius',      set: 'standard', coin: 1, onChain: { coins: 2 } },
+  { n: 'Nero',           set: 'standard', coin: 1, onWin: { coins: 2 } },
+  { n: 'Bilkis',         set: 'standard', coin: 4, bankBuy: 1 },
+  { n: 'Hannibal',       set: 'standard', coin: 2, shield: 1 },
+  { n: 'Caesar',         set: 'standard', coin: 5, shield: 2 },
+  // ⚠ Solomon is the 14th Standard card and is NOT here — see the note below.
+  { n: 'Euclid',         set: 'standard', coin: 5, sci: 'compass' },
+  { n: 'Ptolemy',        set: 'standard', coin: 5, sci: 'tablet' },
+  { n: 'Pythagoras',     set: 'standard', coin: 5, sci: 'gear' },
+  { n: 'Sappho',         set: 'standard', coin: 1, vp: 2 },
+  { n: 'Zenobia',        set: 'standard', coin: 2, vp: 3 },
+  { n: 'Nefertiti',      set: 'standard', coin: 3, vp: 4 },
+  { n: 'Cleopatra',      set: 'standard', coin: 4, vp: 5 },
+  { n: 'Phidias',        set: 'standard', coin: 3, per: { vp: 1, of: 'brown',  from: 'self' } },
+  { n: 'Praxiteles',     set: 'standard', coin: 3, per: { vp: 2, of: 'grey',   from: 'self' } },
+  { n: 'Nebuchadnezzar', set: 'standard', coin: 4, per: { vp: 1, of: 'blue',   from: 'self' } },
+  { n: 'Varro',          set: 'standard', coin: 3, per: { vp: 1, of: 'yellow', from: 'self' } },
+  { n: 'Pericles',       set: 'standard', coin: 6, per: { vp: 2, of: 'red',    from: 'self' } },
+  { n: 'Hypatia',        set: 'standard', coin: 4, per: { vp: 1, of: 'green',  from: 'self' } },
+  { n: 'Hiram',          set: 'standard', coin: 3, per: { vp: 2, of: 'purple', from: 'self' } },
+  { n: 'Midas',          set: 'standard', coin: 3, vpPerCoins: 3 },
+  { n: 'Amytis',         set: 'standard', coin: 4, per: { vp: 2, of: 'stage',  from: 'self' } },
+  { n: 'Alexander',      set: 'standard', coin: 3, per: { vp: 1, of: 'victory', from: 'self' } },
+  { n: 'Justinian',      set: 'standard', coin: 3, setVp: { of: ['blue', 'red', 'green'], vp: 3 } },
+  { n: 'Plato',          set: 'standard', coin: 3, setVp: { of: ['brown', 'grey', 'blue', 'yellow', 'red', 'green', 'purple'], vp: 7 } },
+  { n: 'Aristotle',      set: 'standard', coin: 3, sciSetVp: 3 },
+
+  // ---- Expert (15)
+  { n: 'Berenice',   set: 'expert', coin: 2,     bonusCoin: 1 },
+  { n: 'Hapshepsut', set: 'expert', coin: 2,     rebate: { with: 'both' } },
+  { n: 'Nitocris',   set: 'expert', coin: 'age', token: 'age' },
+  { n: 'Telesilla',  set: 'expert', coin: 3,     purge: true },
+  { n: 'Tomyris',    set: 'expert', coin: 4,     deflect: true },
+  { n: 'Aganice',    set: 'expert', coin: 'age', sciSwap: true },
+  { n: 'Enheduania', set: 'expert', coin: 4,     sciMost: true },
+  { n: 'Phryne',     set: 'expert', coin: 'age', mostVp: { of: 'blue',   vp: 5 } },
+  { n: 'Cornelia',   set: 'expert', coin: 'age', mostVp: { of: 'yellow', vp: 5 } },
+  { n: 'Euryptyle',  set: 'expert', coin: 'age', mostVp: { of: 'red',    vp: 5 } },
+  { n: 'Theano',     set: 'expert', coin: 'age', mostVp: { of: 'green',  vp: 5 } },
+  { n: 'Makeda',     set: 'expert', coin: 'age', mostVp: { of: 'coins',  vp: 5 } },
+  { n: 'Cynisca',    set: 'expert', coin: 'age', cleanVp: 6 },
+  { n: 'Gorgo',      set: 'expert', coin: 5,     pairVp: true },
+  { n: 'Agrippina',  set: 'expert', coin: 1,     loneVp: 7 },
+
+  // ---- Cities bonus (6) — dealt only when Cities is switched on
+  { n: 'Caligula',   set: 'cities', coin: 3,     freeColourAge: 'black' },
+  { n: 'Diocletian', set: 'cities', coin: 2,     onBuild: { of: 'black', coins: 2 } },
+  { n: 'Octavia',    set: 'cities', coin: 1,     onStage: { coins: 2, others: 1 } },
+  { n: 'Arsinoe',    set: 'cities', coin: 'age', coins: 4, lossAge: true },
+  { n: 'Aspasia',    set: 'cities', coin: 3,     vp: 2, diplo: 1 },
+  { n: 'Darius',     set: 'cities', coin: 4,     per: { vp: 1, of: 'black', from: 'self' } },
+];
+
+// The one leader NOT above:
+//
+//   Solomon  Standard, 3 coins  "Take all the cards in the discard. Choose 1
+//                               and construct it for free."
+//
+// It is held back for the same reason as Cities' Forging Agency, which is the
+// same card in different clothes: taking the discard pile needs a new choice in
+// the protocol — a phase in which one player picks and everybody else waits —
+// and not just a row in this table. The wonder boards have been waiting on the
+// identical thing since before either expansion: Halikarnassos' whole B side is
+// built out of the discard pile and does nothing today either. Whoever builds
+// that phase gets all four at once, so it is one job rather than four.
