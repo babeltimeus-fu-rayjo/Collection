@@ -1522,6 +1522,18 @@ a {
 /* the hand */
 #hand { display: flex; gap: 8px; padding: 8px; overflow-x: auto; align-items: stretch; }
 .hand-note { color: #9fb4aa; padding: 10px; }
+
+/* Testing knobs: the step prompt, and a bot's hand turned face up. Both are
+   deliberately plain — they are scaffolding, not part of the game. */
+#step {
+  align-self: center; margin: 2px auto 0; padding: 5px 12px;
+  border: 1px dashed rgba(224, 179, 82, .5); border-radius: 999px;
+  color: #e0b352; font-size: 12px; cursor: pointer;
+}
+.city-peek {
+  margin-top: 3px; font-size: 10.5px; line-height: 1.4;
+  color: #8fa89c; font-style: italic; overflow-wrap: anywhere;
+}
 .hand-card { display: flex; flex-direction: column; gap: 5px; min-width: 150px; }
 .swcard { border-radius: 10px; padding: 7px; border: 1px solid rgba(255,255,255,.13);
           background: rgba(0,0,0,.3); display: flex; flex-direction: column; gap: 4px; min-height: 96px; }

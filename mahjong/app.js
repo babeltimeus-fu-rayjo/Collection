@@ -46,8 +46,6 @@ const cfg = initSettings('mjg', [
   { key: 'botDelay', label: 'Bot thinking delay', def: [1200, 800], section: 'Host pacing', host: true },
   { key: 'claimTimeout', label: 'Claim timeout (0 = off)', def: 0, section: 'Host pacing', host: true, hint: 'Auto-pass a player who hasn\'t responded to a claim after this long. 0 waits indefinitely (the default).' },
   { key: 'postFlyDelay', label: 'Pause after discard fly', def: 0, section: 'Host pacing', host: true, hint: 'Extra pause after a discarded tile finishes flying before the next bot acts. Bots always wait for the fly itself; this adds on top.' },
-  { key: 'talkScale', label: 'Speech-line waits ×', def: 1, min: 0, max: 4, step: 0.1, unit: '×', ms: false, section: 'Table talk' },
-  { key: 'talkHoldPad', label: 'Turn hold after last line', def: 1200, section: 'Table talk' },
   { key: 'bubbleSay', label: 'Game bubbles linger', def: 4000, section: 'Bubbles & banners' },
   { key: 'bubbleChat', label: 'Chat bubbles linger', def: 6000, section: 'Bubbles & banners' },
   { key: 'bubbleTrunc', label: 'Bubble text cap', def: 84, min: 12, max: 400, step: 4, unit: 'ch', ms: false, section: 'Bubbles & banners' },

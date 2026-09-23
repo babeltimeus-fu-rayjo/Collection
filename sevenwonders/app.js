@@ -37,18 +37,25 @@ import '../common/version.js';
 
 // The ⚙ drawer (bottom-left): live-tunable pacing for testing. Defaults
 // reproduce the shipped behavior exactly; overrides stay in this browser.
+// Every knob here changes something you can see. That is not a given: this
+// list and the code that read it were built from Skull King's, which has bids,
+// tricks, a forced last card and a talking table — none of which 7 Wonders has
+// — and the two halves had drifted onto disjoint names. cfg.range returns 0 for
+// a key nobody declared and cfg.raw returns undefined, so the reads that missed
+// were not loud about it: bots simply acted with no delay at all.
 const cfg = initSettings('swd', [
-  { key: 'botDelay', label: 'Bot thinking delay', def: [700, 500], section: 'Host pacing', host: true },
-  { key: 'revealHold', label: 'Hold on the reveal', def: 2200, section: 'Host pacing', host: true, hint: 'How long the table shows what everybody just played before the next turn starts.' },
-  { key: 'stepBots', label: 'Bots wait for a click', def: false, bool: true, section: 'Testing', host: true },
-  { key: 'revealBots', label: 'Show bot hands', def: false, bool: true, section: 'Testing', host: true },
-  { key: 'bubbleSay', label: 'Game bubbles linger', def: 4200, section: 'Bubbles & banners' },
-  { key: 'bubbleChat', label: 'Chat bubbles linger', def: 6500, section: 'Bubbles & banners' },
-  { key: 'bubbleTrunc', label: 'Bubble text cap', def: 84, min: 12, max: 400, step: 4, unit: 'ch', ms: false, section: 'Bubbles & banners' },
-  { key: 'flashMs', label: 'Small banner duration', def: 1700, section: 'Bubbles & banners' },
-  { key: 'flashBig', label: 'Big banner duration', def: 3700, section: 'Bubbles & banners' },
+  { key: 'botDelay', label: 'Bot thinking delay', def: [700, 500], section: 'Host pacing', host: true, hint: 'Everybody chooses at once, but the bots still choose one after another so you can read the table filling in.' },
+  { key: 'revealHold', label: 'Hold on the reveal', def: 2200, section: 'Host pacing', host: true, hint: 'How long the table shows what everybody just played before the bots start the next turn.' },
+  { key: 'stepBots', label: 'Bots wait for a click', def: false, bool: true, section: 'Testing', host: true, hint: 'Bots stop before every choice and wait for you to click the table. Use it to watch one decision at a time. Your own hand still works — click the background, not a card.' },
+  { key: 'revealBots', label: 'Show bot hands', def: false, bool: true, section: 'Testing', host: true, hint: 'Turn the bots\' hands, and their undrafted leaders, face up while the Age is still being played. Only the host builds views, so this reveals them to everyone at the table.' },
+  { key: 'bubbleChat', label: 'Chat bubbles linger', def: 6500, section: 'Bubbles' },
+  { key: 'bubbleTrunc', label: 'Bubble text cap', def: 84, min: 12, max: 400, step: 4, unit: 'ch', ms: false, section: 'Bubbles' },
   { key: 'overlayDelay', label: 'Age / final tally delay', def: 3200, section: 'Overlays' },
 ]);
+
+// Testing: what the host chooses to put in everybody's view. Only the host
+// builds views, so turning bot hands face up turns them face up for the table.
+const viewOpts = () => ({ revealBots: cfg.on('revealBots') });
 
 // ---------------------------------------------------------------- networking
 
@@ -152,19 +159,6 @@ function toast(text, ms = 3000) {
   $('#toasts').append(t);
   setTimeout(() => t.classList.add('gone'), ms);
   setTimeout(() => t.remove(), ms + 400);
-}
-
-let flashTimer = null;
-function flash(text, cls = '', ms = 0) {
-  const b = $('#banner');
-  b.textContent = text;
-  b.className = 'flash hidden';
-  void b.offsetWidth;
-  const dur = ms || cfg('flashMs');
-  b.style.animationDuration = `${dur}ms`;
-  b.className = `flash ${cls}`;
-  clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => b.classList.add('hidden'), dur);
 }
 
 function setHomeStatus(text, isError = false) {
@@ -302,7 +296,7 @@ function showChatBubble(m) {
         if (!a.length) chatBubbles.delete(m.seat);
       }
       paintChatBubbles();
-    }, m.say ? cfg('bubbleSay') : cfg('bubbleChat')),
+    }, cfg('bubbleChat')),
   });
   chatBubbles.set(m.seat, arr);
   paintChatBubbles();
@@ -597,7 +591,7 @@ class HostSession {
       w.conn.send({
         t: 'state',
         view: {
-          ...viewFor(this.G, w.target, this.code),
+          ...viewFor(this.G, w.target, this.code, viewOpts()),
           observer: { name: w.name, target: w.target },
           watchers: this.watchers.map((x) => x.name),
         },
@@ -683,48 +677,54 @@ class HostSession {
     return pending.length ? pending[0] : null;
   }
 
-  forcedActor() { return null; }
-
-  // Bots think in the host's browser; the pause keeps consecutive bot turns
-  // readable. Bids come quicker since everyone bids at once, and a forced
-  // last card snaps down almost immediately.
+  // Bots think in the host's browser. Everybody chooses at once, so there is
+  // no turn to take — but they still choose one at a time, because a table
+  // that fills in all at once is unreadable.
   scheduleBots() {
     clearTimeout(this.botTimer);
+    this.stepPending = false;
+    if (!this.G) { paintStep(); return; }
+    if (this.botActor() == null) { paintStep(); return; }
+    // Stepping: set no timer at all, just mark that a bot is holding and wait
+    // to be nudged. Advertised only when a bot actually has something to do.
+    if (cfg.on('stepBots')) {
+      this.stepPending = true;
+      paintStep();
+      return;
+    }
+    paintStep();
+    let delay = cfg.range('botDelay');
+    // ... and never before the table has finished showing the last reveal, or
+    // the Age tally has been up long enough to read.
+    if (this.holdUntil) delay = Math.max(delay, this.holdUntil - Date.now());
+    this.botTimer = setTimeout(() => this.tickBot(), delay);
+  }
+
+  // one click, one bot choice
+  step() {
+    if (!this.stepPending) return;
+    this.stepPending = false;
+    paintStep();
+    this.tickBot();
+  }
+
+  tickBot() {
     if (!this.G) return;
-    const forced = this.forcedActor();
-    const actor = this.botActor();
-    if (actor == null && forced == null) return;
-    let delay;
-    if (forced != null) delay = cfg.range('botForced');
-    else delay = this.G.phase === 'bid' ? cfg.range('botBid') : cfg.range('botPlay');
-    if (this.trickPauseUntil) delay = Math.max(delay, this.trickPauseUntil - Date.now());
-    if (this.bannerUntil) delay = Math.max(delay, this.bannerUntil - Date.now());
-    if (this.talkPauseUntil && forced == null) delay = Math.max(delay, this.talkPauseUntil - Date.now());
-    this.botTimer = setTimeout(() => {
-      if (!this.G) return;
-      const fseat = this.forcedActor();
-      if (fseat != null) {
-        const p = this.G.players.find((q) => q.seat === fseat);
-        applyMove(this.G, fseat, { kind: 'play', cardId: p.hand[0].id });
-        this.broadcast();
-        return;
+    const seat = this.botActor();
+    if (seat == null) return;
+    const move = botChoose(this.G, seat);
+    if (move) {
+      const res = applyMove(this.G, seat, move);
+      if (!res.ok) {
+        // never stall the table: the simplest legal move in this phase
+        const p = this.G.players.find((q) => q.seat === seat);
+        const ph = this.G.phase;
+        if (ph === 'draft' && p.draft[0]) applyMove(this.G, seat, { kind: 'draft', cardId: p.draft[0].id });
+        else if (ph === 'recruit' && p.leaders[0]) applyMove(this.G, seat, { kind: 'pick', how: 'discard', cardId: p.leaders[0].id });
+        else if (p.hand[0]) applyMove(this.G, seat, { kind: 'pick', how: 'discard', cardId: p.hand[0].id });
       }
-      const seat = this.botActor();
-      if (seat == null) return;
-      const move = botChoose(this.G, seat);
-      if (move) {
-        const res = applyMove(this.G, seat, move);
-        if (!res.ok) {
-          // never stall the table: the simplest legal move in this phase
-          const p = this.G.players.find((q) => q.seat === seat);
-          const ph = this.G.phase;
-          if (ph === 'draft' && p.draft[0]) applyMove(this.G, seat, { kind: 'draft', cardId: p.draft[0].id });
-          else if (ph === 'recruit' && p.leaders[0]) applyMove(this.G, seat, { kind: 'pick', how: 'discard', cardId: p.leaders[0].id });
-          else if (p.hand[0]) applyMove(this.G, seat, { kind: 'pick', how: 'discard', cardId: p.hand[0].id });
-        }
-      }
-      this.broadcast();
-    }, delay);
+    }
+    this.broadcast();
   }
 
   lobbyMsg() {
@@ -785,45 +785,30 @@ class HostSession {
     showScreen('lobby');
   }
 
+  // Two moments are worth stopping for, and the fx counter is the only thing
+  // that says a moment is NEW: everyone's choices turning face up, and the Age
+  // tally. Both put a hold on the bots so the table is not three cards further
+  // on by the time you have read it.
   broadcast() {
-    if (this.G && this.G.fx && this.G.fx.kind === 'trick' && this.G.fx.seq !== this._trickFxSeen) {
-      this._trickFxSeen = this.G.fx.seq;
-      this.trickPauseUntil = Date.now() + cfg('trickPause');
+    const fx = this.G && this.G.fx;
+    if (fx && fx.seq !== this._holdFxSeen) {
+      this._holdFxSeen = fx.seq;
+      const wait = fx.kind === 'reveal' ? cfg('revealHold')
+        : fx.kind === 'military' ? cfg('overlayDelay')
+        : 0;
+      if (wait) this.holdUntil = Math.max(this.holdUntil || 0, Date.now() + wait);
     }
-    if (this.G && this.G.fx && this.G.fx.seq !== this._bannerFxSeen) {
-      this._bannerFxSeen = this.G.fx.seq;
-      const fk = this.G.fx.kind;
-      if (fk === 'bids' || (fk === 'deal' && this.G.fx.round > 1)) {
-        this.bannerUntil = Math.max(this.bannerUntil || 0, Date.now() + cfg('flashMs'));
-      }
-    }
-    // pace the table: note how long the newest spoken exchange needs to
-    // air, so bots do not start the next turn mid-conversation
-    if (this.G && this.G.chatter) {
-      if (this._talkMid !== this.G.mid) {
-        this._talkMid = this.G.mid;
-        this._talkSeen = 0;
-      }
-      let talkTotal = null;
-      for (const c of this.G.chatter) {
-        if (c.n > this._talkSeen) {
-          talkTotal = (talkTotal || 0) + (c.wait || 0);
-          this._talkSeen = c.n;
-        }
-      }
-      if (talkTotal != null)
-        this.talkPauseUntil = Math.max(this.talkPauseUntil || 0, Date.now() + Math.round(talkTotal * cfg.raw('talkScale')) + cfg('talkPausePad'));
-    }
+    const opts = viewOpts();
     const wnames = this.watchers.map((x) => x.name);
     for (const [seat, conn] of this.conns) {
       try {
-        conn.send({ t: 'state', view: { ...viewFor(this.G, seat, this.code), watchers: wnames } });
+        conn.send({ t: 'state', view: { ...viewFor(this.G, seat, this.code, opts), watchers: wnames } });
       } catch {}
     }
     for (const w of this.watchers) this.sendWatcher(w);
     pendingMove = false;
     showScreen('game');
-    renderGame({ ...viewFor(this.G, 0, this.code), watchers: wnames }, this);
+    renderGame({ ...viewFor(this.G, 0, this.code, opts), watchers: wnames }, this);
     this.scheduleBots();
   }
 
@@ -1403,6 +1388,14 @@ function cityEl(view, p, tag) {
   }
   if (!p.built.length) cards.append(el('span', 'dim', 'nothing built yet'));
   box.append(cards);
+
+  // Testing only: the host has turned this bot's hand face up.
+  if (p.peek) {
+    for (const [label, names] of [['holding', p.peek.hand], ['leaders', p.peek.leaders], ['drafting', p.peek.draft]]) {
+      if (!names || !names.length) continue;
+      box.append(el('div', 'city-peek', `${label}: ${names.join(' · ')}`));
+    }
+  }
   return box;
 }
 
@@ -1556,12 +1549,34 @@ function renderGame(view, sess) {
   renderHand(view);
   renderActions(view, sess);
   renderLog(view);
-  playChatter(view);
   paintChatBubbles();
+  paintStep();
 
   maybeShowAgeEnd(view);
   if (view.phase === 'over') showGameOver(view, sess);
   else $('#gameover').classList.add('hidden');
+}
+
+// ---------------------------------------------------------------- stepping
+
+// With 'Bots wait for a click' on, the host sets no timer at all and parks
+// here instead. Clicking anywhere that is not a control lets exactly one bot
+// choose, which is how you watch a draft decision at a time.
+function paintStep() {
+  const el0 = $('#step');
+  if (!el0) return;
+  const on = !!(session && session.isHost && session.stepPending);
+  el0.classList.toggle('hidden', !on);
+  el0.textContent = on ? 'Click anywhere to let the next bot choose' : '';
+}
+
+function bindStep() {
+  $('#screen-game').addEventListener('click', (e) => {
+    if (!session || !session.isHost || !session.stepPending) return;
+    // the controls are still live while stepping — only the bare table steps
+    if (e.target.closest('button, input, a, #hand, #chat, .topbar, .modal')) return;
+    session.step();
+  });
 }
 
 // ---------------------------------------------------------------- action bar
@@ -1602,85 +1617,11 @@ function renderActions(view, sess) {
 let logLines = [];
 let logMid = null;
 
-// Game speech: the engine scripts short first-person table-talk lines;
-// replay NEW ones as chat-style bubbles with conversational pauses. On
-// (re)join, history is skipped rather than replayed.
-let chatterSeen = 0;
-let chatterMid = null;
-let chatterTimers = [];
-let talkUntil = 0;
-let talkTimer = null;
-
-// The engine may already have advanced the turn while table-talk is still
-// airing; the new turn's controls unlock once the last line was readable.
-function talkHold() {
-  return Date.now() < talkUntil;
-}
-
-// While table-talk airs, the table keeps presenting the SPEAKER's turn;
-// the engine's next turn takes over visually only once the exchange ends —
-// glow, waiting text, controls, and YOUR TURN all hand over together.
-let shownTurnSeat = null;
-let shownTurnMid = null;
-
-function shownTurn(view, engineSeat) {
-  if (shownTurnMid !== view.mid) {
-    shownTurnMid = view.mid;
-    shownTurnSeat = engineSeat;
-  }
-  if (!talkHold()) shownTurnSeat = engineSeat;
-  return shownTurnSeat;
-}
-
-
-function playChatter(view) {
-  const items = view.chatter || [];
-  if (chatterMid !== view.mid) {
-    chatterMid = view.mid;
-    for (const t of chatterTimers) clearTimeout(t);
-    chatterTimers = [];
-    chatterSeen = items.length ? items[items.length - 1].n : 0;
-    return;
-  }
-  let at = 0;
-  let heard = false;
-  for (const c of items) {
-    if (c.n <= chatterSeen) continue;
-    chatterSeen = c.n;
-    at += Math.round((c.wait || 0) * cfg.raw('talkScale'));
-    if (at <= 0) showChatBubble({ seat: c.seat, text: c.text, say: true });
-    else {
-      const line = c;
-      chatterTimers.push(setTimeout(() => showChatBubble({ seat: line.seat, text: line.text, say: true }), at));
-    }
-    heard = true;
-  }
-  if (heard) {
-    talkUntil = Math.max(talkUntil, Date.now() + at + cfg('talkHoldPad'));
-    clearTimeout(talkTimer);
-    talkTimer = setTimeout(() => {
-      if (lastView) renderGame(lastView, session);
-    }, Math.max(60, talkUntil - Date.now() + 40));
-  }
-}
-
-// A loud nudge fired the instant the turn becomes yours (never for
-// observers).
-let hadTurn = false;
-let turnMid = null;
-
-function announceTurn(view, isMine) {
-  if (turnMid !== view.mid) {
-    turnMid = view.mid;
-    hadTurn = false;
-  }
-  if (session && session.observer) {
-    hadTurn = isMine;
-    return;
-  }
-  if (isMine && !hadTurn) flash('YOUR TURN', '', cfg('flashBig'));
-  hadTurn = isMine;
-}
+// The engine has a say() for scripted table-talk, as its siblings do, but
+// nothing in 7 Wonders ever calls it: everybody chooses at once and there is no
+// turn to comment on. The client half of that machinery — the pacing of spoken
+// lines, the hold that kept bots from interrupting one, the YOUR TURN banner —
+// is gone with it. Chat bubbles are what is left, and those come from players.
 
 function renderLog(view) {
   const key = String(view.mid);
@@ -1923,6 +1864,8 @@ function init() {
     if (text && session) session.sendChat(text);
     inp.value = '';
   });
+
+  bindStep();
 
   for (const b of document.querySelectorAll('.btn-leave')) b.addEventListener('click', leave);
   for (const b of document.querySelectorAll('.btn-rules')) {

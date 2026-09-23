@@ -900,7 +900,11 @@ function endAge(G) {
   beginAge(G);
 }
 
-function bumpFx(G, fx) { G.fx = fx; G.fxSeq += 1; }
+// Every other engine in the collection stamps the counter onto the effect
+// itself, and every client compares fx.seq to decide whether an effect is new.
+// This one did not, so `fx.seq !== seen` was undefined !== undefined — false,
+// forever — and the host's hold on the reveal never once fired.
+function bumpFx(G, fx) { G.fxSeq += 1; G.fx = { seq: G.fxSeq, ...fx }; }
 
 // ---------------------------------------------------------------- counting
 
@@ -1081,7 +1085,7 @@ function endGame(G) {
 
 // What one seat is allowed to know. Your own hand is yours; everybody's city,
 // coins, shields and wonder are on the table for anyone to count.
-export function viewFor(G, seat, code) {
+export function viewFor(G, seat, code, opts = {}) {
   const me = playerBySeat(G, seat);
   return {
     proto: PROTO,
@@ -1110,6 +1114,12 @@ export function viewFor(G, seat, code) {
       nextStageCost: nextStage(p) ? nextStage(p).cost : null,
       coins: p.coins, shields: p.shields, tokens: p.tokens, debt: p.debt, diplo: p.diplo,
       leaders: p.leaders.length,
+      // Testing: the host may turn the bots' hands face up. Nobody else can —
+      // only the host builds views, so this is the host's decision for the
+      // whole table, and it is off unless they say otherwise.
+      peek: opts.revealBots && (p.bot || p.botFor) && p.seat !== seat
+        ? { hand: p.hand.map((c) => c.n), leaders: p.leaders.map((c) => c.n), draft: p.draft.map((c) => c.n) }
+        : null,
       built: p.built, handCount: p.hand.length,
       picked: !!G.picks[p.seat],
     })),
