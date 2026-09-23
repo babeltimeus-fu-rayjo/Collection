@@ -248,12 +248,18 @@ export const SCIENCE_SET_BONUS = 7;
 // (Villa, Smugglers' Wharf, Hidden Cache, Tribute, Treasury) that are not in
 // the expansion at all.
 //
-// A fan wiki is not the publisher and is not always right: its base-game
-// Craftsmens Guild reads 1 ore + 2 stone where the printed card is 2 and 2, so
-// nothing outside this block was touched on its say-so. What protects this
-// block is that the engine still asserts its own structure — an Age deals seven
-// cards per player, and at most seven black cards are drawn into each Age, so
-// every Age here needs at least seven and has ten or more.
+// A fan wiki is not the publisher, and on three base-game guilds it disagrees
+// with what is already here — Craftsmens (1 ore + 2 stone against 2 and 2),
+// Spies (2 clay against 3), Builders (3 stone against 2). Each is one repeated
+// resource, but not all in the same direction, so it is not one extraction bug
+// either. They are unresolved: this wiki has no per-card pages to check against
+// — searching a guild's name returns only this one list — so there is no second
+// opinion on it anywhere on the site. Nothing outside this block was changed on
+// its say-so, and that disagreement is the reason.
+//
+// What protects this block is that the engine still asserts its own structure —
+// an Age deals seven cards per player, and at most seven black cards are drawn
+// into each Age, so every Age here needs at least seven and has ten or more.
 //
 // Effect keys, all handled in game.js:
 //   mask           copy one science symbol off a neighbour's green card
