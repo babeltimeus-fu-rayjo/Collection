@@ -48,8 +48,14 @@ for (const [n, opts] of CONFIGS) {
       bad(`${tag} g${g}: ${built}+${buried}+${G.discard.length} != ${dealt} cards dealt`);
     }
     // six plays per age each; anything not standing in a city or buried under a
-    // wonder was either sold or was the seventh card nobody got to
-    if (G.discard.length < n * 3) bad(`${tag} g${g}: only ${G.discard.length} discards, expected at least ${n * 3}`);
+    // wonder was either sold or was the seventh card nobody got to. The pile
+    // only ever grew until Solomon, the Forging Agency and Halikarnassos
+    // started taking cards back out of it, so the floor is the seventh cards
+    // minus whatever was dug up.
+    const fromPile = G.players.reduce((a, p) => a + p.built.filter((c) => c.fromPile).length, 0);
+    if (G.discard.length + fromPile < n * 3) {
+      bad(`${tag} g${g}: ${G.discard.length} discards + ${fromPile} salvaged, expected at least ${n * 3}`);
+    }
     if (built + buried + (G.discard.length - n * 3) !== n * plays * 3) {
       bad(`${tag} g${g}: ${built}+${buried}+sold != ${n * plays * 3} plays`);
     }

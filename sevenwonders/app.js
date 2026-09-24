@@ -672,7 +672,7 @@ class HostSession {
   // bot-covered seat that has not chosen yet is fair game.
   botActor() {
     const g = this.G;
-    if (!g || !['play', 'draft', 'recruit'].includes(g.phase)) return null;
+    if (!g || !['play', 'draft', 'recruit', 'salvage'].includes(g.phase)) return null;
     const pending = waitingOn(g).filter((seat) => this.seatCovered(seat));
     return pending.length ? pending[0] : null;
   }
@@ -1381,7 +1381,7 @@ function cityEl(view, p, tag) {
     const of = p.built.filter((c) => c.c === colour);
     if (!of.length) continue;
     const stack = el('div', `stack ${colour}`);
-    stack.title = `${COLOUR_NAME[colour]}\n` + of.map((c) => `· ${c.n}`).join('\n');
+    stack.title = `${COLOUR_NAME[colour]}\n` + of.map((c) => `· ${c.n}${c.fromPile ? ' (out of the discard)' : ''}`).join('\n');
     stack.append(el('span', 'stack-n', String(of.length)));
     for (const c of of) stack.append(el('span', 'stack-card', c.n));
     cards.append(stack);
@@ -1445,9 +1445,28 @@ function renderRecruit(view) {
   });
 }
 
+// The discard pile, face up, for the seat that has earned a look. Everyone
+// else gets the waiting line and no list at all — which is what the rules say:
+// you take the pile, look through it, and put it back without showing anyone.
+function renderSalvage(view) {
+  const s = view.salvage;
+  if (!s || !s.cards) return;
+  leaderRow(view, s.cards, (c) => [actBtn('Build · free', 'go', { kind: 'salvage', cardId: c.id })]);
+  const out = el('div', 'hand-card');
+  const face = el('div', 'swcard ghost');
+  face.append(el('div', 'sw-name', 'Or nothing'));
+  face.append(el('div', 'sw-gist', 'Put the pile back and carry on with the turn.'));
+  out.append(face);
+  const acts = el('div', 'card-acts');
+  acts.append(actBtn('Take nothing', 'sell', { kind: 'salvage', how: 'pass' }));
+  out.append(acts);
+  $('#hand').append(out);
+}
+
 function renderHand(view) {
   const hand = $('#hand');
   hand.replaceChildren();
+  if (view.phase === 'salvage') return renderSalvage(view);
   if (!['play', 'draft', 'recruit'].includes(view.phase)) return;
   if (view.iPicked) {
     hand.append(el('div', 'hand-note', 'Chosen — waiting for the others…'));
@@ -1497,7 +1516,11 @@ function renderGame(view, sess) {
   lastView = view;
   lastSess = sess;
   $('#room-chip').textContent = view.code;
-  if (view.phase === 'draft') {
+  if (view.phase === 'salvage') {
+    $('#age-chip').textContent = `Age ${AGE_ROMAN[view.age]}`;
+    $('#turn-chip').textContent = 'The discard pile';
+    $('#pass-chip').textContent = `${view.discardCount} card${view.discardCount === 1 ? '' : 's'}`;
+  } else if (view.phase === 'draft') {
     $('#age-chip').textContent = 'Leader draft';
     $('#turn-chip').textContent = `Round ${view.draftRound} of 4`;
     $('#pass-chip').textContent = 'passing right';
@@ -1531,7 +1554,12 @@ function renderGame(view, sess) {
 
   const waiting = $('#waiting');
   waiting.replaceChildren();
-  if (['play', 'draft', 'recruit'].includes(view.phase) && view.waiting.length) {
+  if (view.phase === 'salvage' && view.salvage) {
+    const who = (view.players.find((q) => q.seat === view.salvage.seat) || {}).name;
+    waiting.textContent = view.salvage.cards
+      ? `${view.salvage.why}: take one card out of the pile and build it for nothing.`
+      : `Waiting for ${who} to pick a card out of the discard…`;
+  } else if (['play', 'draft', 'recruit'].includes(view.phase) && view.waiting.length) {
     const names = view.waiting
       .filter((s) => s !== view.mySeat)
       .map((s) => (view.players.find((q) => q.seat === s) || {}).name)
@@ -1584,7 +1612,7 @@ function bindStep() {
 function renderActions(view, sess) {
   const bar = $('#action-bar');
   bar.replaceChildren();
-  if (!['play', 'recruit'].includes(view.phase)) return;
+  if (!['play', 'recruit', 'salvage'].includes(view.phase)) return;
   const me = view.players.find((q) => q.seat === view.mySeat);
   if (!me) return;
   const note = el('span', 'act-note');

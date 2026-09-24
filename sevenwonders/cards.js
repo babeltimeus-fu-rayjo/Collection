@@ -179,9 +179,14 @@ export const BASE_AGES = [AGE1, AGE2, AGE3];
 // character, and several of them grant an ability rather than points:
 //
 //   freePerAge   build one card per age without paying for it
-//   fromDiscard  build a card out of the discard pile for nothing
 //   playLast     play the seventh card of an age instead of discarding it
 //   copyGuild    at the end, count one neighbour's guild as your own
+//
+// ⚠ Those three are printed on the boards and are NOT implemented: the engine
+// stores them and no rule reads them, so Olympia's A-side second stage and
+// B-side third, and Babylon's B-side second, currently do nothing. Building a
+// card out of the discard used to be a fourth one; it is the `salvage` flag
+// now, and it works.
 //
 // A stage that produces a resource produces it for you only — wonder production
 // can't be sold to a neighbour, which is what notTrade marks.
@@ -212,8 +217,8 @@ export const WONDERS = [
     B: [{ cost: 'SS', vp: 2, coins: 4 }, { cost: 'WW', vp: 3, coins: 4 }, { cost: 'GPT', vp: 5, coins: 4 }],
   } },
   { n: 'Halikarnassos', res: 'T', sides: {
-    A: [{ cost: 'CC', vp: 3 }, { cost: 'OOO', act: 'fromDiscard' }, { cost: 'TT', vp: 7 }],
-    B: [{ cost: 'OO', vp: 2, act: 'fromDiscard' }, { cost: 'CCC', vp: 1, act: 'fromDiscard' }, { cost: 'GPT', act: 'fromDiscard' }],
+    A: [{ cost: 'CC', vp: 3 }, { cost: 'OOO', salvage: true }, { cost: 'TT', vp: 7 }],
+    B: [{ cost: 'OO', vp: 2, salvage: true }, { cost: 'CCC', vp: 1, salvage: true }, { cost: 'GPT', salvage: true }],
   } },
 ];
 
@@ -271,6 +276,7 @@ export const SCIENCE_SET_BONUS = 7;
 //   rebate         one coin off resources bought from that side
 //   produceMissing produces any resource your city does not already make
 //   freeStages     wonder stages stop costing resources
+//   salvage        take the discard pile, build one card out of it for nothing
 
 export const CITY_CARDS = [
   // ---- Age I
@@ -297,6 +303,7 @@ export const CITY_CARDS = [
   { n: 'Mercenaries',     c: 'black', age: 2, coin: 4, cost: 'P',     shield: 3 },
   { n: 'Consulate',       c: 'black', age: 2,          cost: 'CP',    vp: 2, diplo: 1 },
   { n: 'Band of Spies',   c: 'black', age: 2, coin: 2, cost: 'CS',    mask: 1 },
+  { n: 'Forging Agency',  c: 'black', age: 2, coin: 2,                salvage: true },
 
   // ---- Age III
   { n: 'Capitol',             c: 'black', age: 3, coin: 2, cost: 'CCGPSS', vp: 8 },
@@ -312,7 +319,7 @@ export const CITY_CARDS = [
   { n: 'Torture Chamber',     c: 'black', age: 3, coin: 3, cost: 'GOO',    mask: 1 },
 ];
 
-// The ten black cards NOT above, and the mechanic each one is waiting on. They
+// The nine black cards NOT above, and the mechanic each one is waiting on. They
 // are left out rather than approximated, because a card that silently does
 // nothing is worse than a card that is not in the deck.
 //
@@ -325,8 +332,6 @@ export const CITY_CARDS = [
 //   Cells             I    end-game points per victory token OF A GIVEN AGE;
 //   Guardhouse        II   tokens are currently counted but not dated
 //   Prison            III
-//   Forging Agency    II   take the whole discard and build one card free —
-//                          needs a new choice in the protocol, not just data
 //   Memorial          III  cash in your defeat tokens and discard them: the
 //                          first card that would REMOVE tokens from a board
 
@@ -412,7 +417,7 @@ export const LEADERS = [
   { n: 'Bilkis',         set: 'standard', coin: 4, bankBuy: 1 },
   { n: 'Hannibal',       set: 'standard', coin: 2, shield: 1 },
   { n: 'Caesar',         set: 'standard', coin: 5, shield: 2 },
-  // ⚠ Solomon is the 14th Standard card and is NOT here — see the note below.
+  { n: 'Solomon',        set: 'standard', coin: 3, salvage: true },
   { n: 'Euclid',         set: 'standard', coin: 5, sci: 'compass' },
   { n: 'Ptolemy',        set: 'standard', coin: 5, sci: 'tablet' },
   { n: 'Pythagoras',     set: 'standard', coin: 5, sci: 'gear' },
@@ -460,15 +465,9 @@ export const LEADERS = [
   { n: 'Darius',     set: 'cities', coin: 4,     per: { vp: 1, of: 'black', from: 'self' } },
 ];
 
-// The one leader NOT above:
-//
-//   Solomon  Standard, 3 coins  "Take all the cards in the discard. Choose 1
-//                               and construct it for free."
-//
-// It is held back for the same reason as Cities' Forging Agency, which is the
-// same card in different clothes: taking the discard pile needs a new choice in
-// the protocol — a phase in which one player picks and everybody else waits —
-// and not just a row in this table. The wonder boards have been waiting on the
-// identical thing since before either expansion: Halikarnassos' whole B side is
-// built out of the discard pile and does nothing today either. Whoever builds
-// that phase gets all four at once, so it is one job rather than four.
+// All fifty-five are here. Solomon was the last one out, because "take all the
+// cards in the discard, choose 1 and construct it for free" is not a row in a
+// table — it is a phase in which one player is choosing and everybody else is
+// waiting. Cities' Forging Agency says the same sentence word for word, and so
+// does every stage of Halikarnassos, so the four of them share one `salvage`
+// flag and one phase in game.js.

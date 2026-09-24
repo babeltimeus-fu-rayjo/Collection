@@ -367,6 +367,8 @@ export function newMatch(roster, opts = {}) {
     }),
     hands: {},
     discard: [],
+    salvage: null,             // who is digging through it right now
+    salvageAsk: [],            // ... and who has earned the right to
     picks: {},
     revealed: null,            // last turn's plays, for the feed
     result: null,
@@ -507,6 +509,13 @@ function resolveRecruit(G) {
   G.revealed = shown;
   G.picks = {};
   bumpFx(G, { kind: 'recruited', plays: shown });
+  finishRecruit(G);
+}
+
+// Solomon is recruited before the Age is dealt, so his dig through the pile
+// happens on last Age's leavings — which is the whole point of him.
+function finishRecruit(G) {
+  if (G.salvageAsk.length) return openSalvage(G, 'recruit');
   dealAge(G);
 }
 
@@ -626,6 +635,11 @@ export function applyMove(G, seat, move) {
   const p = playerBySeat(G, seat);
   if (!p) return { ok: false, error: 'Not at the table' };
   if (G.phase === 'over') return { ok: false, error: 'The game is over' };
+  if (G.phase === 'salvage') {
+    return move.kind === 'salvage'
+      ? doSalvage(G, p, move)
+      : { ok: false, error: 'Somebody is choosing from the discard' };
+  }
   if (G.phase === 'draft') {
     return move.kind === 'draft' || move.kind === 'pick'
       ? doDraft(G, p, move) : { ok: false, error: 'Pick a leader to keep' };
@@ -659,6 +673,7 @@ function doPick(G, p, move) {
 const SIMULTANEOUS = ['play', 'draft', 'recruit'];
 
 export function waitingOn(G) {
+  if (G.phase === 'salvage') return G.salvage ? [G.salvage.queue[0].seat] : [];
   if (!SIMULTANEOUS.includes(G.phase)) return [];
   return G.players.filter((p) => !G.picks[p.seat]).map((p) => p.seat);
 }
@@ -708,11 +723,103 @@ function resolveTurn(G) {
   G.revealed = shown;
   G.picks = {};
   bumpFx(G, { kind: 'reveal', plays: shown });
+  finishTurn(G);
+}
 
+// The tail of a turn. Anyone digging through the discard interrupts here —
+// they choose while the rest of the table waits — and the turn resumes from
+// this same function once the pile has been put back.
+function finishTurn(G) {
+  if (G.salvageAsk.length) return openSalvage(G, 'turn');
   // shields and immediate coins are settled; now pass the hands on
   if (G.turn >= G.handSize - 1) return endAge(G);
   passHands(G);
   G.turn += 1;
+  G.phase = 'play';
+}
+
+// ---------------------------------------------------------------- the discard
+//
+// Four things in the box reach into the discard pile and they all say the same
+// sentence: take the whole pile, choose one card, construct it for nothing.
+// Solomon and Cities' Forging Agency are word-for-word identical, and every
+// stage of Halikarnassos does it too. What they need from the engine is not a
+// field but a PHASE — one player choosing while everybody else waits — which
+// is why all four arrived together.
+//
+// The pile is not public. The rules have you pick it up, look through it,
+// take one and put the rest back without showing anyone, so viewFor hands the
+// list to the seat that is choosing and to nobody else.
+//
+// Leaders sold during Recruitment are NOT in here. They are set aside rather
+// than discarded, so a leader somebody threw away cannot be salvaged; the
+// discard pile is the Age-card pile.
+
+// What this seat may take. Not the whole pile: you can never hold two cards of
+// the same name, so your own city thins it before you ever see it.
+export function salvageOptions(G, seat) {
+  const p = playerBySeat(G, seat);
+  if (!p) return [];
+  return G.discard.filter((c) => !alreadyBuilt(p, c.n));
+}
+
+function openSalvage(G, resume) {
+  G.salvage = { queue: G.salvageAsk, resume };
+  G.salvageAsk = [];
+  G.phase = 'salvage';
+  bumpFx(G, { kind: 'salvage', seat: G.salvage.queue[0].seat });
+  nextSalvage(G);
+}
+
+// Hand the pile to the next person owed a look, skipping anyone it holds
+// nothing for, and resume the turn once nobody is left. A card taken out of
+// the pile can itself reach back into it — the Forging Agency is in there —
+// so the queue is drained rather than walked.
+function nextSalvage(G) {
+  for (;;) {
+    if (G.salvageAsk.length) {
+      G.salvage.queue.push(...G.salvageAsk);
+      G.salvageAsk = [];
+    }
+    const head = G.salvage.queue[0];
+    if (!head) break;
+    if (salvageOptions(G, head.seat).length) return;
+    G.salvage.queue.shift();
+    addLog(G, `${playerBySeat(G, head.seat).name} finds nothing to take from the discard.`);
+  }
+  const resume = G.salvage.resume;
+  G.salvage = null;
+  if (resume === 'recruit') finishRecruit(G);
+  else finishTurn(G);
+}
+
+function takeFromDiscard(G, p, card, why) {
+  G.discard = G.discard.filter((c) => c.id !== card.id);
+  // marked, because a card that came out of the pile was never played from
+  // anybody's hand — which is the one thing that stops the cards adding up
+  p.built.push({ ...card, fromPile: true });
+  const charges = [];
+  applyImmediate(G, p, card);
+  buildEffects(G, p, card, { pay: {} });    // free, but not free THROUGH a chain
+  chargeFor(G, p, card, charges);
+  applyCharges(G, charges);
+  addLog(G, `${p.name} builds ${card.n} out of the discard for nothing (${why}).`);
+}
+
+function doSalvage(G, p, move) {
+  const head = G.salvage && G.salvage.queue[0];
+  if (!head || head.seat !== p.seat) return { ok: false, error: 'Somebody else is choosing' };
+  if (move.how === 'pass') {
+    addLog(G, `${p.name} puts the discard back untouched.`);
+  } else {
+    const card = G.discard.find((c) => c.id === move.cardId);
+    if (!card) return { ok: false, error: 'That card is not in the discard' };
+    if (alreadyBuilt(p, card.n)) return { ok: false, error: 'You have already built that' };
+    takeFromDiscard(G, p, card, head.why);
+  }
+  G.salvage.queue.shift();
+  nextSalvage(G);
+  return { ok: true };
 }
 
 // Every coin the BANK hands you arrives through here, because Berenice takes
@@ -736,6 +843,10 @@ function winToken(G, p, value) {
 }
 
 function applyImmediate(G, p, thing) {
+  // A card, or a wonder stage, that reaches into the discard pile. It cannot
+  // be settled here — the turn everybody else is in the middle of has to
+  // finish first — so it joins a queue that finishTurn picks up.
+  if (thing.salvage) G.salvageAsk.push({ seat: p.seat, why: thing.n || p.wonder });
   if (thing.shield) p.shields += thing.shield;
   if (thing.coins) gainCoins(G, p, thing.coins);
   if (thing.diplo) p.diplo += thing.diplo;
@@ -1107,6 +1218,13 @@ export function viewFor(G, seat, code, opts = {}) {
     draftHand: G.phase === 'draft' && me ? me.draft : [],
     myLeaders: me ? me.leaders : [],
     leaderOptions: G.phase === 'recruit' && me && !G.picks[seat] ? leaderOptionsFor(G, seat) : [],
+    salvage: G.salvage ? {
+      seat: G.salvage.queue[0].seat,
+      why: G.salvage.queue[0].why,
+      // You pick the pile up, look through it and put the rest back without
+      // showing anyone — so only the seat that is choosing gets the list.
+      cards: G.salvage.queue[0].seat === seat ? salvageOptions(G, seat) : null,
+    } : null,
     players: G.players.map((p) => ({
       seat: p.seat, name: p.name, bot: p.bot, connected: p.connected, team: p.team,
       wonder: p.wonder, side: p.side, wonderRes: p.wonderRes,
@@ -1371,7 +1489,7 @@ function botRecruit(G, seat) {
       const stage = nextStage(p);
       let v = (stage.vp || 0) + (stage.shield || 0) * militaryWorth(G, seat) * Math.max(1, 4 - G.age) + (stage.coins || 0) * cw;
       if (stage.sci) v += scienceGain(G, seat, stage.sci);
-      if (stage.act || stage.give || stage.trade) v += 3;
+      if (stage.act || stage.salvage || stage.give || stage.trade) v += 3;
       // Which leader goes under the stage matters; that a leader does is the
       // same value whichever one it is, so the subtraction is a tiebreak only.
       scored.push({ how: 'wonder', cardId: o.id, v: v - o.wonder.coins * cw * 1.15 - worth * 0.02 });
@@ -1385,7 +1503,23 @@ function botRecruit(G, seat) {
   return { kind: 'pick', how: scored[0].how, cardId: scored[0].cardId };
 }
 
+// Nothing clever: the best card in the pile by the same yardstick the bot
+// uses on its own hand, and never a pass while anything is left worth taking.
+function botSalvage(G, seat) {
+  const opts = salvageOptions(G, seat);
+  if (!opts.length) return { kind: 'salvage', how: 'pass' };
+  let best = null;
+  for (const c of opts) {
+    const v = valueOf(G, seat, c);
+    if (!best || v > best.v) best = { v, cardId: c.id };
+  }
+  return { kind: 'salvage', cardId: best.cardId };
+}
+
 export function botChoose(G, seat) {
+  if (G.phase === 'salvage') {
+    return G.salvage && G.salvage.queue[0].seat === seat ? botSalvage(G, seat) : null;
+  }
   if (G.phase === 'draft') return G.picks[seat] ? null : botDraft(G, seat);
   if (G.phase === 'recruit') return G.picks[seat] ? null : botRecruit(G, seat);
   if (G.phase !== 'play') return null;
@@ -1405,7 +1539,7 @@ export function botChoose(G, seat) {
       const stage = nextStage(p);
       let v = (stage.vp || 0) + (stage.shield || 0) * militaryWorth(G, seat) + (stage.coins || 0) / 3;
       if (stage.sci) v += scienceGain(G, seat, stage.sci);
-      if (stage.act || stage.give || stage.trade) v += 3;
+      if (stage.act || stage.salvage || stage.give || stage.trade) v += 3;
       scored.push({ how: 'wonder', cardId: o.id, v: v - o.wonder.coins * 0.35 + 0.4 });
     }
     // selling is the floor: three coins and denying nobody anything

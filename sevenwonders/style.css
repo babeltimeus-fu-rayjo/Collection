@@ -1552,6 +1552,9 @@ a {
 /* Leaders are white cards with a different back; on a dark table the tell is
    the pale edge and a warmer face than any Age card has. */
 .swcard.white  { border-left: 4px solid #e8e0ce; background: rgba(232, 224, 206, .10); }
+/* the "take nothing" face at the end of the discard pile: a card-shaped
+   absence, so it lines up with the real ones without pretending to be one */
+.swcard.ghost  { border-left: 4px dashed rgba(255,255,255,.22); background: none; color: #8fa89c; }
 .swcard.white .sw-name { color: #f2ead8; }
 
 .lead-chip { background: rgba(232,224,206,.16); color: #efe6d2; border-radius: 6px; padding: 0 5px; }
