@@ -36,7 +36,13 @@ for (const [n, opts] of CONFIGS) {
       const names = p.built.map(c => c.n);
       if (new Set(names).size !== names.length) bad(`${tag} g${g}: ${p.name} built a duplicate`);
       if (p.stagesBuilt.length > p.stages.length) bad(`${tag} g${g}: ${p.name} overbuilt their wonder`);
-      if (p.tokens.length > 6) bad(`${tag} g${g}: ${p.name} has ${p.tokens.length} military tokens`);
+      // Two borders times three Ages is six, and for a long time that was the
+      // whole of it. Cities' raiders take a token of their Age without a fight,
+      // one per Age; Leaders' Nitocris takes one more; and Tomyris does not
+      // take her defeats, she posts them to whoever beat her, so the single
+      // player next to her can collect up to three she would have kept.
+      const cap = 6 + (opts.cities ? 3 : 0) + (opts.leaders ? 4 : 0);
+      if (p.tokens.length > cap) bad(`${tag} g${g}: ${p.name} has ${p.tokens.length} military tokens, cap is ${cap}`);
       if (p.hand.length) bad(`${tag} g${g}: ${p.name} still holds cards`);
     }
     // every card dealt is accounted for: built, buried under a wonder, or binned

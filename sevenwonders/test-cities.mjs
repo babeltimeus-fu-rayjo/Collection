@@ -130,5 +130,82 @@ const everyoneElsePasses = (G, except) => {
   ok(before.wonder === null || before.wonder.coins >= 0, 'and it was not free before it was built');
 }
 
+// ---- black cards score, which for a long time they did not
+{
+  const G = mk(3);
+  G.phase = 'over';
+  const me = SW.playerBySeat(G, 0);
+  const base = SW.scoreFor(G, 0).total;
+  me.built = [{ ...card('City Gates') }];                 // 4 VP and nothing else
+  const s = SW.scoreFor(G, 0);
+  ok(s.cities === 4, `a black card's points land in their own column (${s.cities})`);
+  ok(s.total === base + 4, `and in the total (${s.total} against ${base})`);
+
+  me.built = [{ ...card('Secret Network') }, { n: 'x', c: 'black' }, { n: 'y', c: 'black' }];
+  ok(SW.scoreFor(G, 0).cities === 3, 'a black card that pays per black card counts itself');
+}
+
+// ---- the warehouse: one more of what you already make
+{
+  const G = mk(3);
+  const me = SW.playerBySeat(G, 0);
+  me.wonderRes = 'W'; me.built = [];
+  for (const q of G.players) if (q.seat) { q.wonderRes = ''; q.built = []; }
+  ok(SW.payFor(G, 0, 'WW') === null, 'one wood board makes one wood');
+  me.built = [{ ...card('Secret Warehouse') }];
+  ok(SW.payFor(G, 0, 'WW') && SW.payFor(G, 0, 'WW').coins === 0, 'the warehouse makes a second');
+  ok(SW.payFor(G, 0, 'WWW') === null, 'but only one a turn');
+  ok(SW.payFor(G, 0, 'G') === null, 'and never something your city does not make');
+}
+
+// ---- the raiders: a token of their Age, and a debt either side
+{
+  for (const [name, age, worth] of [['Raider Camp', 1, 1], ['Raider Fort', 2, 3], ['Raider Garrison', 3, 5]]) {
+    const G = mk(4);
+    const id = give(G, 0, name);
+    SW.playerBySeat(G, 0).coins = 9;
+    play(G, 0, id);
+    everyoneElsePasses(G, 0);
+    const me = SW.playerBySeat(G, 0);
+    ok(me.tokens.length === 1 && me.tokens[0] === worth,
+       `${name} takes an Age ${'I'.repeat(age)} victory, worth ${worth} (${JSON.stringify(me.tokens)})`);
+    const l = SW.playerBySeat(G, SW.leftOf(G, 0)), r = SW.playerBySeat(G, SW.rightOf(G, 0));
+    const far = G.players.find((q) => q.seat !== 0 && q.seat !== l.seat && q.seat !== r.seat);
+    ok(l.debt === 1 && r.debt === 1, `and puts both neighbours a debt down (${l.debt}, ${r.debt})`);
+    ok(!far || far.debt === 0, 'and nobody further round the table');
+  }
+}
+
+// ---- the cells, the guardhouse and the prison: points per token of one Age
+{
+  const G = mk(3);
+  G.phase = 'over';
+  const me = SW.playerBySeat(G, 0);
+  me.tokens = [1, 1, 3, 5, -1];            // two Age I, one Age II, one Age III
+  me.built = [{ ...card('Cells') }];
+  ok(SW.scoreFor(G, 0).cities === 4, 'the Cells pay 2 for each Age I victory');
+  me.built = [{ ...card('Guardhouse') }];
+  ok(SW.scoreFor(G, 0).cities === 3, 'the Guardhouse pays 3 for each Age II one');
+  me.built = [{ ...card('Prison') }];
+  ok(SW.scoreFor(G, 0).cities === 4, 'the Prison pays 4 for each Age III one');
+  me.tokens = [-1, -1];
+  ok(SW.scoreFor(G, 0).cities === 0, 'and defeats are not victories');
+}
+
+// ---- the memorial buys your defeats, then burns them
+{
+  const G = mk(4);
+  const id = give(G, 0, 'Memorial');
+  const me = SW.playerBySeat(G, 0);
+  me.coins = 9;
+  me.tokens = [-1, -1, -1, 3];
+  const before = me.coins;
+  play(G, 0, id);
+  everyoneElsePasses(G, 0);
+  ok(me.coins === before + 6, `two coins for each of three defeats (${me.coins - before})`);
+  ok(JSON.stringify(me.tokens) === '[3]', `and then they are gone (${JSON.stringify(me.tokens)})`);
+  ok(SW.scoreFor(G, 0).military === 3, 'so they stop costing points as well');
+}
+
 console.log(fails ? `\n${fails} FAILURES` : '\nCities mechanics hold');
 process.exit(fails ? 1 : 0);

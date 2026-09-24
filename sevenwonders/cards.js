@@ -277,7 +277,7 @@ export const SCIENCE_SET_BONUS = 7;
 //
 // The expansion has 42 black cards, fourteen per Age — which is what the
 // publisher's own second-edition rulebook says it has, and it lists no guilds
-// in the box. Thirty-three are here; the nine missing ones are listed at the
+// in the box. Forty-one are here; the nine missing ones are listed at the
 // bottom of this block rather than faked. What was here before was a
 // third-party table whose costs were visibly filler — every Age II card cost
 // papyrus+textile, every Age III card glass+papyrus+textile — plus five cards
@@ -302,8 +302,14 @@ export const SCIENCE_SET_BONUS = 7;
 //   nbCoins        each of your neighbours also takes this from the bank
 //   rebate         one coin off resources bought from that side
 //   produceMissing produces any resource your city does not already make
+//   produceOwn     ... and its mirror: one more of something you DO make
 //   freeStages     wonder stages stop costing resources
 //   salvage        take the discard pile, build one card out of it for nothing
+//   token          a military victory token of that Age, without a fight
+//   nbDebt         each neighbour takes this many debt tokens, directly
+//   vpPerToken     end-game points per victory token of one named Age
+//   coinsPerDefeat coins for each defeat token you hold
+//   purgeDefeats   ... and then they are gone
 
 export const CITY_CARDS = [
   // ---- Age I
@@ -315,6 +321,9 @@ export const CITY_CARDS = [
   { n: 'Opium Stash',            c: 'black', age: 1,                       coins: 3, loss: 1 },
   { n: 'Hideout',                c: 'black', age: 1,                       vp: 2, loss: 1 },
   { n: 'Militia',                c: 'black', age: 1, coin: 3,              shield: 2 },
+  { n: 'Raider Camp',            c: 'black', age: 1,                       token: 1, nbDebt: 1 },
+  { n: 'Cells',                  c: 'black', age: 1,                       vpPerToken: { age: 1, vp: 2 } },
+  { n: 'Secret Warehouse',       c: 'black', age: 1, coin: 2,              produceOwn: true },
   { n: 'Residence',              c: 'black', age: 1, cost: 'C',            vp: 1, diplo: 1 },
   { n: 'Pigeonhole',             c: 'black', age: 1, coin: 1, cost: 'O',   mask: 1 },
 
@@ -330,6 +339,8 @@ export const CITY_CARDS = [
   { n: 'Mercenaries',     c: 'black', age: 2, coin: 4, cost: 'P',     shield: 3 },
   { n: 'Consulate',       c: 'black', age: 2,          cost: 'CP',    vp: 2, diplo: 1 },
   { n: 'Band of Spies',   c: 'black', age: 2, coin: 2, cost: 'CS',    mask: 1 },
+  { n: 'Raider Fort',     c: 'black', age: 2, coin: 1, cost: 'CO',    token: 2, nbDebt: 1 },
+  { n: 'Guardhouse',      c: 'black', age: 2, coin: 2, cost: 'OW',    vpPerToken: { age: 2, vp: 3 } },
   { n: 'Forging Agency',  c: 'black', age: 2, coin: 2,                salvage: true },
 
   // ---- Age III
@@ -344,29 +355,23 @@ export const CITY_CARDS = [
   { n: 'Contingent',          c: 'black', age: 3, coin: 5, cost: 'T',      shield: 5 },
   { n: 'Embassy',             c: 'black', age: 3,          cost: 'PST',    vp: 2, diplo: 1 },
   { n: 'Torture Chamber',     c: 'black', age: 3, coin: 3, cost: 'GOO',    mask: 1 },
+  { n: 'Raider Garrison',     c: 'black', age: 3, coin: 2, cost: 'SST',    token: 3, nbDebt: 1 },
+  { n: 'Prison',              c: 'black', age: 3, coin: 2, cost: 'COOP',   vpPerToken: { age: 3, vp: 4 } },
+  { n: 'Memorial',            c: 'black', age: 3,          cost: 'STW',    coinsPerDefeat: 2, purgeDefeats: true },
 ];
 
-// The nine black cards NOT above. Most of them are no longer hard — the engine
-// has grown the pieces since, and only the first still wants something genuinely
-// new. Left out because they are not in yet, not because they cannot be.
+// The one black card NOT above:
 //
-//   Smuggler's Cache  I    a coin off every purchase of the STARTING resource.
-//                          The rebate this file has is a coin off the first buy
-//                          from a SIDE, once a turn, which is a different shape:
-//                          this one keys on the resource and pays every time.
-//                          The only one that still needs new plumbing.
-//   Secret Warehouse  I    an extra copy of a resource you already produce —
-//                          the mirror of produceMissing, which already works out
-//                          the set of what you make
-//   Raider Camp       I    grant yourself a victory token of a named Age, and
-//   Raider Fort       II   hand each neighbour a debt. Leaders' Nitocris already
-//   Raider Garrison   III  grants a token; handing out debt directly is a line.
-//   Cells             I    points per victory token OF A GIVEN AGE. A token
-//   Guardhouse        II   already carries its Age in its value — 1, 3 and 5 —
-//   Prison            III  so they are dated after all; an older note here said
-//                          otherwise and was wrong.
-//   Memorial          III  coins for your defeat tokens, then throw them away.
-//                          Telesilla already throws defeat tokens away.
+//   Smuggler's Cache  I  "Pay 1 coin less each time you buy the starting
+//                        resource from your neighbor."
+//
+// The rebate this file has is a coin off the first resource bought from a
+// SIDE, once a turn — which is a different shape. This one keys on a resource
+// rather than a side, pays on every purchase rather than the first, and the
+// resource it keys on is the neighbour's board letter, which payFor does not
+// currently carry through the flow. The other eight that used to sit here were
+// waiting on mechanics the engine has since grown for Leaders and for the
+// discard pile, and are in the table above.
 
 // Cities adds no guilds. Its contents are 42 black cards, diplomacy tokens,
 // debt tokens and coins — the first edition's Counterfeiters Guild, Guild Of

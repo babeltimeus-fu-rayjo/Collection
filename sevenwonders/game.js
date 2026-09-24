@@ -147,11 +147,13 @@ function generators(p, { sellableOnly = false } = {}) {
   }
   for (const s of p.stagesBuilt) if (s.give) add(s.give, false, 'wonder stage');
 
-  // Cities: a warehouse makes whatever your city cannot. "Cannot" means your
-  // brown and grey cards and the board itself — the ones above — so this has to
-  // be worked out after them, and it is yours alone to use.
+  // Cities: the Black Market makes whatever your city cannot, and the Secret
+  // Warehouse one more of something it can. "Can" means your brown and grey
+  // cards and the board itself — the ones above — so both have to be worked out
+  // after them, and both are yours alone to use.
   const missingCount = p.built.filter((c) => c.produceMissing).length;
-  if (missingCount) {
+  const ownCount = p.built.filter((c) => c.produceOwn).length;
+  if (missingCount || ownCount) {
     const own = new Set();
     if (p.wonderRes) own.add(p.wonderRes);
     for (const c of p.built) {
@@ -159,7 +161,8 @@ function generators(p, { sellableOnly = false } = {}) {
       for (const o of c.give.split('/')) for (const ch of o) own.add(ch);
     }
     const missing = RESOURCES.split('').filter((r) => !own.has(r));
-    if (missing.length) for (let i = 0; i < missingCount; i++) gens.push({ opts: missing, n: 1, sellable: false, why: 'warehouse' });
+    if (missing.length) for (let i = 0; i < missingCount; i++) gens.push({ opts: missing, n: 1, sellable: false, why: 'black market' });
+    if (own.size) for (let i = 0; i < ownCount; i++) gens.push({ opts: [...own], n: 1, sellable: false, why: 'warehouse' });
   }
   return sellableOnly ? gens.filter((g) => g.sellable) : gens;
 }
@@ -522,10 +525,6 @@ function finishRecruit(G) {
 
 // The things a leader does the moment it arrives and never again.
 function recruitEffects(G, p, card) {
-  if (card.token) {
-    winToken(G, p, MILITARY_WIN[G.age]);
-    addLog(G, `${p.name} claims an Age ${'I'.repeat(G.age)} victory without a fight.`);
-  }
   if (card.purge) {
     // Telesilla: your defeats are struck off, and everyone else gives up a
     // victory "of their choice" — which is always their cheapest one.
@@ -896,6 +895,31 @@ function applyImmediate(G, p, thing) {
   if (thing.shield) p.shields += thing.shield;
   if (thing.coins) gainCoins(G, p, thing.coins);
   if (thing.diplo) p.diplo += thing.diplo;
+  // Cities: the raiders take a victory token of their own Age and hand each
+  // neighbour a debt for the trouble. Leaders' Nitocris takes one for whichever
+  // Age it happens to be, which is the same thing with the Age left open.
+  if (thing.token) {
+    const age = thing.token === 'age' ? G.age : thing.token;
+    winToken(G, p, MILITARY_WIN[age]);
+    addLog(G, `${p.name} takes an Age ${'I'.repeat(age)} victory without a fight.`);
+  }
+  if (thing.nbDebt) {
+    for (const sn of [leftOf(G, p.seat), rightOf(G, p.seat)]) {
+      const q = playerBySeat(G, sn);
+      if (q && q.seat !== p.seat) q.debt += thing.nbDebt;
+    }
+    addLog(G, `${p.name} leaves both neighbours in debt.`);
+  }
+  // ... and the Memorial buys your defeats off you before burning them, so the
+  // counting has to happen before the burning.
+  if (thing.coinsPerDefeat) {
+    const n = p.tokens.filter((t) => t < 0).length;
+    if (n) {
+      gainCoins(G, p, n * thing.coinsPerDefeat);
+      addLog(G, `${p.name} is paid ${n * thing.coinsPerDefeat} for ${n} defeat${n > 1 ? 's' : ''}.`);
+    }
+  }
+  if (thing.purgeDefeats) p.tokens = p.tokens.filter((t) => t >= 0);
   if (thing.nbCoins) {
     // a gambling den pays the house AND the people either side of it
     for (const s of [leftOf(G, p.seat), rightOf(G, p.seat)]) {
@@ -1244,6 +1268,16 @@ export function scoreFor(G, seat) {
     }
   }
 
+  // Cities: black cards score like every other colour — flat points, points per
+  // something, and the three that pay per victory token of one named Age. A
+  // token carries its Age in its value, 1, 3 and 5, so there is nothing else to
+  // look up. None of this was counted at all until now: black fell between the
+  // colour buckets below and was quietly dropped.
+  const blacks = p.built.filter((c) => c.c === 'black');
+  const cityVp = blacks.reduce((a, c) => a + (c.vp || 0), 0) + perVp(blacks)
+    + p.built.reduce((a, c) => a + (c.vpPerToken
+        ? p.tokens.filter((t) => t === MILITARY_WIN[c.vpPerToken.age]).length * c.vpPerToken.vp : 0), 0);
+
   // The Decorators want the whole wonder finished and nothing else.
   const wonderDone = p.stagesBuilt.length >= p.stages.length;
   const guildBonus = p.built.reduce((a, c) => a + (c.vpIfWonder && wonderDone ? c.vpIfWonder : 0), 0);
@@ -1255,6 +1289,7 @@ export function scoreFor(G, seat) {
     civilian: p.built.filter((c) => c.c === 'blue').reduce((a, c) => a + (c.vp || 0), 0),
     commercial: perVp(p.built.filter((c) => c.c === 'yellow')),
     guild: perVp(p.built.filter((c) => c.c === 'purple')) + guildBonus,
+    cities: cityVp,
     leaders: lead,
     science: bestScienceOf(counts.slice(), choices, sciOpt),
     debt: -p.debt,
@@ -1441,6 +1476,17 @@ function valueOf(G, seat, card) {
     const n = countFor(G, seat, card.per);
     v += n * (card.per.vp || 0) + n * (card.per.coins || 0) / 3;
   }
+  if (card.token) v += MILITARY_WIN[card.token === 'age' ? G.age : card.token];
+  if (card.nbDebt) v += card.nbDebt * 0.8;             // a point off each of two rivals
+  if (card.vpPerToken) {
+    const p3 = playerBySeat(G, seat);
+    v += p3.tokens.filter((t) => t === MILITARY_WIN[card.vpPerToken.age]).length * card.vpPerToken.vp;
+  }
+  if (card.coinsPerDefeat) {
+    const p4 = playerBySeat(G, seat);
+    v += p4.tokens.filter((t) => t < 0).length * (card.coinsPerDefeat / 3 + 1);
+  }
+  if (card.produceOwn) v += (4 - G.age) * 1.2;
   if (card.vpIfWonder) {
     const p2 = playerBySeat(G, seat);
     v += card.vpIfWonder * (p2.stagesBuilt.length + 1) / (p2.stages.length + 1);

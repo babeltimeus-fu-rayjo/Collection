@@ -1253,6 +1253,8 @@ function resRow(spec, cls = '') {
   return row;
 }
 
+const ROMAN = { 1: 'I', 2: 'II', 3: 'III' };
+
 // The one-line summary of what a card actually does.
 function cardGist(c) {
   const bits = [];
@@ -1268,6 +1270,7 @@ function cardGist(c) {
   if (c.nbCoins) bits.push(`neighbours take ${c.nbCoins}`);
   if (c.rebate) bits.push(`1 off the first buy (${c.rebate.with})`);
   if (c.produceMissing) bits.push('produces what your city cannot');
+  if (c.produceOwn) bits.push('one more a turn of something your city already makes');
   if (c.freeStages) bits.push('wonder stages cost no resources');
   if (c.discount) bits.push(`one fewer resource for ${c.discount.of === 'stage' ? 'wonder stages' : c.discount.of + ' cards'}`);
   if (c.freeColour) bits.push(`${c.freeColour} cards cost nothing`);
@@ -1279,7 +1282,10 @@ function cardGist(c) {
   if (c.onChain) bits.push(`${c.onChain.coins} coins every time a chain makes a card free`);
   if (c.onStage) bits.push(`${c.onStage.coins} coins a wonder stage${c.onStage.others ? `, everyone else loses ${c.onStage.others}` : ''}`);
   if (c.onWin) bits.push(`${c.onWin.coins} coins for every victory token`);
-  if (c.token) bits.push('a victory token for the current Age, without a fight');
+  if (c.token) bits.push(`a victory token for ${c.token === 'age' ? 'the current Age' : 'Age ' + ROMAN[c.token]}, without a fight`);
+  if (c.nbDebt) bits.push(`each neighbour takes ${c.nbDebt > 1 ? c.nbDebt + ' debts' : 'a debt'}`);
+  if (c.vpPerToken) bits.push(`${c.vpPerToken.vp} VP per Age ${ROMAN[c.vpPerToken.age]} victory token`);
+  if (c.coinsPerDefeat) bits.push(`${c.coinsPerDefeat} coins for each defeat token${c.purgeDefeats ? ', which are then discarded' : ''}`);
   if (c.purge) bits.push('burn your defeats; everyone else gives up a victory');
   if (c.deflect) bits.push('your defeats go to whoever beat you');
   if (c.lossAge) bits.push('everyone else loses coins equal to the Age');
@@ -1762,6 +1768,7 @@ function showGameOver(view, sess) {
     ['', 'name'], ['⚔', 'military'], ['🪙', 'coins'], ['wonder', 'wonder'],
     ['civil', 'civilian'], ['comm', 'commercial'], ['guild', 'guild'],
   ];
+  if (view.opts && view.opts.cities) cols.push(['city', 'cities']);
   if (view.opts && view.opts.leaders) cols.push(['lead', 'leaders']);
   cols.push(['sci', 'science']);
   if (r.scores.some((x) => x.debt)) cols.push(['debt', 'debt']);
