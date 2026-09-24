@@ -178,15 +178,28 @@ export const BASE_AGES = [AGE1, AGE2, AGE3];
 // 3 VP, something in the middle, 7 VP. B-sides are where the boards get their
 // character, and several of them grant an ability rather than points:
 //
-//   freePerAge   build one card per age without paying for it
-//   playLast     play the seventh card of an age instead of discarding it
-//   copyGuild    at the end, count one neighbour's guild as your own
+//   freePerAge   one card an Age built without paying for it. Offered beside
+//                the price rather than instead of it, because choosing WHICH
+//                card to spend it on is the whole of the ability
+//   playLast     play the seventh card of an Age instead of binning it, as a
+//                turn of your own taken after everyone else has finished
+//   copyGuild    at the end, a copy of one neighbour's guild, scored from your
+//                chair rather than from theirs
 //
-// ⚠ Those three are printed on the boards and are NOT implemented: the engine
-// stores them and no rule reads them, so Olympia's A-side second stage and
-// B-side third, and Babylon's B-side second, currently do nothing. Building a
-// card out of the discard used to be a fourth one; it is the `salvage` flag
-// now, and it works.
+// Those three work, and so does `salvage` on Halikarnassos. What is NOT
+// settled is whether the costs and stages below are the printed ones. The wiki
+// that settled the Cities and Leaders cards is no help here: its wonder pages
+// are hand-written infoboxes in poor repair. Ephesos' day side has a template
+// parameter leaking into an effect string, every day side is missing its
+// victory points, and Olympia is described with powers that are not this
+// game's ("the first card of each colour for free"). Parts of it are plainly
+// right — Gizah's and Rhodos' night sides match this table exactly, and it puts
+// Halikarnassos' discard power on the same four stages. Parts plainly are not:
+// it gives Babylon's night side two stages where this has three, and moves
+// playLast from the second to the first. Nothing here was changed on its
+// say-so, for the same reason the base-game guild costs were not. The three
+// abilities are keyed off the flags, so if a stage moves later they move with
+// it and nothing else has to change.
 //
 // A stage that produces a resource produces it for you only — wonder production
 // can't be sold to a neighbour, which is what notTrade marks.

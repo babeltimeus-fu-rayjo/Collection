@@ -369,6 +369,8 @@ export function newMatch(roster, opts = {}) {
     discard: [],
     salvage: null,             // who is digging through it right now
     salvageAsk: [],            // ... and who has earned the right to
+    lastCard: [],              // Babylon: who still owes the Age one more card
+    lateCards: 0,              // ... and how many it has played rather than binned
     picks: {},
     revealed: null,            // last turn's plays, for the feed
     result: null,
@@ -576,6 +578,9 @@ const chainUnlocks = (p) => {
 
 export const alreadyBuilt = (p, name) => p.built.some((c) => c.n === name);
 
+// The abilities printed on the boards rather than bought with a card.
+const hasAct = (p, act) => p.stagesBuilt.some((s) => s.act === act);
+
 // The next unbuilt stage of your wonder, or null when it is finished.
 export function nextStage(p) {
   return p.stagesBuilt.length < p.stages.length ? p.stages[p.stagesBuilt.length] : null;
@@ -594,22 +599,24 @@ export function optionsFor(G, seat) {
     ? (freeStages ? { coins: 0, left: 0, right: 0 } : payWithDiscount(G, seat, stage.cost, 'stage'))
     : null;
 
-  // Leaders: Ramses waives a whole colour for good, Caligula one card of a
-  // colour per Age. The pay object carries the colour back so resolveTurn
-  // knows which allowance was just spent.
+  // Ramses waives a whole colour for good, so there is nothing to save and it
+  // is applied without asking. Caligula waives one black card an Age and
+  // Olympia one card of ANY colour an Age — those are allowances, and spending
+  // one on a card you could have paid for is usually a mistake. So they are
+  // offered as a second way to build rather than quietly taken.
   const freeCol = new Set(), freeOnce = new Set();
   for (const c of p.built) {
     if (c.freeColour) freeCol.add(c.freeColour);
     if (c.freeColourAge && !p.freeAgeUsed[`${c.freeColourAge}-${G.age}`]) freeOnce.add(c.freeColourAge);
   }
+  if (hasAct(p, 'freePerAge') && !p.freeAgeUsed[`any-${G.age}`]) freeOnce.add('any');
 
   return p.hand.map((card) => {
     const dup = alreadyBuilt(p, card.n);
-    let play = null;
+    let play = null, playFree = null;
     if (!dup) {
       if (unlocked.has(card.n)) play = { coins: 0, left: 0, right: 0, chain: true };
       else if (freeCol.has(card.c)) play = { coins: 0, left: 0, right: 0, gift: card.c };
-      else if (freeOnce.has(card.c)) play = { coins: 0, left: 0, right: 0, gift: card.c, once: true };
       else {
         const pay = payWithDiscount(G, seat, card.cost, card.c);
         if (pay) {
@@ -617,11 +624,17 @@ export function optionsFor(G, seat) {
           if (total <= p.coins) play = { ...pay, coin: card.coin || 0, coins: total };
         }
       }
+      // ... and the allowance, when there is actually something to save on.
+      // A colour-specific one goes first, so the general one keeps its options.
+      if (!play || play.coins > 0) {
+        const gift = freeOnce.has(card.c) ? card.c : freeOnce.has('any') ? 'any' : null;
+        if (gift) playFree = { coins: 0, left: 0, right: 0, gift, once: true };
+      }
     }
     return {
       id: card.id, name: card.n, colour: card.c,
-      play,
-      why: dup ? 'You have already built that' : (play ? null : 'You cannot pay for it'),
+      play, playFree,
+      why: dup ? 'You have already built that' : (play || playFree ? null : 'You cannot pay for it'),
       wonder: stage && stagePay && stagePay.coins <= p.coins ? { ...stagePay } : null,
       wonderWhy: !stage ? 'Your wonder is finished' : (stagePay ? (stagePay.coins <= p.coins ? null : 'You cannot pay for it') : 'You cannot pay for it'),
     };
@@ -640,6 +653,9 @@ export function applyMove(G, seat, move) {
       ? doSalvage(G, p, move)
       : { ok: false, error: 'Somebody is choosing from the discard' };
   }
+  if (G.phase === 'lastcard') {
+    return move.kind === 'pick' ? doLastCard(G, p, move) : { ok: false, error: 'One last card to play' };
+  }
   if (G.phase === 'draft') {
     return move.kind === 'draft' || move.kind === 'pick'
       ? doDraft(G, p, move) : { ok: false, error: 'Pick a leader to keep' };
@@ -651,21 +667,30 @@ export function applyMove(G, seat, move) {
   return { ok: false, error: 'Unknown action' };
 }
 
+// The four things you can do with a card in hand, priced. Shared by an
+// ordinary turn and by Babylon's extra one at the end of an Age.
+function pickFrom(G, p, card, how) {
+  const opt = optionsFor(G, p.seat).find((o) => o.id === card.id);
+  if (how === 'play' && !opt.play) return { error: opt.why || 'You cannot build that' };
+  if (how === 'free' && !opt.playFree) return { error: 'You have no free build left this Age' };
+  if (how === 'wonder' && !opt.wonder) return { error: opt.wonderWhy || 'You cannot build a stage' };
+  if (!['play', 'free', 'wonder', 'discard'].includes(how)) return { error: 'Unknown action' };
+  return {
+    pay: how === 'play' ? opt.play : how === 'free' ? opt.playFree
+      : how === 'wonder' ? opt.wonder : { coins: 0, left: 0, right: 0 },
+  };
+}
+
 function doPick(G, p, move) {
   if (G.phase !== 'play') return { ok: false, error: 'Not choosing right now' };
   if (G.picks[p.seat]) return { ok: false, error: 'You have already chosen' };
   const card = p.hand.find((c) => c.id === move.cardId);
   if (!card) return { ok: false, error: 'That card is not in your hand' };
 
-  const opt = optionsFor(G, p.seat).find((o) => o.id === card.id);
-  if (move.how === 'play' && !opt.play) return { ok: false, error: opt.why || 'You cannot build that' };
-  if (move.how === 'wonder' && !opt.wonder) return { ok: false, error: opt.wonderWhy || 'You cannot build a stage' };
-  if (!['play', 'wonder', 'discard'].includes(move.how)) return { ok: false, error: 'Unknown action' };
+  const pick = pickFrom(G, p, card, move.how);
+  if (pick.error) return { ok: false, error: pick.error };
 
-  G.picks[p.seat] = {
-    seat: p.seat, how: move.how, cardId: card.id,
-    pay: move.how === 'play' ? opt.play : move.how === 'wonder' ? opt.wonder : { coins: 0, left: 0, right: 0 },
-  };
+  G.picks[p.seat] = { seat: p.seat, how: move.how, cardId: card.id, pay: pick.pay };
   if (Object.keys(G.picks).length === G.nPlayers) resolveTurn(G);
   return { ok: true };
 }
@@ -674,6 +699,7 @@ const SIMULTANEOUS = ['play', 'draft', 'recruit'];
 
 export function waitingOn(G) {
   if (G.phase === 'salvage') return G.salvage ? [G.salvage.queue[0].seat] : [];
+  if (G.phase === 'lastcard') return G.lastCard.slice();
   if (!SIMULTANEOUS.includes(G.phase)) return [];
   return G.players.filter((p) => !G.picks[p.seat]).map((p) => p.seat);
 }
@@ -692,30 +718,7 @@ function resolveTurn(G) {
   for (const pick of picks) {
     const p = playerBySeat(G, pick.seat);
     const card = p.hand.find((c) => c.id === pick.cardId);
-    p.hand = p.hand.filter((c) => c.id !== pick.cardId);
-    shown.push({ seat: p.seat, how: pick.how, name: card.n, colour: card.c });
-
-    if (pick.how === 'discard') {
-      G.discard.push(card);
-      gainCoins(G, p, 3);
-      addLog(G, `${p.name} sells a card for 3 coins.`);
-      continue;
-    }
-    // pay the bank and the neighbours
-    p.coins -= pick.pay.coins;
-    if (pick.pay.left) playerBySeat(G, leftOf(G, p.seat)).coins += pick.pay.left;
-    if (pick.pay.right) playerBySeat(G, rightOf(G, p.seat)).coins += pick.pay.right;
-
-    if (pick.how === 'wonder') {
-      buildStage(G, p, card, charges);
-    } else {
-      if (pick.pay.once) p.freeAgeUsed[`${pick.pay.gift}-${G.age}`] = true;
-      p.built.push(card);
-      applyImmediate(G, p, card);
-      buildEffects(G, p, card, pick);
-      chargeFor(G, p, card, charges);
-      addLog(G, `${p.name} builds ${card.n}${pick.pay.coins ? ` for ${pick.pay.coins}` : ''}.`);
-    }
+    shown.push(settlePick(G, p, card, pick, charges));
   }
 
   applyCharges(G, charges);
@@ -790,6 +793,7 @@ function nextSalvage(G) {
   const resume = G.salvage.resume;
   G.salvage = null;
   if (resume === 'recruit') finishRecruit(G);
+  else if (resume === 'age') resolveAge(G);
   else finishTurn(G);
 }
 
@@ -840,6 +844,36 @@ function winToken(G, p, value) {
   p.tokens.push(value);
   const fee = p.built.reduce((a, c) => a + (c.onWin ? c.onWin.coins : 0), 0);
   if (fee) gainCoins(G, p, fee);
+}
+
+// One player's choice, carried out. Pulled out of the turn loop because
+// Babylon plays a card of its own after everybody else has finished theirs,
+// and it has to mean exactly the same thing when it does.
+function settlePick(G, p, card, pick, charges) {
+  p.hand = p.hand.filter((c) => c.id !== card.id);
+  const shown = { seat: p.seat, how: pick.how, name: card.n, colour: card.c };
+  if (pick.how === 'discard') {
+    G.discard.push(card);
+    gainCoins(G, p, 3);
+    addLog(G, `${p.name} sells a card for 3 coins.`);
+    return shown;
+  }
+  // pay the bank and the neighbours
+  p.coins -= pick.pay.coins;
+  if (pick.pay.left) playerBySeat(G, leftOf(G, p.seat)).coins += pick.pay.left;
+  if (pick.pay.right) playerBySeat(G, rightOf(G, p.seat)).coins += pick.pay.right;
+
+  if (pick.how === 'wonder') {
+    buildStage(G, p, card, charges);
+    return shown;
+  }
+  if (pick.pay.once) p.freeAgeUsed[`${pick.pay.gift}-${G.age}`] = true;
+  p.built.push(card);
+  applyImmediate(G, p, card);
+  buildEffects(G, p, card, pick);
+  chargeFor(G, p, card, charges);
+  addLog(G, `${p.name} builds ${card.n}${pick.pay.coins ? ` for ${pick.pay.coins}` : pick.pay.once ? ' for nothing' : ''}.`);
+  return shown;
 }
 
 function applyImmediate(G, p, thing) {
@@ -941,8 +975,54 @@ function passHands(G) {
 // exported so a test can resolve a conflict without playing six turns first
 export function forceEndAge(G) { return endAge(G); }
 
+// Babylon's night side does not throw the last card of an Age away, it plays
+// it. That is its own little turn, taken after everyone else has finished with
+// theirs, and the card is paid for like any other — so it can be built, sold
+// for three, or spent on a wonder stage.
 function endAge(G) {
-  // the last card of the age goes in the bin unread
+  const late = G.players.filter((p) => p.hand.length && hasAct(p, 'playLast')).map((p) => p.seat);
+  // everybody else's last card goes in the bin unread, and goes in FIRST, so
+  // it is in the pile if the card Babylon plays happens to reach into it
+  for (const p of G.players) {
+    if (late.includes(p.seat)) continue;
+    for (const c of p.hand) G.discard.push(c);
+    p.hand = [];
+  }
+  if (late.length) {
+    G.lastCard = late;
+    G.phase = 'lastcard';
+    for (const seat of late) addLog(G, `${playerBySeat(G, seat).name} keeps the last card of the Age to play.`);
+    bumpFx(G, { kind: 'lastcard', seats: late });
+    return;
+  }
+  return resolveAge(G);
+}
+
+function doLastCard(G, p, move) {
+  if (!G.lastCard.includes(p.seat)) return { ok: false, error: 'Not your card to play' };
+  const card = p.hand.find((c) => c.id === move.cardId);
+  if (!card) return { ok: false, error: 'That card is not in your hand' };
+  const chosen = pickFrom(G, p, card, move.how);
+  if (chosen.error) return { ok: false, error: chosen.error };
+  const charges = [];
+  // counted, because this card did not go in the bin with everybody else's —
+  // which is the one thing that stops the seventh cards adding up
+  G.lateCards += 1;
+  const shown = [settlePick(G, p, card, { how: move.how, pay: chosen.pay }, charges)];
+  applyCharges(G, charges);
+  G.revealed = shown;
+  bumpFx(G, { kind: 'reveal', plays: shown });
+  G.lastCard = G.lastCard.filter((s) => s !== p.seat);
+  if (G.lastCard.length) return { ok: true };
+  // that card may have been the Forging Agency, or raised a stage that digs
+  if (G.salvageAsk.length) openSalvage(G, 'age');
+  else resolveAge(G);
+  return { ok: true };
+}
+
+function resolveAge(G) {
+  // anything still in a hand — a last card nobody was allowed to play, or one
+  // whose owner left the table — goes in the bin now
   for (const p of G.players) {
     for (const c of p.hand) G.discard.push(c);
     p.hand = [];
@@ -1153,15 +1233,39 @@ export function scoreFor(G, seat) {
     }
   }
 
+  // Olympia's night side takes a copy of one guild from either side at the very
+  // end. The copy scores from YOUR chair, not from the chair you took it out of
+  // — the Workers Guild counts the brown cards of YOUR neighbours — and the
+  // Scientists Guild is a symbol rather than points, so both are priced and the
+  // better one taken. The copy is not a card in your city: nothing that counts
+  // purple cards counts it.
+  const sciBase = bestScienceOf(counts.slice(), choices, sciOpt);
+  let copyVp = 0, copySci = 0;
+  if (hasAct(p, 'copyGuild')) {
+    let canCopyWild = false;
+    for (const sn of [leftOf(G, seat), rightOf(G, seat)]) {
+      const q = playerBySeat(G, sn);
+      if (!q || q.seat === seat) continue;
+      for (const c of q.built) {
+        if (c.c !== 'purple') continue;
+        if (c.sci === 'any') { canCopyWild = true; continue; }
+        copyVp = Math.max(copyVp, (c.vp || 0) + (c.per && c.per.vp ? countFor(G, seat, c.per) * c.per.vp : 0));
+      }
+    }
+    if (canCopyWild) copySci = bestScienceOf(counts.slice(), choices.concat([ALL_SYMBOLS]), sciOpt) - sciBase;
+    if (copySci >= copyVp) copyVp = 0;
+    else copySci = 0;
+  }
+
   const parts = {
     military: p.tokens.reduce((a, b) => a + b, 0),
     coins: Math.floor(p.coins / 3),
     wonder: p.stagesBuilt.reduce((a, s) => a + (s.vp || 0), 0),
     civilian: p.built.filter((c) => c.c === 'blue').reduce((a, c) => a + (c.vp || 0), 0),
     commercial: perVp(p.built.filter((c) => c.c === 'yellow')),
-    guild: perVp(p.built.filter((c) => c.c === 'purple')),
+    guild: perVp(p.built.filter((c) => c.c === 'purple')) + copyVp,
     leaders: lead,
-    science: bestScienceOf(counts.slice(), choices, sciOpt),
+    science: sciBase + copySci,
     debt: -p.debt,
   };
   parts.total = Object.values(parts).reduce((a, b) => a + b, 0);
@@ -1213,7 +1317,9 @@ export function viewFor(G, seat, code, opts = {}) {
     waiting: waitingOn(G),
     iPicked: !!G.picks[seat],
     hand: me ? me.hand : [],
-    options: G.phase === 'play' && me && !G.picks[seat] ? optionsFor(G, seat) : [],
+    options: me && ((G.phase === 'play' && !G.picks[seat]) || (G.phase === 'lastcard' && G.lastCard.includes(seat)))
+      ? optionsFor(G, seat) : [],
+    lastCard: G.lastCard.slice(),
     draftRound: G.draftRound || 0,
     draftHand: G.phase === 'draft' && me ? me.draft : [],
     myLeaders: me ? me.leaders : [],
@@ -1520,13 +1626,23 @@ export function botChoose(G, seat) {
   if (G.phase === 'salvage') {
     return G.salvage && G.salvage.queue[0].seat === seat ? botSalvage(G, seat) : null;
   }
+  if (G.phase === 'lastcard') return G.lastCard.includes(seat) ? botPlay(G, seat) : null;
   if (G.phase === 'draft') return G.picks[seat] ? null : botDraft(G, seat);
   if (G.phase === 'recruit') return G.picks[seat] ? null : botRecruit(G, seat);
   if (G.phase !== 'play') return null;
+  return G.picks[seat] ? null : botPlay(G, seat);
+}
+
+function botPlay(G, seat) {
   const p = playerBySeat(G, seat);
-  if (!p || G.picks[seat]) return null;
+  if (!p) return null;
   const opts = optionsFor(G, seat);
   if (!opts.length) return null;
+  // A once-an-Age free build is worth keeping for something dear, and the Age
+  // is likelier to bring one the earlier it is — so spending it costs more at
+  // the start of an Age than at the end of one.
+  const perAge = (G.handSize || CARDS_PER_AGE) - 1;
+  const hold = 1.6 * Math.max(0, perAge - G.turn) / perAge;
 
   const scored = [];
   for (const o of opts) {
@@ -1535,6 +1651,7 @@ export function botChoose(G, seat) {
       const spend = o.play.coins;
       scored.push({ how: 'play', cardId: o.id, v: valueOf(G, seat, card) - spend * 0.35 });
     }
+    if (o.playFree) scored.push({ how: 'free', cardId: o.id, v: valueOf(G, seat, card) - hold });
     if (o.wonder) {
       const stage = nextStage(p);
       let v = (stage.vp || 0) + (stage.shield || 0) * militaryWorth(G, seat) + (stage.coins || 0) / 3;

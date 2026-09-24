@@ -150,13 +150,15 @@ const drive = (G, until = () => G.phase === 'over') => {
   me.hand = [black('b1'), black('b2')];
   // the other three just need something to throw away so the turn resolves
   for (const q of G.players) if (q.seat) q.hand = [{ n: `Junk${q.seat}`, c: 'brown', give: 'W', id: `j${q.seat}` }];
-  ok(SW.optionsFor(G, 0).every((o) => o.play && o.play.coins === 0), 'Caligula offers a free black card');
-  SW.applyMove(G, 0, { kind: 'pick', how: 'play', cardId: 'b1' });
+  // the allowance is offered alongside the normal price, never instead of it:
+  // spending it on a card you could afford is usually the wrong move
+  ok(SW.optionsFor(G, 0).every((o) => o.playFree && o.playFree.coins === 0), 'Caligula offers a free black card');
+  SW.applyMove(G, 0, { kind: 'pick', how: 'free', cardId: 'b1' });
   for (const q of G.players) if (q.seat) SW.applyMove(G, q.seat, { kind: 'pick', how: 'discard', cardId: q.hand[0].id });
   me.hand = [black('b3')];                     // the turn passed the old hand on
-  ok(SW.optionsFor(G, 0).every((o) => !o.play), 'but only one an Age');
+  ok(SW.optionsFor(G, 0).every((o) => !o.play && !o.playFree), 'but only one an Age');
   G.age = 2;
-  ok(SW.optionsFor(G, 0).some((o) => o.play && o.play.coins === 0), 'and it comes back next Age');
+  ok(SW.optionsFor(G, 0).some((o) => o.playFree && o.playFree.coins === 0), 'and it comes back next Age');
 }
 
 // ---- buying from the bank, and being paid for buying from a neighbour

@@ -672,7 +672,7 @@ class HostSession {
   // bot-covered seat that has not chosen yet is fair game.
   botActor() {
     const g = this.G;
-    if (!g || !['play', 'draft', 'recruit', 'salvage'].includes(g.phase)) return null;
+    if (!g || !['play', 'draft', 'recruit', 'salvage', 'lastcard'].includes(g.phase)) return null;
     const pending = waitingOn(g).filter((seat) => this.seatCovered(seat));
     return pending.length ? pending[0] : null;
   }
@@ -1467,7 +1467,10 @@ function renderHand(view) {
   const hand = $('#hand');
   hand.replaceChildren();
   if (view.phase === 'salvage') return renderSalvage(view);
-  if (!['play', 'draft', 'recruit'].includes(view.phase)) return;
+  // Babylon's extra card is an ordinary turn with one card in it, so it is
+  // drawn by the ordinary hand — but only for whoever is owed it.
+  if (view.phase === 'lastcard' && !view.lastCard.includes(view.mySeat)) return;
+  if (!['play', 'draft', 'recruit', 'lastcard'].includes(view.phase)) return;
   if (view.iPicked) {
     hand.append(el('div', 'hand-note', 'Chosen — waiting for the others…'));
     return;
@@ -1492,6 +1495,20 @@ function renderHand(view) {
     }
     build.addEventListener('click', () => sendMove({ kind: 'pick', how: 'play', cardId: c.id }));
     acts.append(build);
+
+    // Olympia's once-an-Age build, and Caligula's. Offered next to the price
+    // rather than instead of it, because which card to spend it on is the
+    // whole decision.
+    if (o.playFree) {
+      const gift = o.playFree.gift;
+      const free = el('button', 'btn tiny free', 'Free build');
+      free.type = 'button';
+      free.title = gift === 'any'
+        ? 'Your one free build this Age — any card'
+        : `Your one free ${gift} card this Age`;
+      free.addEventListener('click', () => sendMove({ kind: 'pick', how: 'free', cardId: c.id }));
+      acts.append(free);
+    }
 
     const wonder = el('button', 'btn tiny', o.wonder ? (o.wonder.coins ? `Wonder · ${o.wonder.coins}` : 'Wonder · free') : 'Wonder');
     wonder.type = 'button';
@@ -1520,6 +1537,10 @@ function renderGame(view, sess) {
     $('#age-chip').textContent = `Age ${AGE_ROMAN[view.age]}`;
     $('#turn-chip').textContent = 'The discard pile';
     $('#pass-chip').textContent = `${view.discardCount} card${view.discardCount === 1 ? '' : 's'}`;
+  } else if (view.phase === 'lastcard') {
+    $('#age-chip').textContent = `Age ${AGE_ROMAN[view.age]}`;
+    $('#turn-chip').textContent = 'The last card';
+    $('#pass-chip').textContent = 'before the conflict';
   } else if (view.phase === 'draft') {
     $('#age-chip').textContent = 'Leader draft';
     $('#turn-chip').textContent = `Round ${view.draftRound} of 4`;
@@ -1554,7 +1575,13 @@ function renderGame(view, sess) {
 
   const waiting = $('#waiting');
   waiting.replaceChildren();
-  if (view.phase === 'salvage' && view.salvage) {
+  if (view.phase === 'lastcard') {
+    const mine = view.lastCard.includes(view.mySeat);
+    const who = view.lastCard.map((sn) => (view.players.find((q) => q.seat === sn) || {}).name).join(', ');
+    waiting.textContent = mine
+      ? 'One more card before the Age ends: build it, bury it under your wonder, or sell it.'
+      : `Waiting for ${who} to play the last card of the Age…`;
+  } else if (view.phase === 'salvage' && view.salvage) {
     const who = (view.players.find((q) => q.seat === view.salvage.seat) || {}).name;
     waiting.textContent = view.salvage.cards
       ? `${view.salvage.why}: take one card out of the pile and build it for nothing.`
@@ -1612,7 +1639,7 @@ function bindStep() {
 function renderActions(view, sess) {
   const bar = $('#action-bar');
   bar.replaceChildren();
-  if (!['play', 'recruit', 'salvage'].includes(view.phase)) return;
+  if (!['play', 'recruit', 'salvage', 'lastcard'].includes(view.phase)) return;
   const me = view.players.find((q) => q.seat === view.mySeat);
   if (!me) return;
   const note = el('span', 'act-note');

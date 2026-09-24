@@ -1564,6 +1564,9 @@ a {
 .btn.tiny { font-size: 11px; padding: 3px 6px; border-radius: 7px; }
 .btn.tiny.go { background: #2f7a4a; }
 .btn.tiny.sell { background: rgba(255,255,255,.08); }
+/* the once-an-Age free build: a third way to build, so it reads as a sibling
+   of Build rather than of Sell */
+.btn.tiny.free { background: #2f6a7a; }
 .btn.tiny:disabled { opacity: .38; cursor: not-allowed; }
 
 #waiting { padding: 2px 10px; color: #e0b352; font-size: 13px; min-height: 18px; }
