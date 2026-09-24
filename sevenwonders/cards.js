@@ -275,22 +275,19 @@ export const SCIENCE_SET_BONUS = 7;
 // [[File:Victory-4.png]]) and map straight onto the fields below. Costs are
 // written in sorted letter order so they are easy to diff against that source.
 //
-// The expansion has 42 black cards, fourteen per Age. Thirty-two are here: the
-// ten missing ones need mechanics the engine does not have yet, and are listed
-// at the bottom of this block rather than faked. What was here before was a
+// The expansion has 42 black cards, fourteen per Age — which is what the
+// publisher's own second-edition rulebook says it has, and it lists no guilds
+// in the box. Thirty-three are here; the nine missing ones are listed at the
+// bottom of this block rather than faked. What was here before was a
 // third-party table whose costs were visibly filler — every Age II card cost
 // papyrus+textile, every Age III card glass+papyrus+textile — plus five cards
 // (Villa, Smugglers' Wharf, Hidden Cache, Tribute, Treasury) that are not in
 // the expansion at all.
 //
-// A fan wiki is not the publisher, and on three base-game guilds it disagrees
-// with what is already here — Craftsmens (1 ore + 2 stone against 2 and 2),
-// Spies (2 clay against 3), Builders (3 stone against 2). Each is one repeated
-// resource, but not all in the same direction, so it is not one extraction bug
-// either. They are unresolved: this wiki has no per-card pages to check against
-// — searching a guild's name returns only this one list — so there is no second
-// opinion on it anywhere on the site. Nothing outside this block was changed on
-// its say-so, and that disagreement is the reason.
+// This block once carried a note that the wiki disagreed with three base-game
+// guild costs and that the disagreement was unresolved. It is resolved: the
+// wiki was quoting the second edition and this file was still on the first.
+// Everything here is second edition now, and those three costs are in it.
 //
 // What protects this block is that the engine still asserts its own structure —
 // an Age deals seven cards per player, and at most seven black cards are drawn
@@ -349,21 +346,27 @@ export const CITY_CARDS = [
   { n: 'Torture Chamber',     c: 'black', age: 3, coin: 3, cost: 'GOO',    mask: 1 },
 ];
 
-// The nine black cards NOT above, and the mechanic each one is waiting on. They
-// are left out rather than approximated, because a card that silently does
-// nothing is worse than a card that is not in the deck.
+// The nine black cards NOT above. Most of them are no longer hard — the engine
+// has grown the pieces since, and only the first still wants something genuinely
+// new. Left out because they are not in yet, not because they cannot be.
 //
-//   Smuggler's Cache  I    a rebate on the STARTING resource, not a bought one
-//   Secret Warehouse  I    an extra copy of a resource you already produce
-//                          (produceMissing covers the opposite case)
-//   Raider Camp       I    grant yourself an Age I military victory token, and
-//   Raider Fort       II   hand each neighbour a debt — no card grants a token
-//   Raider Garrison   III  today, and debt is only ever taken, never given
-//   Cells             I    end-game points per victory token OF A GIVEN AGE;
-//   Guardhouse        II   tokens are currently counted but not dated
-//   Prison            III
-//   Memorial          III  cash in your defeat tokens and discard them: the
-//                          first card that would REMOVE tokens from a board
+//   Smuggler's Cache  I    a coin off every purchase of the STARTING resource.
+//                          The rebate this file has is a coin off the first buy
+//                          from a SIDE, once a turn, which is a different shape:
+//                          this one keys on the resource and pays every time.
+//                          The only one that still needs new plumbing.
+//   Secret Warehouse  I    an extra copy of a resource you already produce —
+//                          the mirror of produceMissing, which already works out
+//                          the set of what you make
+//   Raider Camp       I    grant yourself a victory token of a named Age, and
+//   Raider Fort       II   hand each neighbour a debt. Leaders' Nitocris already
+//   Raider Garrison   III  grants a token; handing out debt directly is a line.
+//   Cells             I    points per victory token OF A GIVEN AGE. A token
+//   Guardhouse        II   already carries its Age in its value — 1, 3 and 5 —
+//   Prison            III  so they are dated after all; an older note here said
+//                          otherwise and was wrong.
+//   Memorial          III  coins for your defeat tokens, then throw them away.
+//                          Telesilla already throws defeat tokens away.
 
 // Cities adds no guilds. Its contents are 42 black cards, diplomacy tokens,
 // debt tokens and coins — the first edition's Counterfeiters Guild, Guild Of
