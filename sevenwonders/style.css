@@ -1557,6 +1557,7 @@ a {
 .swcard.ghost  { border-left: 4px dashed rgba(255,255,255,.22); background: none; color: #8fa89c; }
 .swcard.white .sw-name { color: #f2ead8; }
 
+.edition { font-size: 12.5px; color: #9fb4aa; border-left: 3px solid rgba(224,179,82,.5); padding-left: 10px; }
 .lead-chip { background: rgba(232,224,206,.16); color: #efe6d2; border-radius: 6px; padding: 0 5px; }
 .act-leaders .lead-name { color: #efe6d2; border-bottom: 1px dotted rgba(239,230,210,.45); cursor: help; }
 

@@ -1,8 +1,9 @@
-// The three abilities printed on the boards rather than bought with a card:
-// Olympia's free build, Babylon's extra card, and Olympia's copied guild.
+// The abilities printed on the boards rather than bought with a card: the
+// three free builds Olympia grants and Babylon's extra card. Second edition,
+// so there is no copied guild here — see the Decorators Guild instead.
 // Run with `node test-wonders.mjs`.
 import * as SW from './game.js';
-import { WONDERS, CITY_CARDS } from './cards.js';
+import { WONDERS, CITY_CARDS, GUILDS } from './cards.js';
 
 let fails = 0;
 const ok = (c, m) => { console.log(`${c ? 'PASS' : '**FAIL**'}  ${m}`); if (!c) fails++; };
@@ -28,54 +29,66 @@ const others = (G, seat) => {
   }
 };
 
-// ---- the boards still carry all three, on the stages they were printed on
+// ---- the boards carry what the second edition prints on them
 {
   const acts = {};
   for (const w of WONDERS) for (const side of ['A', 'B']) {
-    for (const s of w.sides[side]) if (s.act) acts[s.act] = `${w.n} ${side}`;
+    for (const st of w.sides[side]) if (st.act) (acts[st.act] ||= []).push(`${w.n} ${side}`);
   }
-  ok(acts.freePerAge === 'Olympia A', `freePerAge is on ${acts.freePerAge}`);
-  ok(acts.playLast === 'Babylon B', `playLast is on ${acts.playLast}`);
-  ok(acts.copyGuild === 'Olympia B', `copyGuild is on ${acts.copyGuild}`);
-  ok(Object.keys(acts).length === 3, `and there is nothing else waiting to be implemented (${Object.keys(acts).join(', ')})`);
+  ok(String(acts.freeFirstOfColour) === 'Olympia A', `freeFirstOfColour is on ${acts.freeFirstOfColour}`);
+  ok(String(acts.freeFirstOfAge) === 'Olympia B', `freeFirstOfAge is on ${acts.freeFirstOfAge}`);
+  ok(String(acts.freeLastOfAge) === 'Olympia B', `freeLastOfAge is on ${acts.freeLastOfAge}`);
+  ok(String(acts.playLast) === 'Babylon B', `playLast is on ${acts.playLast}`);
+  ok(Object.keys(acts).length === 4, `and nothing else is waiting to be implemented (${Object.keys(acts).join(', ')})`);
+  ok(WONDERS.find((w) => w.n === 'Babylon').sides.B.length === 2, "Babylon's night side has two stages");
 }
 
-// ---- Olympia: one card an Age, for nothing
+// ---- Olympia's day side: the first card of each colour
 {
   const G = mk(4);
-  const me = grant(G, 0, 'freePerAge');
+  const me = grant(G, 0, 'freeFirstOfColour');
   me.wonderRes = ''; me.built = []; me.coins = 0;
-  me.hand = [card('Palace', 'blue', { cost: 'WSCOGPT', vp: 8 }), card('Pawnshop', 'blue', { vp: 3 })];
+  me.hand = [card('Palace', 'blue', { cost: 'CGOPSTW', vp: 8 }), card('Castrum', 'red', { cost: 'CCPW' })];
+  ok(opt(G, 0, 'Palace').play && opt(G, 0, 'Palace').play.coins === 0, 'your first blue card is free however dear it is');
+  ok(opt(G, 0, 'Castrum').play.coins === 0, 'and so is your first red one');
+  ok(opt(G, 0, 'Palace').playFree === null, 'there is no allowance to spend — the card is simply free');
 
-  const dear = opt(G, 0, 'Palace');
-  ok(dear.play === null, 'a card you cannot pay for is still not something you can pay for');
-  ok(dear.playFree && dear.playFree.coins === 0, 'but the free build is offered beside it');
-
-  const cheap = opt(G, 0, 'Pawnshop');
-  ok(cheap.play && cheap.play.coins === 0, 'a card that costs nothing is simply free');
-  ok(cheap.playFree === null, 'and does not waste the allowance');
-
-  SW.applyMove(G, 0, { kind: 'pick', how: 'free', cardId: 'Palace' });
-  others(G, 0);
-  ok(me.built.some((c) => c.n === 'Palace'), 'the free build puts the card in your city');
-  ok(me.coins === 0, `and takes no coins (${me.coins})`);
-
-  me.hand = [card('Pantheon', 'blue', { cost: 'CCOPTG', vp: 7 })];
-  ok(opt(G, 0, 'Pantheon').playFree === null, 'there is only one an Age');
-  G.age = 2;
-  ok(opt(G, 0, 'Pantheon').playFree !== null, 'and it comes back with the next one');
+  me.built = [{ n: 'Baths', c: 'blue', vp: 3 }];
+  ok(opt(G, 0, 'Palace').play === null, 'a second blue card is not');
+  ok(opt(G, 0, 'Castrum').play.coins === 0, 'while the first red one still is');
 }
 
-// ---- and it does not fight with Caligula over the same card
+// ---- Olympia's night side: the first card of an Age, and the last
+{
+  const G = mk(4);
+  const me = grant(G, 0, 'freeFirstOfAge');
+  me.wonderRes = ''; me.built = []; me.coins = 0;
+  me.hand = [card('Palace', 'blue', { cost: 'CGOPSTW', vp: 8 })];
+  G.turn = 1;
+  ok(opt(G, 0, 'Palace').play.coins === 0, 'the first card of the Age is free');
+  me.builtThisAge = 1;
+  ok(opt(G, 0, 'Palace').play === null, 'the second is not');
+
+  const H = mk(4);
+  const you = grant(H, 0, 'freeLastOfAge');
+  you.wonderRes = ''; you.built = []; you.coins = 0;
+  you.hand = [card('Palace', 'blue', { cost: 'CGOPSTW', vp: 8 })];
+  H.turn = 1;
+  ok(opt(H, 0, 'Palace').play === null, 'the last card of the Age is not free on the first turn');
+  H.turn = H.handSize - 1;
+  ok(opt(H, 0, 'Palace').play.coins === 0, 'and is on the last');
+}
+
+// ---- and the one allowance that IS a choice still is
 {
   const G = mk(4, { cities: true });
-  const me = grant(G, 0, 'freePerAge');
+  const me = grant(G, 0, 'freeFirstOfAge');
   me.wonderRes = ''; me.built = [{ n: 'Caligula', c: 'white', freeColourAge: 'black' }]; me.coins = 0;
+  me.builtThisAge = 1;                        // Olympia's is already spent
   me.hand = [card('Capitol', 'black', { cost: 'CCGPSS', vp: 8 })];
-  ok(opt(G, 0, 'Capitol').playFree.gift === 'black',
-     'a black card spends Caligula’s allowance, not the one that works on anything');
-  me.freeAgeUsed = { 'black-1': true };
-  ok(opt(G, 0, 'Capitol').playFree.gift === 'any', 'and falls back to Olympia’s once his is gone');
+  ok(opt(G, 0, 'Capitol').play === null, 'Olympia does not help twice in an Age');
+  ok(opt(G, 0, 'Capitol').playFree && opt(G, 0, 'Capitol').playFree.gift === 'black',
+     'but Caligula is still offered, and still as a choice');
 }
 
 // ---- Babylon: the seventh card is played, not binned
@@ -147,50 +160,20 @@ const others = (G, seat) => {
   ok(G.age === 2, `then everything finishes in order (Age ${G.age})`);
 }
 
-// ---- Olympia again: a copy of somebody else's guild
-const score = (mine, left, right, act = 'copyGuild') => {
+// ---- the Decorators want the wonder finished
+{
   const G = mk(3);
   G.phase = 'over';
-  const me = grant(G, 0, act);
-  me.built = mine;
-  SW.playerBySeat(G, SW.leftOf(G, 0)).built = left;
-  SW.playerBySeat(G, SW.rightOf(G, 0)).built = right;
-  return SW.scoreFor(G, 0);
-};
-const col = (c, n) => Array.from({ length: n }, (_, i) => ({ n: `${c}${i}`, c }));
-const WORKERS = { n: 'Workers Guild', c: 'purple', per: { vp: 1, of: 'brown', from: 'neighbours' } };
-const SCIENTISTS = { n: 'Scientists Guild', c: 'purple', sci: 'any' };
-
-{
-  ok(score([], [], []).guild === 0, 'no guild next door, nothing to copy');
-  ok(score([], [WORKERS], []).guild === 0, 'a Workers Guild copied beside two empty cities is worth nothing');
-
-  // the copy counts MY neighbours, not the neighbours of whoever built it
-  const s = score([], [WORKERS, ...col('brown', 2)], col('brown', 3));
-  ok(s.guild === 5, `the copy scores from your chair, not theirs (${s.guild} for 2 + 3 brown)`);
-
-  const two = score([], [WORKERS, ...col('brown', 1)], [{ n: 'Magistrates Guild', c: 'purple', per: { vp: 1, of: 'blue', from: 'neighbours' } }, ...col('blue', 4)]);
-  ok(two.guild === 4, `the better of the two is taken (${two.guild})`);
-
-  const noAct = score([], [WORKERS, ...col('brown', 2)], col('brown', 3), 'playLast');
-  ok(noAct.guild === 0, 'and only Olympia gets to do it');
-}
-
-// ---- including the one that is a symbol rather than points
-{
-  const sci = (n, sym) => Array.from({ length: n }, (_, i) => ({ n: `${sym}${i}`, c: 'green', sci: sym }));
-  const plain = score([...sci(2, 'compass'), ...sci(2, 'gear'), ...sci(2, 'tablet')], [], []);
-  const copied = score([...sci(2, 'compass'), ...sci(2, 'gear'), ...sci(2, 'tablet')], [SCIENTISTS], []);
-  ok(plain.science === 26, `two of each is 26 (${plain.science})`);
-  // a fourth symbol on a 2/2/2 row is 9 - 4, and the set bonus is already paid
-  ok(copied.science === plain.science + 5 && copied.guild === 0,
-     `copying the Scientists Guild is a symbol, and lands in the science column (+${copied.science - plain.science})`);
-
-  // ... but only when it beats the points on offer
-  const rich = { n: 'Big Guild', c: 'purple', vp: 20 };
-  const both = score([...sci(2, 'compass')], [SCIENTISTS, rich], []);
-  ok(both.guild === 20 && both.science === score([...sci(2, 'compass')], [], []).science,
-     `a fat points guild beats a symbol when it is worth more (${both.guild})`);
+  const me = SW.playerBySeat(G, 0);
+  const dec = GUILDS.find((g) => g.n === 'Decorators Guild');
+  ok(!!dec && dec.vpIfWonder === 7, 'the Decorators Guild is in the base ten, and pays 7');
+  ok(!GUILDS.some((g) => g.n === 'Strategists Guild'), 'and the Strategists Guild is not — it was a first edition card');
+  me.built = [{ ...dec }];
+  me.stages = [{ cost: '' }, { cost: '' }];
+  me.stagesBuilt = [{ cost: '' }];
+  ok(SW.scoreFor(G, 0).guild === 0, 'half a wonder is worth nothing to them');
+  me.stagesBuilt = [{ cost: '' }, { cost: '' }];
+  ok(SW.scoreFor(G, 0).guild === 7, 'a finished one is worth seven');
 }
 
 // ---- and the whole thing, over and over

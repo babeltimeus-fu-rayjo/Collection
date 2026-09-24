@@ -1,4 +1,27 @@
-// cards.js — the printed content of 7 Wonders, as data.
+// cards.js — the printed content of 7 Wonders, as data. SECOND EDITION (2020),
+// throughout: base game, Leaders and Cities.
+//
+// That matters, because the second edition is a rebalance and not a reprint.
+// Against the first edition the base deck gains Well, Ludus and Castrum and
+// loses the Pawnshop; three blue cards are worth a point more; the blue chains
+// are rewired; the Strategists Guild becomes the Decorators; three guild costs
+// change; 27 of the 44 figures on the wonder boards change, Babylon's night
+// side losing a stage outright; and Olympia stops copying guilds. Mixing the
+// two editions is the one thing that gives you neither.
+//
+// Where it came from, and how far it was checked:
+//   base cards   the 7 Wonders wiki's List of Age Cards, whose per-player
+//                columns are what the `at` arrays below are. Verified by
+//                arithmetic rather than by eye: every Age deals exactly seven
+//                cards a player at every count from three to seven, which the
+//                numbers cannot do by accident.
+//   chains       the wiki's Chains page, which agrees with the chain list the
+//                publisher gives away as a PDF.
+//   guilds       the wiki's guild table.
+//   wonders      the wiki's wonder pages. Alexandria's day side is the only
+//                board the publisher's own rulebook prints, and it matches.
+//   Leaders      the Leader Cards page, diffed name-for-name and cost-for-cost.
+//   Cities       the black cards on List of Cards, diffed the same way.
 //
 // Nothing in here knows how to play the game; game.js reads it. Keeping the
 // deck as a table means an expansion is a block of rows rather than a branch in
@@ -48,26 +71,26 @@ export const COLOUR_NAME = {
 const AGE1 = [
   // brown — raw materials
   { n: 'Lumber Yard',   c: 'brown', at: [3, 4],       give: 'W' },
+  { n: 'Ore Vein',      c: 'brown', at: [3, 4],       give: 'O' },
   { n: 'Stone Pit',     c: 'brown', at: [3, 5],       give: 'S' },
   { n: 'Clay Pool',     c: 'brown', at: [3, 5],       give: 'C' },
-  { n: 'Ore Vein',      c: 'brown', at: [3, 4],       give: 'O' },
-  { n: 'Tree Farm',     c: 'brown', at: [6],    coin: 1, give: 'W/C' },
+  { n: 'Timber Yard',   c: 'brown', at: [3],    coin: 1, give: 'W/S' },
+  { n: 'Clay Pit',      c: 'brown', at: [3],    coin: 1, give: 'O/C' },
   { n: 'Excavation',    c: 'brown', at: [4],    coin: 1, give: 'S/C' },
-  { n: 'Clay Pit',      c: 'brown', at: [3],    coin: 1, give: 'C/O' },
-  { n: 'Timber Yard',   c: 'brown', at: [3],    coin: 1, give: 'S/W' },
   { n: 'Forest Cave',   c: 'brown', at: [5],    coin: 1, give: 'W/O' },
-  { n: 'Mine',          c: 'brown', at: [6],    coin: 1, give: 'O/S' },
+  { n: 'Tree Farm',     c: 'brown', at: [6],    coin: 1, give: 'W/C' },
+  { n: 'Mine',          c: 'brown', at: [6],    coin: 1, give: 'S/O' },
 
   // grey — manufactured goods
-  { n: 'Loom',       c: 'grey', at: [3, 6], give: 'T' },
   { n: 'Glassworks', c: 'grey', at: [3, 6], give: 'G' },
   { n: 'Press',      c: 'grey', at: [3, 6], give: 'P' },
+  { n: 'Loom',       c: 'grey', at: [3, 6], give: 'T' },
 
   // blue — civilian
-  { n: 'Pawnshop', c: 'blue', at: [4, 7],           vp: 3 },
-  { n: 'Baths',    c: 'blue', at: [3, 7], cost: 'S', vp: 3, chains: ['Aqueduct'] },
-  { n: 'Altar',    c: 'blue', at: [3, 5],           vp: 2, chains: ['Temple'] },
-  { n: 'Theater',  c: 'blue', at: [3, 6],           vp: 2, chains: ['Statue'] },
+  { n: 'Altar',   c: 'blue', at: [3, 5],           vp: 3, chains: ['Pantheon'] },
+  { n: 'Theater', c: 'blue', at: [3, 6],           vp: 3, chains: ['Gardens'] },
+  { n: 'Well',    c: 'blue', at: [4, 7],           vp: 3, chains: ['Statue'] },
+  { n: 'Baths',   c: 'blue', at: [3, 7], cost: 'S', vp: 3, chains: ['Aqueduct'] },
 
   // yellow — commercial
   { n: 'Tavern',             c: 'yellow', at: [4, 5, 7], coins: 5 },
@@ -76,14 +99,14 @@ const AGE1 = [
   { n: 'Marketplace',        c: 'yellow', at: [3, 6], trade: { with: 'both',  kind: 'man' }, chains: ['Caravansery'] },
 
   // red — military
-  { n: 'Stockade',    c: 'red', at: [3, 7], cost: 'W', shield: 1 },
-  { n: 'Barracks',    c: 'red', at: [3, 5], cost: 'O', shield: 1 },
   { n: 'Guard Tower', c: 'red', at: [3, 4], cost: 'C', shield: 1 },
+  { n: 'Barracks',    c: 'red', at: [3, 5], cost: 'O', shield: 1 },
+  { n: 'Stockade',    c: 'red', at: [3, 7], cost: 'W', shield: 1 },
 
   // green — science
+  { n: 'Scriptorium', c: 'green', at: [3, 4], cost: 'P', sci: 'tablet',  chains: ['Courthouse', 'Library'] },
   { n: 'Apothecary',  c: 'green', at: [3, 5], cost: 'T', sci: 'compass', chains: ['Stables', 'Dispensary'] },
   { n: 'Workshop',    c: 'green', at: [3, 7], cost: 'G', sci: 'gear',    chains: ['Archery Range', 'Laboratory'] },
-  { n: 'Scriptorium', c: 'green', at: [3, 4], cost: 'P', sci: 'tablet',  chains: ['Courthouse', 'Library'] },
 ];
 
 // ---------------------------------------------------------------- Age II
@@ -91,83 +114,86 @@ const AGE1 = [
 const AGE2 = [
   // brown
   { n: 'Sawmill',   c: 'brown', at: [3, 4], coin: 1, give: 'WW' },
+  { n: 'Foundry',   c: 'brown', at: [3, 4], coin: 1, give: 'OO' },
   { n: 'Quarry',    c: 'brown', at: [3, 4], coin: 1, give: 'SS' },
   { n: 'Brickyard', c: 'brown', at: [3, 4], coin: 1, give: 'CC' },
-  { n: 'Foundry',   c: 'brown', at: [3, 4], coin: 1, give: 'OO' },
 
   // grey
-  { n: 'Loom',       c: 'grey', at: [3, 5], give: 'T' },
   { n: 'Glassworks', c: 'grey', at: [3, 5], give: 'G' },
   { n: 'Press',      c: 'grey', at: [3, 5], give: 'P' },
+  { n: 'Loom',       c: 'grey', at: [3, 5], give: 'T' },
 
   // blue
-  { n: 'Aqueduct',   c: 'blue', at: [3, 7], cost: 'SSS',  vp: 5, free: 'Baths' },
-  { n: 'Temple',     c: 'blue', at: [3, 6], cost: 'WCG',  vp: 3, free: 'Altar',       chains: ['Pantheon'] },
-  { n: 'Statue',     c: 'blue', at: [3, 7], cost: 'OOW',  vp: 4, free: 'Theater',     chains: ['Gardens'] },
-  { n: 'Courthouse', c: 'blue', at: [3, 5], cost: 'CCT',  vp: 4, free: 'Scriptorium' },
+  { n: 'Courthouse', c: 'blue', at: [3, 5], cost: 'CCT', vp: 4, free: 'Scriptorium' },
+  { n: 'Temple',     c: 'blue', at: [3, 6], cost: 'CGW', vp: 4 },
+  { n: 'Statue',     c: 'blue', at: [3, 7], cost: 'OOW', vp: 4, free: 'Well' },
+  { n: 'Aqueduct',   c: 'blue', at: [3, 7], cost: 'SSS', vp: 5, free: 'Baths' },
 
   // yellow
   { n: 'Forum',       c: 'yellow', at: [3, 6, 7], cost: 'CC', give: 'G/P/T', free: 'East Trading Post', free2: 'West Trading Post', chains: ['Haven'] },
-  { n: 'Caravansery', c: 'yellow', at: [3, 5, 6], cost: 'WW', give: 'W/S/C/O', free: 'Marketplace', chains: ['Lighthouse'] },
+  { n: 'Caravansery', c: 'yellow', at: [3, 5, 6], cost: 'WW', give: 'W/S/O/C', free: 'Marketplace', chains: ['Lighthouse'] },
   { n: 'Vineyard',    c: 'yellow', at: [3, 6],   per: { coins: 1, of: 'brown', from: 'neighbours+self' } },
-  { n: 'Bazar',       c: 'yellow', at: [4, 7],   per: { coins: 2, of: 'grey',  from: 'neighbours+self' } },
+  { n: 'Bazaar',      c: 'yellow', at: [4, 7],   per: { coins: 2, of: 'grey',  from: 'neighbours+self' } },
 
   // red
+  { n: 'Stables',         c: 'red', at: [3, 5],    cost: 'COW', shield: 2, free: 'Apothecary' },
+  { n: 'Archery Range',   c: 'red', at: [3, 6],    cost: 'OWW', shield: 2, free: 'Workshop' },
   { n: 'Walls',           c: 'red', at: [3, 7],    cost: 'SSS', shield: 2, chains: ['Fortifications'] },
-  { n: 'Training Ground', c: 'red', at: [4, 6, 7], cost: 'WOO', shield: 2, chains: ['Circus'] },
-  { n: 'Stables',         c: 'red', at: [3, 5],    cost: 'OCW', shield: 2, free: 'Apothecary' },
-  { n: 'Archery Range',   c: 'red', at: [3, 6],    cost: 'WWO', shield: 2, free: 'Workshop' },
+  { n: 'Training Ground', c: 'red', at: [4, 6, 7], cost: 'OOW', shield: 2, chains: ['Circus'] },
 
   // green
-  { n: 'Dispensary', c: 'green', at: [3, 4], cost: 'OOG', sci: 'compass', free: 'Apothecary',  chains: ['Arena', 'Lodge'] },
+  { n: 'Dispensary', c: 'green', at: [3, 4], cost: 'GOO', sci: 'compass', free: 'Apothecary',  chains: ['Arena', 'Lodge'] },
   { n: 'Laboratory', c: 'green', at: [3, 5], cost: 'CCP', sci: 'gear',    free: 'Workshop',    chains: ['Siege Workshop', 'Observatory'] },
   { n: 'Library',    c: 'green', at: [3, 6], cost: 'SST', sci: 'tablet',  free: 'Scriptorium', chains: ['Senate', 'University'] },
-  { n: 'School',     c: 'green', at: [3, 7], cost: 'WP',  sci: 'tablet',  chains: ['Academy', 'Study'] },
+  { n: 'School',     c: 'green', at: [3, 7], cost: 'PW',  sci: 'tablet',  chains: ['Academy', 'Study'] },
 ];
 
 // ---------------------------------------------------------------- Age III
 
 const AGE3 = [
   // blue
-  { n: 'Pantheon',  c: 'blue', at: [3, 6],    cost: 'CCOPTG', vp: 7, free: 'Temple' },
-  { n: 'Gardens',   c: 'blue', at: [3, 4],    cost: 'CCW',    vp: 5, free: 'Statue' },
-  { n: 'Town Hall', c: 'blue', at: [3, 5, 6], cost: 'SSOG',   vp: 6 },
-  { n: 'Palace',    c: 'blue', at: [3, 7],    cost: 'WSCOGPT', vp: 8 },
-  { n: 'Senate',    c: 'blue', at: [3, 5],    cost: 'WWSO',   vp: 6, free: 'Library' },
+  { n: 'Gardens',   c: 'blue', at: [3, 4], cost: 'CCW',     vp: 5, free: 'Theater' },
+  { n: 'Senate',    c: 'blue', at: [3, 5], cost: 'OSWW',    vp: 6, free: 'Library' },
+  { n: 'Town Hall', c: 'blue', at: [3, 6], cost: 'GSSS',    vp: 6 },
+  { n: 'Pantheon',  c: 'blue', at: [3, 6], cost: 'CCGOPT',  vp: 7, free: 'Altar' },
+  { n: 'Palace',    c: 'blue', at: [3, 7], cost: 'CGOPSTW', vp: 8 },
 
   // yellow
-  { n: 'Haven',              c: 'yellow', at: [3, 4],    cost: 'WOT', free: 'Forum',      per: { coins: 1, vp: 1, of: 'brown',  from: 'self' } },
-  { n: 'Lighthouse',         c: 'yellow', at: [3, 6],    cost: 'SG',  free: 'Caravansery', per: { coins: 1, vp: 1, of: 'yellow', from: 'self' } },
-  { n: 'Chamber of Commerce', c: 'yellow', at: [4, 6],   cost: 'CCP',                      per: { coins: 2, vp: 2, of: 'grey',   from: 'self' } },
-  { n: 'Arena',              c: 'yellow', at: [3, 5, 7], cost: 'SSO', free: 'Dispensary',  per: { coins: 3, vp: 1, of: 'stage',  from: 'self' } },
+  { n: 'Haven',               c: 'yellow', at: [3, 4], cost: 'OTW', free: 'Forum',       per: { coins: 1, vp: 1, of: 'brown',  from: 'self' } },
+  { n: 'Lighthouse',          c: 'yellow', at: [3, 6], cost: 'GS',  free: 'Caravansery', per: { coins: 1, vp: 1, of: 'yellow', from: 'self' } },
+  { n: 'Chamber of Commerce', c: 'yellow', at: [4, 6], cost: 'CCP',                      per: { coins: 2, vp: 2, of: 'grey',   from: 'self' } },
+  { n: 'Ludus',               c: 'yellow', at: [5, 7], cost: 'OS',                       per: { coins: 3, vp: 1, of: 'red',    from: 'self' } },
+  { n: 'Arena',               c: 'yellow', at: [3, 5], cost: 'CCO', free: 'Dispensary',  per: { coins: 3, vp: 1, of: 'stage',  from: 'self' } },
 
   // red
-  { n: 'Fortifications', c: 'red', at: [3, 7],    cost: 'OOOS', shield: 3, free: 'Walls' },
-  { n: 'Circus',         c: 'red', at: [4, 5, 6], cost: 'SSSO', shield: 3, free: 'Training Ground' },
-  { n: 'Arsenal',        c: 'red', at: [3, 4, 7], cost: 'WWOT', shield: 3 },
-  { n: 'Siege Workshop', c: 'red', at: [3, 5],    cost: 'CCCW', shield: 3, free: 'Laboratory' },
+  { n: 'Fortifications', c: 'red', at: [3, 7], cost: 'COOO', shield: 3, free: 'Walls' },
+  { n: 'Circus',         c: 'red', at: [4, 6], cost: 'CCCO', shield: 3, free: 'Training Ground' },
+  { n: 'Arsenal',        c: 'red', at: [3, 5], cost: 'OTWW', shield: 3 },
+  { n: 'Siege Workshop', c: 'red', at: [3, 5], cost: 'CCCW', shield: 3, free: 'Laboratory' },
+  { n: 'Castrum',        c: 'red', at: [4, 7], cost: 'CCPW', shield: 3 },
 
   // green
   { n: 'Lodge',       c: 'green', at: [3, 6], cost: 'CCPT', sci: 'compass', free: 'Dispensary' },
-  { n: 'Observatory',  c: 'green', at: [3, 7], cost: 'OOGT', sci: 'gear',    free: 'Laboratory' },
-  { n: 'University',  c: 'green', at: [3, 4], cost: 'WWPG', sci: 'tablet',  free: 'Library' },
-  { n: 'Academy',     c: 'green', at: [3, 7], cost: 'SSSG', sci: 'compass', free: 'School' },
-  { n: 'Study',       c: 'green', at: [3, 5], cost: 'WPT',  sci: 'gear',    free: 'School' },
+  { n: 'Observatory', c: 'green', at: [3, 7], cost: 'GOOT', sci: 'gear',    free: 'Laboratory' },
+  { n: 'University',  c: 'green', at: [3, 4], cost: 'GPWW', sci: 'tablet',  free: 'Library' },
+  { n: 'Academy',     c: 'green', at: [3, 7], cost: 'GSSS', sci: 'compass', free: 'School' },
+  { n: 'Study',       c: 'green', at: [3, 5], cost: 'PTW',  sci: 'gear',    free: 'School' },
 ];
 
 // Guilds: ten exist, a game uses player-count + 2 of them, drawn at random and
-// shuffled into Age III. They are the only cards that read another player's city.
+// shuffled into Age III. They are the only cards that read another player's
+// city — except the Decorators, who only ever look at your own wonder.
 export const GUILDS = [
-  { n: 'Workers Guild',      c: 'purple', cost: 'OOCSW', per: { vp: 1, of: 'brown',  from: 'neighbours' } },
-  { n: 'Craftsmens Guild',   c: 'purple', cost: 'OOSS',  per: { vp: 2, of: 'grey',   from: 'neighbours' } },
-  { n: 'Traders Guild',      c: 'purple', cost: 'GPT',   per: { vp: 1, of: 'yellow', from: 'neighbours' } },
-  { n: 'Philosophers Guild', c: 'purple', cost: 'CCCPT', per: { vp: 1, of: 'green',  from: 'neighbours' } },
-  { n: 'Spies Guild',        c: 'purple', cost: 'CCCG',  per: { vp: 1, of: 'red',    from: 'neighbours' } },
-  { n: 'Strategists Guild',  c: 'purple', cost: 'OOST',  per: { vp: 1, of: 'defeat', from: 'neighbours' } },
-  { n: 'Shipowners Guild',   c: 'purple', cost: 'WWWGP', per: { vp: 1, of: 'brown+grey+purple', from: 'self' } },
-  { n: 'Scientists Guild',   c: 'purple', cost: 'WWOOP', sci: 'any' },
-  { n: 'Magistrates Guild',  c: 'purple', cost: 'WWWST', per: { vp: 1, of: 'blue',   from: 'neighbours' } },
-  { n: 'Builders Guild',     c: 'purple', cost: 'SSCCG', per: { vp: 1, of: 'stage',  from: 'neighbours+self' } },
+  { n: 'Workers Guild',      c: 'purple', cost: 'COOSW',  per: { vp: 1, of: 'brown',  from: 'neighbours' } },
+  { n: 'Craftsmens Guild',   c: 'purple', cost: 'OSS',    per: { vp: 2, of: 'grey',   from: 'neighbours' } },
+  { n: 'Magistrates Guild',  c: 'purple', cost: 'STWWW',  per: { vp: 1, of: 'blue',   from: 'neighbours' } },
+  { n: 'Traders Guild',      c: 'purple', cost: 'GPT',    per: { vp: 1, of: 'yellow', from: 'neighbours' } },
+  { n: 'Spies Guild',        c: 'purple', cost: 'CCG',    per: { vp: 1, of: 'red',    from: 'neighbours' } },
+  { n: 'Philosophers Guild', c: 'purple', cost: 'CCCPT',  per: { vp: 1, of: 'green',  from: 'neighbours' } },
+  { n: 'Shipowners Guild',   c: 'purple', cost: 'GPWWW',  per: { vp: 1, of: 'brown+grey+purple', from: 'self' } },
+  { n: 'Scientists Guild',   c: 'purple', cost: 'OOPWW',  sci: 'any' },
+  { n: 'Decorators Guild',   c: 'purple', cost: 'OOST',   vpIfWonder: 7 },
+  { n: 'Builders Guild',     c: 'purple', cost: 'CCGSSS', per: { vp: 1, of: 'stage',  from: 'neighbours+self' } },
 ];
 
 export const BASE_AGES = [AGE1, AGE2, AGE3];
@@ -178,74 +204,50 @@ export const BASE_AGES = [AGE1, AGE2, AGE3];
 // 3 VP, something in the middle, 7 VP. B-sides are where the boards get their
 // character, and several of them grant an ability rather than points:
 //
-//   freePerAge   one card an Age built without paying for it. Offered beside
-//                the price rather than instead of it, because choosing WHICH
-//                card to spend it on is the whole of the ability
-//   playLast     play the seventh card of an Age instead of binning it, as a
-//                turn of your own taken after everyone else has finished
-//   copyGuild    at the end, a copy of one neighbour's guild, scored from your
-//                chair rather than from theirs
-//
-// Those three work, and so does `salvage` on Halikarnassos.
-//
-// These boards are the FIRST edition, and they are exactly it. Every stage was
-// compared against luxons/seven-wonders, an unrelated implementation with no
-// shared ancestry: all 42 stages and all 7 starting resources match, once you
-// allow for it writing L where this writes T for the loom.
-//
-// The second edition (2020) rebalanced the boards, and 27 of those 44 figures
-// changed. Babylon and Olympia swapped starting resources; Babylon's night
-// side lost a stage; Halikarnassos was re-costed end to end; Alexandria's day
-// side finishes on papyrus and cloth rather than two glass. Olympia's night
-// side no longer copies a guild at all — it builds the first and the last card
-// of each Age for nothing instead — and its day side builds the first card of
-// each COLOUR free rather than one card an Age. So `copyGuild` is a first
-// edition ability and `freePerAge` is a first edition reading of a second
-// edition one.
-//
-// An earlier version of this comment said the wiki's wonder pages were wrong.
-// They are not: they are second edition, which is why they disagreed. The one
-// board the publisher's own rulebook happens to print — Alexandria, day side,
-// on page 2 of the 2020 English rules — has papyrus and cloth on its third
-// stage, matching the wiki against this table.
-//
-// Nothing has been changed. Going to second edition is not a re-costing of
-// seven boards, it is an edition change: the same rebalance altered cards too,
-// and those have not been audited. The three abilities are keyed off the flags
-// rather than off stage positions, so whenever that happens they move with
-// their stage and nothing else has to.
+//   freeFirstOfColour  the first card you build of each colour costs nothing
+//   freeFirstOfAge     the first card you build in each Age costs nothing
+//   freeLastOfAge      ... and so does the last one
+//   playLast           play the seventh card of an Age instead of binning it,
+//                      as a turn of your own after everyone else has finished
+//   salvage            take the discard pile and build one card out of it free
 //
 // A stage that produces a resource produces it for you only — wonder production
 // can't be sold to a neighbour, which is what notTrade marks.
+//
+// These are the SECOND edition boards. Every cost here was read from the
+// 7 Wonders wiki's wonder pages; Alexandria's day side is the one board the
+// publisher's own 2020 rulebook prints (page 2), and it matches. Note that
+// Babylon's night side has two stages, not three, and that Olympia no longer
+// copies a guild — the first edition's Strategists Guild went the same way.
 
 export const WONDERS = [
   { n: 'Gizah', res: 'S', sides: {
-    A: [{ cost: 'SS', vp: 3 }, { cost: 'WWW', vp: 5 }, { cost: 'SSSS', vp: 7 }],
-    B: [{ cost: 'WW', vp: 3 }, { cost: 'SSS', vp: 5 }, { cost: 'CCC', vp: 5 }, { cost: 'SSSSP', vp: 7 }],
+    A: [{ cost: 'WW', vp: 3 }, { cost: 'CCT', vp: 5 }, { cost: 'SSSS', vp: 7 }],
+    B: [{ cost: 'WW', vp: 3 }, { cost: 'SSS', vp: 5 }, { cost: 'CCC', vp: 5 }, { cost: 'PSSSS', vp: 7 }],
   } },
-  { n: 'Babylon', res: 'C', sides: {
-    A: [{ cost: 'CC', vp: 3 }, { cost: 'WWW', sci: 'any' }, { cost: 'CCCC', vp: 7 }],
-    B: [{ cost: 'CT', vp: 3 }, { cost: 'WWG', act: 'playLast' }, { cost: 'CCCP', sci: 'any' }],
+  { n: 'Babylon', res: 'W', sides: {
+    A: [{ cost: 'CC', vp: 3 }, { cost: 'OOT', sci: 'any' }, { cost: 'WWWW', vp: 7 }],
+    B: [{ cost: 'SS', act: 'playLast' }, { cost: 'CCCG', sci: 'any' }],
   } },
-  { n: 'Olympia', res: 'W', sides: {
-    A: [{ cost: 'WW', vp: 3 }, { cost: 'SS', act: 'freePerAge' }, { cost: 'OO', vp: 7 }],
-    B: [{ cost: 'WW', trade: { with: 'both', kind: 'raw' } }, { cost: 'SS', vp: 5 }, { cost: 'OOT', act: 'copyGuild' }],
+  { n: 'Olympia', res: 'C', sides: {
+    A: [{ cost: 'SS', vp: 3 }, { cost: 'WW', act: 'freeFirstOfColour' }, { cost: 'CCC', vp: 7 }],
+    B: [{ cost: 'OO', vp: 2, act: 'freeFirstOfAge' }, { cost: 'CCC', vp: 3, act: 'freeLastOfAge' }, { cost: 'GPT', vp: 5 }],
   } },
   { n: 'Rhodos', res: 'O', sides: {
     A: [{ cost: 'WW', vp: 3 }, { cost: 'CCC', shield: 2 }, { cost: 'OOOO', vp: 7 }],
     B: [{ cost: 'SSS', vp: 3, shield: 1, coins: 3 }, { cost: 'OOOO', vp: 4, shield: 1, coins: 4 }],
   } },
   { n: 'Alexandria', res: 'G', sides: {
-    A: [{ cost: 'SS', vp: 3 }, { cost: 'OO', give: 'W/S/C/O', notTrade: true }, { cost: 'GG', vp: 7 }],
-    B: [{ cost: 'CC', give: 'W/S/C/O', notTrade: true }, { cost: 'WW', give: 'G/P/T', notTrade: true }, { cost: 'SSS', vp: 7 }],
+    A: [{ cost: 'SS', vp: 3 }, { cost: 'OO', give: 'W/S/O/C', notTrade: true }, { cost: 'PT', vp: 7 }],
+    B: [{ cost: 'CC', give: 'W/S/O/C', notTrade: true }, { cost: 'OOO', give: 'G/P/T', notTrade: true }, { cost: 'WWWW', vp: 7 }],
   } },
   { n: 'Ephesos', res: 'P', sides: {
-    A: [{ cost: 'SS', vp: 3 }, { cost: 'WW', coins: 9 }, { cost: 'PP', vp: 7 }],
-    B: [{ cost: 'SS', vp: 2, coins: 4 }, { cost: 'WW', vp: 3, coins: 4 }, { cost: 'GPT', vp: 5, coins: 4 }],
+    A: [{ cost: 'CC', vp: 3 }, { cost: 'WW', coins: 9 }, { cost: 'GOO', vp: 7 }],
+    B: [{ cost: 'SS', vp: 2, coins: 4 }, { cost: 'WW', vp: 3, coins: 4 }, { cost: 'OOT', vp: 5, coins: 4 }],
   } },
   { n: 'Halikarnassos', res: 'T', sides: {
-    A: [{ cost: 'CC', vp: 3 }, { cost: 'OOO', salvage: true }, { cost: 'TT', vp: 7 }],
-    B: [{ cost: 'OO', vp: 2, salvage: true }, { cost: 'CCC', vp: 1, salvage: true }, { cost: 'GPT', salvage: true }],
+    A: [{ cost: 'OO', vp: 3 }, { cost: 'GP', salvage: true }, { cost: 'SSS', vp: 7 }],
+    B: [{ cost: 'CC', vp: 2, salvage: true }, { cost: 'GP', vp: 1, salvage: true }, { cost: 'WWW', salvage: true }],
   } },
 ];
 
@@ -256,7 +258,8 @@ export const START_COINS_LEADERS = 6;   // Leaders: you need money to hire them
 export const CARDS_PER_AGE = 7;
 
 // Winning a conflict is worth more as the ages go on; losing always costs one,
-// and the defeat tokens stay on your board for the Strategists Guild to count.
+// and the defeat tokens stay on your board — Cynisca pays for a board with none
+// on it, Telesilla sweeps yours away, and Tomyris posts hers to the winner.
 export const MILITARY_WIN = { 1: 1, 2: 3, 3: 5 };
 export const MILITARY_LOSS = -1;
 
@@ -362,20 +365,12 @@ export const CITY_CARDS = [
 //   Memorial          III  cash in your defeat tokens and discard them: the
 //                          first card that would REMOVE tokens from a board
 
-// The three guilds Cities adds. They join the same pile, and the number drawn
-// is unchanged — still player count plus two.
-//
-// Two of the three carried the same filler cost as the black cards did. The
-// wiki lists them under different translations — Forgers Guild and Shadow
-// Guild — but the effects match exactly, so the costs are theirs. The third has
-// no counterpart on that list under any name, so its cost is still a guess and
-// is marked as one.
-export const CITY_GUILDS = [
-  { n: 'Counterfeiters Guild', c: 'purple', cost: 'GOOOT', vp: 5, loss: 3 },
-  { n: 'Guild Of Shadows',     c: 'purple', cost: 'PSSW',  per: { vp: 1, of: 'black', from: 'neighbours' } },
-  // ⚠ cost unverified: no guild on the wiki's list scores victory tokens
-  { n: 'Mourners Guild',       c: 'purple', cost: 'GPT',   per: { vp: 1, of: 'victory', from: 'neighbours' } },
-];
+// Cities adds no guilds. Its contents are 42 black cards, diplomacy tokens,
+// debt tokens and coins — the first edition's Counterfeiters Guild, Guild Of
+// Shadows and Mourners Guild are not part of the second edition box. Mourners,
+// along with the Architects and Gamers guilds, is a promo the publisher still
+// hands out as a separate card with its own rules sheet; none of the three is
+// in here.
 
 // Debt is measured in victory points, one per coin you could not pay.
 export const DEBT_VP = -1;

@@ -1292,6 +1292,7 @@ function cardGist(c) {
   if (c.cleanVp) bits.push(`${c.cleanVp} VP if you never lose a conflict`);
   if (c.loneVp) bits.push(`${c.loneVp} VP if this stays your only leader`);
   if (c.pairVp) bits.push('VP per matching pair of victory tokens, at their value');
+  if (c.vpIfWonder) bits.push(`${c.vpIfWonder} VP if your wonder is finished`);
   if (c.per) {
     const per = [];
     if (c.per.coins) per.push(`${c.per.coins} coin${c.per.coins > 1 ? 's' : ''}`);

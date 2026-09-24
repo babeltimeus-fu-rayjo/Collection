@@ -66,6 +66,15 @@ for (const [n, opts] of CONFIGS) {
   }
   const roster = Array.from({ length: n }, (_, s) => ({ seat: s, name: 'P' + s, bot: true }));
   const G = SW.newMatch(roster, opts);
+  // The one structural fact the card table has to satisfy: an Age deals seven
+  // cards a player, eight with Cities. handSize is derived by division, so a
+  // deck that is short or long shows up here as a fraction of a card each and
+  // nowhere else — which is how a wrong `at` column would hide.
+  // ... and eight seats are not "the seven-player game plus one": the deck is
+  // built at the seven-player scale and the seven black cards make 56, which
+  // deals seven each again.
+  const want = n >= 8 ? 7 : (opts.cities ? 8 : 7);
+  if (G.handSize !== want) bad(`${n}p: deals ${G.handSize} a player, expected ${want}`);
   const label = `${n}p${opts.cities ? ' +cities' : ''}${opts.teams ? ' +teams' : ''}`;
   console.log(`${label.padEnd(20)} 25 games ok — deals ${G.handSize}, plays ${G.handSize - 1} an Age`);
 }

@@ -16,7 +16,7 @@
 
 import {
   RAW, MANUFACTURED, RESOURCES, RES_NAME, COLOUR_NAME,
-  BASE_AGES, GUILDS, WONDERS, CITY_CARDS, CITY_GUILDS, DEBT_VP,
+  BASE_AGES, GUILDS, WONDERS, CITY_CARDS, DEBT_VP,
   LEADERS, LEADERS_PER_PLAYER,
   START_COINS, START_COINS_LEADERS, CARDS_PER_AGE,
   MILITARY_WIN, MILITARY_LOSS, SCIENCE_SET_BONUS,
@@ -109,10 +109,8 @@ function buildAge(age, nPlayers, opts, rnd) {
     }
   }
   if (age === 3) {
-    // guilds: player count + 2, drawn at random — Cities adds three to the pile
-    // but not to the number drawn
-    const pool = opts.cities ? GUILDS.concat(CITY_GUILDS) : GUILDS;
-    for (const g of shuffle(pool.slice(), rnd).slice(0, scale + 2)) out.push({ ...g, age: 3 });
+    // guilds: player count + 2 of the ten, drawn at random
+    for (const g of shuffle(GUILDS.slice(), rnd).slice(0, scale + 2)) out.push({ ...g, age: 3 });
   }
   if (opts.cities) {
     // as many black cards as there are players, drawn blind; the rest of the
@@ -362,6 +360,7 @@ export function newMatch(roster, opts = {}) {
         leaders: [],           // Leaders: recruited one an Age, four drafted
         draft: [],             // ... and what is still going round the table
         bonusUsed: false,      // Berenice: her extra coin, once a turn
+        builtThisAge: 0,       // Olympia: whether the first one is still to come
         hand: [],
       };
     }),
@@ -566,6 +565,7 @@ function dealAge(G) {
   G.turn = 1;
   G.phase = 'play';
   G.picks = {};
+  for (const p of G.players) p.builtThisAge = 0;
 }
 
 // ---------------------------------------------------------------- what you may do
@@ -609,14 +609,25 @@ export function optionsFor(G, seat) {
     if (c.freeColour) freeCol.add(c.freeColour);
     if (c.freeColourAge && !p.freeAgeUsed[`${c.freeColourAge}-${G.age}`]) freeOnce.add(c.freeColourAge);
   }
-  if (hasAct(p, 'freePerAge') && !p.freeAgeUsed[`any-${G.age}`]) freeOnce.add('any');
+
+  // Olympia. Unlike Caligula's, these are conditions and not allowances —
+  // there is nothing to spend or save, so they apply themselves.
+  const lastTurn = G.turn >= (G.handSize || CARDS_PER_AGE) - 1;
+  const gratis = (card) => {
+    if (hasAct(p, 'freeFirstOfColour') && !p.built.some((c) => c.c === card.c)) return 'colour';
+    if (hasAct(p, 'freeFirstOfAge') && !p.builtThisAge) return 'age';
+    if (hasAct(p, 'freeLastOfAge') && lastTurn) return 'last';
+    return null;
+  };
 
   return p.hand.map((card) => {
     const dup = alreadyBuilt(p, card.n);
     let play = null, playFree = null;
     if (!dup) {
+      const olympia = gratis(card);
       if (unlocked.has(card.n)) play = { coins: 0, left: 0, right: 0, chain: true };
       else if (freeCol.has(card.c)) play = { coins: 0, left: 0, right: 0, gift: card.c };
+      else if (olympia) play = { coins: 0, left: 0, right: 0, gift: olympia };
       else {
         const pay = payWithDiscount(G, seat, card.cost, card.c);
         if (pay) {
@@ -868,6 +879,7 @@ function settlePick(G, p, card, pick, charges) {
     return shown;
   }
   if (pick.pay.once) p.freeAgeUsed[`${pick.pay.gift}-${G.age}`] = true;
+  p.builtThisAge += 1;
   p.built.push(card);
   applyImmediate(G, p, card);
   buildEffects(G, p, card, pick);
@@ -1117,7 +1129,6 @@ function countFor(G, seat, per) {
     const q = playerBySeat(G, s);
     if (!q) continue;
     if (per.of === 'stage') n += q.stagesBuilt.length;
-    else if (per.of === 'defeat') n += q.tokens.filter((t) => t < 0).length;
     else if (per.of === 'victory') n += q.tokens.filter((t) => t > 0).length;
     else {
       const colours = per.of.split('+');
@@ -1233,29 +1244,9 @@ export function scoreFor(G, seat) {
     }
   }
 
-  // Olympia's night side takes a copy of one guild from either side at the very
-  // end. The copy scores from YOUR chair, not from the chair you took it out of
-  // — the Workers Guild counts the brown cards of YOUR neighbours — and the
-  // Scientists Guild is a symbol rather than points, so both are priced and the
-  // better one taken. The copy is not a card in your city: nothing that counts
-  // purple cards counts it.
-  const sciBase = bestScienceOf(counts.slice(), choices, sciOpt);
-  let copyVp = 0, copySci = 0;
-  if (hasAct(p, 'copyGuild')) {
-    let canCopyWild = false;
-    for (const sn of [leftOf(G, seat), rightOf(G, seat)]) {
-      const q = playerBySeat(G, sn);
-      if (!q || q.seat === seat) continue;
-      for (const c of q.built) {
-        if (c.c !== 'purple') continue;
-        if (c.sci === 'any') { canCopyWild = true; continue; }
-        copyVp = Math.max(copyVp, (c.vp || 0) + (c.per && c.per.vp ? countFor(G, seat, c.per) * c.per.vp : 0));
-      }
-    }
-    if (canCopyWild) copySci = bestScienceOf(counts.slice(), choices.concat([ALL_SYMBOLS]), sciOpt) - sciBase;
-    if (copySci >= copyVp) copyVp = 0;
-    else copySci = 0;
-  }
+  // The Decorators want the whole wonder finished and nothing else.
+  const wonderDone = p.stagesBuilt.length >= p.stages.length;
+  const guildBonus = p.built.reduce((a, c) => a + (c.vpIfWonder && wonderDone ? c.vpIfWonder : 0), 0);
 
   const parts = {
     military: p.tokens.reduce((a, b) => a + b, 0),
@@ -1263,9 +1254,9 @@ export function scoreFor(G, seat) {
     wonder: p.stagesBuilt.reduce((a, s) => a + (s.vp || 0), 0),
     civilian: p.built.filter((c) => c.c === 'blue').reduce((a, c) => a + (c.vp || 0), 0),
     commercial: perVp(p.built.filter((c) => c.c === 'yellow')),
-    guild: perVp(p.built.filter((c) => c.c === 'purple')) + copyVp,
+    guild: perVp(p.built.filter((c) => c.c === 'purple')) + guildBonus,
     leaders: lead,
-    science: sciBase + copySci,
+    science: bestScienceOf(counts.slice(), choices, sciOpt),
     debt: -p.debt,
   };
   parts.total = Object.values(parts).reduce((a, b) => a + b, 0);
@@ -1449,6 +1440,10 @@ function valueOf(G, seat, card) {
   if (card.per) {
     const n = countFor(G, seat, card.per);
     v += n * (card.per.vp || 0) + n * (card.per.coins || 0) / 3;
+  }
+  if (card.vpIfWonder) {
+    const p2 = playerBySeat(G, seat);
+    v += card.vpIfWonder * (p2.stagesBuilt.length + 1) / (p2.stages.length + 1);
   }
   if (card.chains && card.chains.length) v += 0.5;      // opens something later
   return v;
