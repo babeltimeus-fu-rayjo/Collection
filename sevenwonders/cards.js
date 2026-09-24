@@ -186,20 +186,34 @@ export const BASE_AGES = [AGE1, AGE2, AGE3];
 //   copyGuild    at the end, a copy of one neighbour's guild, scored from your
 //                chair rather than from theirs
 //
-// Those three work, and so does `salvage` on Halikarnassos. What is NOT
-// settled is whether the costs and stages below are the printed ones. The wiki
-// that settled the Cities and Leaders cards is no help here: its wonder pages
-// are hand-written infoboxes in poor repair. Ephesos' day side has a template
-// parameter leaking into an effect string, every day side is missing its
-// victory points, and Olympia is described with powers that are not this
-// game's ("the first card of each colour for free"). Parts of it are plainly
-// right — Gizah's and Rhodos' night sides match this table exactly, and it puts
-// Halikarnassos' discard power on the same four stages. Parts plainly are not:
-// it gives Babylon's night side two stages where this has three, and moves
-// playLast from the second to the first. Nothing here was changed on its
-// say-so, for the same reason the base-game guild costs were not. The three
-// abilities are keyed off the flags, so if a stage moves later they move with
-// it and nothing else has to change.
+// Those three work, and so does `salvage` on Halikarnassos.
+//
+// These boards are the FIRST edition, and they are exactly it. Every stage was
+// compared against luxons/seven-wonders, an unrelated implementation with no
+// shared ancestry: all 42 stages and all 7 starting resources match, once you
+// allow for it writing L where this writes T for the loom.
+//
+// The second edition (2020) rebalanced the boards, and 27 of those 44 figures
+// changed. Babylon and Olympia swapped starting resources; Babylon's night
+// side lost a stage; Halikarnassos was re-costed end to end; Alexandria's day
+// side finishes on papyrus and cloth rather than two glass. Olympia's night
+// side no longer copies a guild at all — it builds the first and the last card
+// of each Age for nothing instead — and its day side builds the first card of
+// each COLOUR free rather than one card an Age. So `copyGuild` is a first
+// edition ability and `freePerAge` is a first edition reading of a second
+// edition one.
+//
+// An earlier version of this comment said the wiki's wonder pages were wrong.
+// They are not: they are second edition, which is why they disagreed. The one
+// board the publisher's own rulebook happens to print — Alexandria, day side,
+// on page 2 of the 2020 English rules — has papyrus and cloth on its third
+// stage, matching the wiki against this table.
+//
+// Nothing has been changed. Going to second edition is not a re-costing of
+// seven boards, it is an edition change: the same rebalance altered cards too,
+// and those have not been audited. The three abilities are keyed off the flags
+// rather than off stage positions, so whenever that happens they move with
+// their stage and nothing else has to.
 //
 // A stage that produces a resource produces it for you only — wonder production
 // can't be sold to a neighbour, which is what notTrade marks.
