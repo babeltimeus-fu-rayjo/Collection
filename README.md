@@ -21,7 +21,12 @@ An unofficial fan implementation of **Toy Battle** by Paolo Mori & Alessandro Zu
   | --- | --- |
   | Castle Field | from the board — objective 7, 15 bases, 14 Medals |
   | Tropical Pool | from the board — objective 6, 13 bases, 4 H.Q., 12 Medals; the numbers on its value triangles are still placeholders |
-  | City of Clouds, Volcanic Jungle, Cursed Cemetery, Caribbean Sea, Station Metal-X, Battlefield | invented, awaiting photographs |
+  | City of Clouds | from the board — objective 8, 14 bases, 16 Medals; landscape, drawn turned so your H.Q. is at the bottom |
+  | Volcanic Jungle | from the board — objective 7, 13 bases, 14 Medals |
+  | Cursed Cemetery | from the board — objective 7, 15 bases, 14 Medals; landscape |
+  | Caribbean Sea, Station Metal-X, Battlefield | invented, being transcribed |
+
+  One pattern held on every region of every board transcribed: **a region ringed by n bases holds n − 2 Medals**, and an H.Q. on the ring is not counted. `test-effects.mjs` enforces it, which makes the Medal count a free check on the paths — a missed or invented path changes how many bases ring a region. The objective has also been exactly half the board's Medals every time.
 
 - **Boards are written as data** at the top of `game.js`: nodes at free coordinates tagged `hq0`/`hq1`/`special`/`only:…`, a list of path segments, and regions given as the nodes that bound them. The real boards needed all of that — regions ringed by three to six bases, regions walled by a moat rather than a path, two H.Q. a side, value limits on individual H.Q. — and the parser rejects a path to a node that does not exist or a region whose nodes are not even joined.
 - **The bot searches.** It runs alpha-beta over the real engine with iterative deepening, and it is not allowed to cheat: the opponent's rack is hidden and both reserves are shuffled, so before searching it throws away everything it is not entitled to know and deals a plausible hand from what is public — its own rack, the stacks on the board (which the rules let anyone inspect), the discard, and how many Troops the opponent holds. Pointing at a Troop for the Battlefield sniper is blind by the rules, so it generates one move standing for all of them. Four skill levels are picked in the lobby; each carries a wall-clock ceiling as well as a node budget, so the same level plays the same way on a laptop and a phone and cannot freeze the tab.

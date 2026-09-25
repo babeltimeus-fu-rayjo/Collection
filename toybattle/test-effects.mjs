@@ -94,6 +94,27 @@ console.log('— Tropical Pool restrictions —');
   if (open) ok(TB.TROOP_ORDER.every((k) => TB.valueAllowed(G, open.id, k)), `${open.label} has no triangle and should take any Troop`);
 }
 
+console.log('— every printed board pays Medals = bases − 2 —');
+{
+  // Noticed by the boards' owner while marking them up, and it held on every
+  // region of every board transcribed so far: a region ringed by n bases holds
+  // n − 2 Medals, and an H.Q. on the ring is not counted. So the Medal count is
+  // a free check on the paths — a missed or invented path changes how many
+  // bases ring a region and breaks it. The invented boards never followed it.
+  let checked = 0;
+  for (const terrain of TB.TERRAINS.filter((x) => x.source === 'board')) {
+    for (const r of terrain.regions) {
+      const want = r.around.length - 2;
+      ok(r.medals === want, `${terrain.name}: region ${r.ring.map((n) => terrain.nodes[n].label).join('-')} has ${r.medals} Medals, but ${r.around.length} bases means ${want}`);
+      checked++;
+    }
+    const total = terrain.regions.reduce((s, r) => s + r.medals, 0);
+    // and the printed objective has been exactly half the board every time
+    ok(terrain.target * 2 === total, `${terrain.name}: objective ${terrain.target} is not half its ${total} Medals — check the badge`);
+  }
+  console.log(`  ${checked} regions on ${TB.TERRAINS.filter((x) => x.source === 'board').length} printed boards, all consistent`);
+}
+
 console.log('— capturing an H.Q. ends it at once —');
 {
   // the whole column, blue H.Q. at (1,5) up to (1,1), so the chain is real
@@ -202,25 +223,28 @@ console.log('— Station Metal-X shields Troop effects —');
 
 console.log('— Cursed Cemetery raises the dead —');
 {
-  const G = stage('cemetery', { rack0: ['roxy'], discard: [['skully', 0], ['jumbo', 1]] });
-  const grave = G.terrain.nodes.find((n) => n.special && TB.reachable(G, 0).has(n.id));
-  ok(grave, 'a grave should be reachable from the blue H.Q. at the start');
-  if (grave) {
-    TB.applyMove(G, 0, { kind: 'place', tile: G.players[0].rack[0].id, node: grave.id });
+  // On the printed board no H.Q. touches a grave, so blue has to hold the base
+  // beside one first. Found by walking the board rather than naming nodes, so
+  // re-reading the board cannot break the test.
+  const G0 = stage('cemetery');
+  const blueHq = G0.terrain.nodes.filter((n) => n.hq === 0).map((n) => n.id);
+  const step = G0.terrain.nodes.find((n) => n.hq === null && blueHq.some((h) => G0.terrain.adj[h].includes(n.id))
+    && G0.terrain.adj[n.id].some((m) => G0.terrain.nodes[m].special));
+  ok(step, 'some base beside the blue H.Q. should lead to a grave');
+  const graveId = step && G0.terrain.adj[step.id].find((m) => G0.terrain.nodes[m].special);
+  if (step) {
+    const G = stage('cemetery', { rack0: ['roxy'], discard: [['skully', 0], ['jumbo', 1]], board: { [step.id]: [['roxy', 0]] } });
+    TB.applyMove(G, 0, { kind: 'place', tile: G.players[0].rack[0].id, node: graveId });
     ok(G.pending && G.pending.kind === 'undead', 'the grave should offer a Troop back');
-    const mine = G.discard.find((t) => t.owner === 0);
+    const mine = G.discard.find((x) => x.owner === 0);
     const r = TB.applyMove(G, 0, { kind: 'undead', tile: mine.id });
     ok(r.ok, 'taking your own Troop back: ' + r.error);
-    ok(G.players[0].rack.some((t) => t.key === 'skully'), 'it should be on the rack');
-    ok(!G.discard.some((t) => t.id === mine.id), 'and out of the discard');
-  }
-}
-{
-  const G = stage('cemetery', { rack0: ['roxy'], discard: [['jumbo', 1]] });
-  const grave = G.terrain.nodes.find((n) => n.special && TB.reachable(G, 0).has(n.id));
-  if (grave) {
-    TB.applyMove(G, 0, { kind: 'place', tile: G.players[0].rack[0].id, node: grave.id });
-    ok(!G.pending, 'with only the enemy’s Troops in the discard the grave should not stop to ask');
+    ok(G.players[0].rack.some((x) => x.key === 'skully'), 'it should be on the rack');
+    ok(!G.discard.some((x) => x.id === mine.id), 'and out of the discard');
+
+    const H = stage('cemetery', { rack0: ['roxy'], discard: [['jumbo', 1]], board: { [step.id]: [['roxy', 0]] } });
+    TB.applyMove(H, 0, { kind: 'place', tile: H.players[0].rack[0].id, node: graveId });
+    ok(!H.pending, 'with only the enemy’s Troops in the discard the grave should not stop to ask');
   }
 }
 

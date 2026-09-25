@@ -227,109 +227,81 @@ const TERRAIN_DEFS = [
     ],
   },
   {
-    key: 'clouds', name: 'City of Clouds', power: 'splendor', target: 4, source: 'invented',
-    tag: "A wide, airy shelf of cloud. Short lines, long views.",
+    // Transcribed from a photograph of the printed board with its paths and
+    // Medals marked on it by the board's owner, 2026-09-25. A landscape board:
+    // blue's H.Q. at the left end of the rainbow, red's at the right, and the
+    // renderer turns it so each player still sees their own at the bottom.
+    // Laid out in a 150 x 100 frame to keep the board's proportions. Half-turn
+    // symmetric: a↔n b↔m c↔l d↔k e↔j f↔i g↔h B↔R. f, g, h and i are the four
+    // special bases on the rainbow, each with the draw icon. Nothing runs
+    // along the rainbow itself. The objective, 8, is read from the corner
+    // badge; the owner marked every Medal but l-m-h, which the pattern gives.
+    key: 'clouds', name: 'City of Clouds', power: 'splendor', target: 8, source: 'board',
+    tag: 'Cloud-bridges looping over a rainbow. Every base on the rainbow hands you a Troop.',
     nodes: {
-      R: [1, 0, 'hq1'],
-      a: [0, 1],
-      b: [1, 1],
-      c: [2, 1],
-      d: [3, 1],
-      e: [0, 2],
-      f: [1, 2, 'special'],
-      g: [2, 2],
-      h: [3, 2],
-      i: [0, 3],
-      j: [1, 3],
-      k: [2, 3, 'special'],
-      l: [3, 3],
-      m: [0, 4],
-      n: [1, 4],
-      o: [2, 4],
-      p: [3, 4],
-      B: [2, 5, 'hq0'],
+      a: [15, 10], b: [45, 10], c: [75, 10], d: [105, 10], e: [135, 10],
+      B: [5, 50, 'hq0'],
+      f: [30, 50, 'special'], g: [60, 50, 'special'], h: [90, 50, 'special'], i: [120, 50, 'special'],
+      R: [145, 50, 'hq1'],
+      j: [15, 90], k: [45, 90], l: [75, 90], m: [105, 90], n: [135, 90],
     },
-    paths: 'R-b a-b b-c c-d a-e b-f c-g d-h e-f f-g g-h e-i f-j g-k h-l i-j j-k k-l i-m j-n k-o l-p m-n n-o o-p o-B R-a R-c n-B p-B',
+    paths: 'a-b b-c c-d d-e j-k k-l l-m m-n B-a B-j R-e R-n '
+      + 'a-f b-f j-f k-f b-g c-g k-g l-g c-h d-h l-h m-h d-i e-i m-i n-i',
     regions: [
-      [1, 'a b e f'],
-      [2, 'b c f g'],
-      [1, 'c d g h'],
-      [1, 'f g j k'],
-      [1, 'i j m n'],
-      [2, 'j k n o'],
-      [1, 'k l o p'],
+      [1, 'a b f'], [1, 'b c g'], [1, 'c d h'], [1, 'd e i'],
+      [1, 'j k f'], [1, 'k l g'], [1, 'l m h'], [1, 'm n i'],
+      [1, 'B a f j'], [2, 'f b g k'], [2, 'g c h l'], [2, 'h d i m'], [1, 'i e R n'],
     ],
   },
   {
-    key: 'jungle', name: 'Volcanic Jungle', power: 'eruption', target: 5, source: 'invented',
-    tag: "The volcano does not take sides. It throws whoever stands too close.",
+    // Transcribed from a photograph of the printed board with its paths and
+    // Medals marked by the board's owner, 2026-09-25. Blue's H.Q. is top-right
+    // and red's bottom-left — the reverse of Castle Field. Laid out in a
+    // 100 x 132 frame to keep the board's proportions. Half-turn symmetric
+    // about the centre base g: a↔m b↔l c↔k d↔j e↔i f↔h B↔R. c and k are the
+    // volcano platforms. The two triangles beside the H.Q. (b-B-e, i-l-R)
+    // hold no Medals and are not listed.
+    key: 'jungle', name: 'Volcanic Jungle', power: 'eruption', target: 7, source: 'board',
+    tag: 'Two volcanoes and the jungle between them. Stand too close and you get thrown.',
     nodes: {
-      R: [1, 0, 'hq1'],
-      a: [0, 1],
-      b: [1, 1],
-      c: [2, 1],
-      d: [3, 1],
-      e: [0, 2],
-      f: [1, 2, 'special'],
-      g: [2, 2],
-      h: [3, 2],
-      i: [0, 3],
-      j: [1, 3],
-      k: [2, 3, 'special'],
-      l: [3, 3],
-      m: [0, 4],
-      n: [1, 4],
-      o: [2, 4],
-      p: [3, 4],
-      B: [2, 5, 'hq0'],
+      a: [20, 10], b: [50, 10], B: [80, 10, 'hq0'],
+      c: [16, 38, 'special'], d: [50, 38], e: [80, 38],
+      f: [20, 66], g: [50, 66], h: [80, 66],
+      i: [20, 94], j: [50, 94], k: [84, 94, 'special'],
+      R: [20, 122, 'hq1'], l: [50, 122], m: [80, 122],
     },
-    paths: 'R-b a-b b-c c-d a-e b-f c-g d-h e-f f-g g-h e-i f-j g-k h-l i-j j-k k-l i-m j-n k-o l-p m-n n-o o-p o-B R-a R-c n-B p-B',
+    paths: 'a-b b-B a-c b-d b-e B-e c-d c-f d-g e-h f-g g-h f-i g-j h-k j-k i-R i-l j-l k-m R-l l-m',
     regions: [
-      [1, 'a b e f'],
-      [2, 'b c f g'],
-      [1, 'c d g h'],
-      [1, 'e f i j'],
-      [1, 'f g j k'],
-      [1, 'g h k l'],
-      [1, 'i j m n'],
-      [2, 'j k n o'],
-      [1, 'k l o p'],
+      [2, 'a b d c'],
+      [3, 'b e h g d'],
+      [2, 'c d g f'],
+      [3, 'f g j l i'],
+      [2, 'g h k j'],
+      [2, 'j k m l'],
     ],
   },
   {
-    key: 'cemetery', name: 'Cursed Cemetery', power: 'undead', target: 5, source: 'invented',
-    tag: "Nothing here stays buried. Four open graves hand your losses back.",
+    // Transcribed from a photograph of the printed board with its paths and
+    // Medals marked by the board's owner, 2026-09-25. A landscape board: red's
+    // H.Q. top-left, blue's bottom-right, the four pumpkins (the graves) near
+    // the corners. Laid out in a 150 x 100 frame. Half-turn symmetric about the
+    // centre base h: a↔o b↔n c↔m d↔l e↔k f↔j g↔i R↔B. The two triangles beside
+    // the H.Q. (R-g-j, f-i-B) hold no Medals and are not listed.
+    key: 'cemetery', name: 'Cursed Cemetery', power: 'undead', target: 7, source: 'board',
+    tag: 'Nothing here stays buried. Four pumpkin graves hand your losses back.',
     nodes: {
-      R: [2, 0, 'hq1'],
-      a: [0, 1],
-      b: [1, 1],
-      c: [2, 1, 'special'],
-      d: [3, 1],
-      e: [0, 2],
-      f: [1, 2, 'special'],
-      g: [2, 2],
-      h: [3, 2],
-      i: [0, 3],
-      j: [1, 3],
-      k: [2, 3, 'special'],
-      l: [3, 3],
-      m: [0, 4],
-      n: [1, 4, 'special'],
-      o: [2, 4],
-      p: [3, 4],
-      B: [1, 5, 'hq0'],
+      R: [13, 17, 'hq1'], a: [39, 16, 'special'], b: [81, 16], c: [120, 18, 'special'],
+      d: [60, 33], e: [101, 34], f: [138, 34],
+      g: [41, 47], h: [81, 50], i: [121, 53],
+      j: [24, 66], k: [61, 67], l: [102, 67],
+      m: [42, 84, 'special'], n: [81, 84], o: [123, 84, 'special'], B: [149, 83, 'hq0'],
     },
-    paths: 'R-c a-b b-c c-d a-e b-f c-g d-h e-f f-g g-h e-i f-j g-k h-l i-j j-k k-l i-m j-n k-o l-p m-n n-o o-p n-B R-b R-d m-B o-B',
+    paths: 'R-g R-j a-g a-d d-b d-g b-e e-c c-f e-f d-h d-k e-h e-l f-i f-B '
+      + 'g-j h-k h-l i-l j-k j-m m-k k-n n-l l-o i-o i-B',
     regions: [
-      [1, 'a b e f'],
-      [1, 'b c f g'],
-      [1, 'c d g h'],
-      [1, 'e f i j'],
-      [2, 'f g j k'],
-      [1, 'g h k l'],
-      [1, 'i j m n'],
-      [1, 'j k n o'],
-      [1, 'k l o p'],
+      [1, 'a d g'], [2, 'd b e h'], [1, 'e c f'], [2, 'e f i l'],
+      [1, 'd h k'], [1, 'e h l'], [2, 'g d k j'],
+      [1, 'j k m'], [2, 'k h l n'], [1, 'l i o'],
     ],
   },
   {

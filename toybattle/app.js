@@ -1183,14 +1183,43 @@ function unit(view) {
 // Both players sit at a board, so both should be looking up it: your own
 // H.Q. is always at the bottom of your screen. Red simply reads the board
 // rotated a half turn, which is what sitting opposite means.
+// Which way up to draw the board. Everyone should see their own H.Q. at the
+// bottom of the screen, as they would sitting at the table, but the printed
+// boards do not agree on where that is: Castle Field puts blue's keep at the
+// bottom, Volcanic Jungle at the top, City of Clouds at the left end. So the
+// drawing is turned by quarter turns until the line from your own H.Q. to the
+// enemy's points up the screen. Cached per view, like the scale.
+let frameFor = null;
+let frameOf = null;
+function frame(view) {
+  if (frameFor === view) return frameOf;
+  const t = view.terrain;
+  const centre = (seat) => {
+    const hs = t.nodes.filter((n) => n.hq === seat);
+    return [hs.reduce((s, n) => s + n.x, 0) / hs.length, hs.reduce((s, n) => s + n.y, 0) / hs.length];
+  };
+  const [mx, my] = centre(view.you === 1 ? 1 : 0);
+  const [ox, oy] = centre(view.you === 1 ? 0 : 1);
+  const dx = ox - mx;
+  const dy = oy - my;
+  // clockwise quarter turns that bring (dx, dy) round to pointing up
+  const turns = Math.abs(dy) >= Math.abs(dx) ? (dy < 0 ? 0 : 2) : (dx > 0 ? 3 : 1);
+  frameFor = view;
+  frameOf = { turns, w: turns % 2 ? t.h : t.w, h: turns % 2 ? t.w : t.h };
+  return frameOf;
+}
+
 function place(view, x, y) {
-  const flip = view.you === 1;
+  const t = view.terrain;
   // board coordinates are arbitrary units with an arbitrary origin, so
-  // normalise against the Terrain's own bounding box before scaling
-  const nx = x - view.terrain.x0;
-  const ny = y - view.terrain.y0;
-  const px = flip ? view.terrain.w - nx : nx;
-  const py = flip ? view.terrain.h - ny : ny;
+  // normalise against the Terrain's own bounding box before turning it
+  const nx = x - t.x0;
+  const ny = y - t.y0;
+  const { turns } = frame(view);
+  const [px, py] = turns === 0 ? [nx, ny]
+    : turns === 1 ? [t.h - ny, nx]
+      : turns === 2 ? [t.w - nx, t.h - ny]
+        : [ny, t.w - nx];
   const s = unit(view);
   return [PAD_X + px * s, PAD_Y + py * s];
 }
@@ -1255,8 +1284,9 @@ function renderBoard(view) {
   const t = view.terrain;
   const host = $('#board');
   const s = unit(view);
-  const W = PAD_X * 2 + t.w * s;
-  const H = PAD_Y * 2 + t.h * s;
+  const { w: fw, h: fh } = frame(view);
+  const W = PAD_X * 2 + fw * s;
+  const H = PAD_Y * 2 + fh * s;
   const svg = sv('svg', 'board-svg', { viewBox: `0 0 ${W} ${H}`, role: 'img' });
   const targets = liveTargets(view);
 
