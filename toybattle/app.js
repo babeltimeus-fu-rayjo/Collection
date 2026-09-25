@@ -1152,17 +1152,30 @@ function sv(tag, cls, attrs = {}) {
 
 // ---------------------------------------------------------------- the board
 
-// Every Terrain is taller than it is wide, and drawing them on a square
-// lattice made that worse: Castle Field came out 312x600, so on a laptop the
-// board shrank to fit the available height and used about a quarter of the
-// width it had been given. Spreading the columns and tightening the rows
-// costs the graph nothing — a path is a path wherever it is drawn.
-const CELL_X = 116;  // horizontal distance between neighbouring node centres
-const CELL_Y = 88;   // vertical
+// Board coordinates are whatever units the Terrain was written in — Castle
+// Field is in percentages of the printed board — so the drawing scales itself
+// instead of assuming a lattice: whatever the typical path length is on this
+// board becomes STEP pixels, and the bases are sized against that.
+const STEP = 96;     // pixels a median-length path should span
 const PAD_X = 58;
 const PAD_Y = 52;
 const BASE = 62;     // side of a base square
 const HQ = 76;
+
+// One cache slot keyed on the view, which arrives fresh with every broadcast.
+let scaleFor = null;
+let scaleOf = 1;
+function unit(view) {
+  if (scaleFor === view) return scaleOf;
+  const t = view.terrain;
+  const lens = t.edges
+    .map(([p, q]) => Math.hypot(t.nodes[p].x - t.nodes[q].x, t.nodes[p].y - t.nodes[q].y))
+    .sort((p, q) => p - q);
+  const median = lens.length ? lens[Math.floor(lens.length / 2)] : 1;
+  scaleFor = view;
+  scaleOf = STEP / (median || 1);
+  return scaleOf;
+}
 
 // Both players sit at a board, so both should be looking up it: your own
 // H.Q. is always at the bottom of your screen. Red simply reads the board
@@ -1175,7 +1188,8 @@ function place(view, x, y) {
   const ny = y - view.terrain.y0;
   const px = flip ? view.terrain.w - nx : nx;
   const py = flip ? view.terrain.h - ny : ny;
-  return [PAD_X + px * CELL_X, PAD_Y + py * CELL_Y];
+  const s = unit(view);
+  return [PAD_X + px * s, PAD_Y + py * s];
 }
 
 // A region is the ground enclosed by the bases that ring it, so it is drawn
@@ -1237,8 +1251,9 @@ function shadow(view) {
 function renderBoard(view) {
   const t = view.terrain;
   const host = $('#board');
-  const W = PAD_X * 2 + t.w * CELL_X;
-  const H = PAD_Y * 2 + t.h * CELL_Y;
+  const s = unit(view);
+  const W = PAD_X * 2 + t.w * s;
+  const H = PAD_Y * 2 + t.h * s;
   const svg = sv('svg', 'board-svg', { viewBox: `0 0 ${W} ${H}`, role: 'img' });
   const targets = liveTargets(view);
 
@@ -1253,7 +1268,7 @@ function renderBoard(view) {
   for (const r of t.regions) {
     const [cx, cy] = place(view, r.x, r.y);
     const g = sv('g', `tb-region${r.owner === null ? '' : ` taken ${side(r.owner)}`}`);
-    g.append(sv('path', 'tb-region-pad', { d: regionPath(r.around.map((n) => place(view, t.nodes[n].x, t.nodes[n].y))) }));
+    g.append(sv('path', 'tb-region-pad', { d: regionPath((r.ring || r.around).map((n) => place(view, t.nodes[n].x, t.nodes[n].y))) }));
     if (r.owner === null) {
       for (let i = 0; i < r.medals; i++) {
         const off = (i - (r.medals - 1) / 2) * 20;

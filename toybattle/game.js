@@ -136,32 +136,44 @@ export const POWERS = {
 
 const TERRAIN_DEFS = [
   {
-    key: 'castle', name: 'Castle Field', power: 'retreat', target: 4,
-    tag: "Stone keeps on a green field. The gentlest of the eight — start here.",
+    // Transcribed from a photograph of the printed board, 2026-09-25. The
+    // board is a half-turn symmetric, so the bottom half is the top half
+    // rotated; coordinates are percentages of the board, origin top-left.
+    // Its Medals objective is printed in the corner: seven.
+    key: 'castle', name: 'Castle Field', power: 'retreat', target: 7,
+    tag: 'Stone keeps on a green field, a moat at each end and a river across the middle.',
     nodes: {
-      R: [1, 0, 'hq1'],
-      a: [0, 1],
-      b: [1, 1],
-      c: [2, 1],
-      d: [0, 2],
-      e: [1, 2, 'special'],
-      f: [2, 2],
-      g: [0, 3],
-      h: [1, 3, 'special'],
-      i: [2, 3],
-      j: [0, 4],
-      k: [1, 4],
-      l: [2, 4],
-      B: [1, 5, 'hq0'],
+      R: [50, 4, 'hq1'],
+      a: [16, 12],
+      b: [84, 12],
+      c: [42, 26],
+      d: [58, 26],
+      e: [18, 33, 'special'],
+      f: [82, 33, 'special'],
+      g: [19, 50],
+      h: [50, 50],
+      i: [81, 50],
+      j: [18, 67, 'special'],
+      k: [82, 67, 'special'],
+      l: [42, 74],
+      m: [58, 74],
+      n: [16, 88],
+      o: [84, 88],
+      B: [50, 96, 'hq0'],
     },
-    paths: 'R-b a-b b-c a-d b-e c-f d-e e-f d-g e-h f-i g-h h-i g-j h-k i-l j-k k-l k-B R-a R-c j-B l-B',
+    // The keep's only ways out are the two drawbridges over its moat, and each
+    // leads to a corner base — nothing runs from the keep to the inner pair.
+    paths: 'R-a R-b a-c a-e b-d b-f c-e d-f c-g c-h d-h d-i e-g f-i '
+      + 'B-n B-o n-l n-j o-m o-k l-j m-k l-h l-g m-h m-i j-g k-i',
     regions: [
-      [1, 'a b d e'],
-      [1, 'b c e f'],
-      [2, 'd e g h'],
-      [2, 'e f h i'],
-      [1, 'g h j k'],
-      [1, 'h i k l'],
+      [3, 'c h d'],
+      [1, 'a e c'],
+      [1, 'b f d'],
+      [2, 'c g l h'],
+      [2, 'd h m i'],
+      [3, 'l h m'],
+      [1, 'o k m'],
+      [1, 'n j l'],
     ],
   },
   {
@@ -415,29 +427,37 @@ const TERRAIN_DEFS = [
 
 // -------------------------------------------------------------- map parsing
 
-// Order a region's bases into the ring they actually form, or return null if
-// they do not form one. Regions are three to six bases, so a backtracking
-// walk is instant and says exactly what is wrong when a board is mistyped.
+// Order a region's nodes along the boundary they actually form. A region is
+// usually ringed by paths all the way round, but not always: the grass beside
+// Castle Field's keep is closed on one side by the moat, and water is not a
+// path you can walk. So a closed ring is tried first and an open chain second
+// — either is a real boundary, and anything else is a mistyped board.
+// Regions are three to six nodes, so backtracking is instant.
 function ringOrder(members, adj) {
   const n = members.length;
-  if (n < 3) return null;
+  if (n < 2) return null;
   const set = new Set(members);
-  const start = members[0];
-  const path = [start];
-  const used = new Set([start]);
-  const walk = () => {
-    if (path.length === n) return adj[path[path.length - 1]].includes(start);
-    for (const next of adj[path[path.length - 1]]) {
-      if (!set.has(next) || used.has(next)) continue;
-      used.add(next);
-      path.push(next);
-      if (walk()) return true;
-      path.pop();
-      used.delete(next);
+  const attempt = (closed) => {
+    for (const start of members) {
+      const path = [start];
+      const used = new Set([start]);
+      const walk = () => {
+        if (path.length === n) return closed ? adj[path[path.length - 1]].includes(start) : true;
+        for (const next of adj[path[path.length - 1]]) {
+          if (!set.has(next) || used.has(next)) continue;
+          used.add(next);
+          path.push(next);
+          if (walk()) return true;
+          path.pop();
+          used.delete(next);
+        }
+        return false;
+      };
+      if (walk()) return { order: path, closed };
     }
-    return false;
+    return null;
   };
-  return walk() ? path : null;
+  return attempt(true) || attempt(false);
 }
 
 function parseTerrain(def) {
@@ -478,19 +498,29 @@ function parseTerrain(def) {
     adj[b].push(a);
   }
 
+  // A region is listed as the ring that encloses it, which on the printed
+  // boards can run along an H.Q. as well as along bases — the grass beside
+  // Castle Field's keep is walled by the moat on one side. An H.Q. is not a
+  // base, though ("the H.Q. is not a base"), and nobody can stand on their
+  // own, so it bounds the region without being part of what you must hold.
+  // `ring` is the shape; `around` is the bases you have to occupy.
   const regions = def.regions.map(([medals, members], i) => {
     const ids = members.trim().split(/\s+/).map((l) => {
       const id = idOf.get(l);
-      if (id === undefined) throw new Error(`${def.key}: region ${i} names base ${l}, which does not exist`);
-      if (nodes[id].hq !== null) throw new Error(`${def.key}: region ${i} names ${l}, which is an H.Q. — regions are ringed by bases`);
+      if (id === undefined) throw new Error(`${def.key}: region ${i} names ${l}, which does not exist`);
       return id;
     });
-    const ring = ringOrder(ids, adj);
-    if (!ring) throw new Error(`${def.key}: region ${i} (${members}) is not closed — those bases do not ring anything`);
+    const found = ringOrder(ids, adj);
+    if (!found) throw new Error(`${def.key}: region ${i} (${members}) is not a boundary — those nodes are not even joined in a line`);
+    const ring = found.order;
+    const around = ring.filter((n) => nodes[n].hq === null);
+    if (!around.length) throw new Error(`${def.key}: region ${i} is walled only by H.Q. and could never be taken`);
     return {
       id: i,
       medals,
-      around: ring,
+      ring,
+      closed: found.closed,
+      around,
       x: ring.reduce((a, n) => a + nodes[n].x, 0) / ring.length,
       y: ring.reduce((a, n) => a + nodes[n].y, 0) / ring.length,
       owner: null,

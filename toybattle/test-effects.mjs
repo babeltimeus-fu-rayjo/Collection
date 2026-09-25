@@ -13,9 +13,14 @@ const ok = (cond, m) => { if (!cond) bad(m); };
 const ROSTER = [{ seat: 0, name: 'Blue', bot: false }, { seat: 1, name: 'Red', bot: false }];
 let uid = 0;
 const mk = (key, owner) => ({ id: `x${uid++}`, key, owner });
-const nodeAt = (G, x, y) => G.terrain.nodes.find((n) => n.x === x && n.y === y).id;
+// Nodes are addressed by the label the board data gives them. On Castle Field
+// the H.Q. are B and R, and each reaches only its two corner bases across a
+// drawbridge: B to n and o, R to a and b. The shortest run between the two
+// keeps is B-n-l-h-c-a-R, so n is the base beside blue's H.Q. and e is one of
+// the special bases.
+const at = (G, label) => G.terrain.nodes.find((n) => n.label === label).id;
 const NODE = {};
-for (const t of TB.TERRAINS) NODE[t.key] = (x, y) => t.nodes.find((n) => n.x === x && n.y === y).id;
+for (const t of TB.TERRAINS) NODE[t.key] = (label) => t.nodes.find((n) => n.label === label).id;
 
 // A blank board with exactly the Troops we say, and nothing else.
 function stage(terrainKey, { rack0 = [], rack1 = [], board = {}, turn = 0, discard = [] } = {}) {
@@ -41,21 +46,21 @@ ok(TB.canCover('kwak', 'kwak'), 'Kwak covers Kwak');
 console.log('— the connection rule —');
 {
   const G = stage('castle', { rack0: ['roxy', 'hook'] });
-  const near = nodeAt(G, 1, 4);   // beside the blue H.Q.
-  const far = nodeAt(G, 1, 1);    // four rows away, nothing of ours between
+  const near = at(G, 'n');   // across blue's drawbridge
+  const far = at(G, 'c');    // right across the board, nothing of ours between
   ok(TB.canPlace(G, 0, near, 'roxy'), 'a base beside your own H.Q. is always open');
   ok(!TB.canPlace(G, 0, far, 'roxy'), 'a base with no chain back to your H.Q. is closed');
   ok(TB.canPlace(G, 0, far, 'hook'), 'Hook ignores the connection rule');
-  const foeHq = nodeAt(G, 1, 0);
+  const foeHq = at(G, 'R');
   ok(!TB.canPlace(G, 0, foeHq, 'hook'), 'Hook still needs a connection for the enemy H.Q. — it is not a base');
-  ok(!TB.canPlace(G, 0, nodeAt(G, 1, 5), 'roxy'), 'you may never place on your own H.Q.');
+  ok(!TB.canPlace(G, 0, at(G, 'B'), 'roxy'), 'you may never place on your own H.Q.');
 }
 {
   // a chain only counts through bases you hold on top
-  const G = stage('castle', { rack0: ['skully'], board: { [NODE.castle(1, 4)]: [['roxy', 0]] } });
-  const mid = nodeAt(G, 1, 3);
-  ok(TB.canPlace(G, 0, mid, 'skully'), 'holding the base below extends the chain one step');
-  const beyond = nodeAt(G, 1, 2);
+  const G = stage('castle', { rack0: ['skully'], board: { [NODE.castle('n')]: [['roxy', 0]] } });
+  const mid = at(G, 'l');
+  ok(TB.canPlace(G, 0, mid, 'skully'), 'holding the base beyond the bridge extends the chain one step');
+  const beyond = at(G, 'h');
   ok(!TB.canPlace(G, 0, beyond, 'skully'), 'the chain does not skip a base you do not hold');
 }
 
@@ -73,7 +78,7 @@ console.log('— Tropical Pool restrictions —');
   const noJoker = { ...G, terrain: { ...G.terrain, nodes: G.terrain.nodes.map((n) => (n.id === buoy.id ? { ...n, only: [1, 2, 3, 4] } : n)) } };
   ok(!TB.valueAllowed(noJoker, buoy.id, 'kwak'), 'a list without the joker keeps the joker out');
   ok(TB.valueAllowed(noJoker, buoy.id, 'skully'), 'and still admits the numbers it names');
-  const hq = nodeAt(G, 1, 0);
+  const hq = at(G, 'R');
   ok(TB.valueAllowed(G, hq, 'roxy'), 'the H.Q. lists 5–7, so a 7 may storm it');
   ok(!TB.valueAllowed(G, hq, 'skully'), 'a 1 may not storm an H.Q. that lists 5–7');
 }
@@ -82,33 +87,35 @@ console.log('— capturing an H.Q. ends it at once —');
 {
   // the whole column, blue H.Q. at (1,5) up to (1,1), so the chain is real
   const G = stage('castle', { rack0: ['roxy'], board: {
-    [NODE.castle(1, 4)]: [['roxy', 0]],
-    [NODE.castle(1, 3)]: [['roxy', 0]],
-    [NODE.castle(1, 2)]: [['roxy', 0]],
-    [NODE.castle(1, 1)]: [['roxy', 0]],
+    [NODE.castle('n')]: [['roxy', 0]],
+    [NODE.castle('l')]: [['roxy', 0]],
+    [NODE.castle('h')]: [['roxy', 0]],
+    [NODE.castle('c')]: [['roxy', 0]],
+    [NODE.castle('a')]: [['roxy', 0]],
   } });
-  ok(!TB.canPlace(G, 0, nodeAt(G, 1, 0), 'skully') === false, 'the enemy H.Q. should be open at the end of a held chain');
-  const r = TB.applyMove(G, 0, { kind: 'place', tile: G.players[0].rack[0].id, node: nodeAt(G, 1, 0) });
+  ok(!TB.canPlace(G, 0, at(G, 'R'), 'skully') === false, 'the enemy H.Q. should be open at the end of a held chain');
+  const r = TB.applyMove(G, 0, { kind: 'place', tile: G.players[0].rack[0].id, node: at(G, 'R') });
   ok(r.ok, 'placing on the enemy H.Q. from an adjacent held base should be legal: ' + r.error);
   ok(G.phase === 'over' && G.winner === 0, 'capturing the enemy H.Q. wins immediately');
 }
 {
   // and one break in that chain closes it again
   const G = stage('castle', { rack0: ['roxy'], board: {
-    [NODE.castle(1, 4)]: [['roxy', 0]],
-    [NODE.castle(1, 2)]: [['roxy', 0]],
-    [NODE.castle(1, 1)]: [['roxy', 0]],
+    [NODE.castle('n')]: [['roxy', 0]],
+    [NODE.castle('h')]: [['roxy', 0]],
+    [NODE.castle('c')]: [['roxy', 0]],
+    [NODE.castle('a')]: [['roxy', 0]],
   } });
-  ok(!TB.canPlace(G, 0, nodeAt(G, 1, 0), 'roxy'), 'a chain with a gap in it does not reach the enemy H.Q.');
+  ok(!TB.canPlace(G, 0, at(G, 'R'), 'roxy'), 'a chain with a gap in it does not reach the enemy H.Q.');
 }
 
 console.log('— regions —');
 {
   // the region nearest the blue H.Q., so the last corner is honestly reachable
   const G = stage('castle');
-  const region = G.terrain.regions.find((r) => r.around.includes(NODE.castle(1, 4)));
+  const region = G.terrain.regions.find((r) => r.around.includes(NODE.castle('n')));
   ok(region, 'the blue side of Castle Field should have a region on it');
-  const last = NODE.castle(1, 3);
+  const last = NODE.castle('l');
   for (const n of region.around) if (n !== last) G.board[n] = [mk('roxy', 0)];
   G.players[0].rack = [mk('skully', 0)];
   const [a] = region.around.filter((n) => n !== last);
@@ -126,21 +133,21 @@ console.log('— Skully, Star and the rack cap —');
 {
   const G = stage('castle', { rack0: ['skully'] });
   const before = G.players[0].reserve.length;
-  TB.applyMove(G, 0, { kind: 'place', tile: G.players[0].rack[0].id, node: nodeAt(G, 1, 4) });
+  TB.applyMove(G, 0, { kind: 'place', tile: G.players[0].rack[0].id, node: at(G, 'n') });
   ok(G.players[0].rack.length === 2, `Skully should draw 2, rack is ${G.players[0].rack.length}`);
   ok(G.players[0].reserve.length === before - 2, 'those two came out of the reserve');
 }
 {
   // "If you already have 7 Troops on your rack, you draw only one."
   const G = stage('castle', { rack0: ['skully', 'roxy', 'roxy', 'roxy', 'roxy', 'roxy', 'roxy', 'roxy'] });
-  TB.applyMove(G, 0, { kind: 'place', tile: G.players[0].rack[0].id, node: nodeAt(G, 1, 4) });
+  TB.applyMove(G, 0, { kind: 'place', tile: G.players[0].rack[0].id, node: at(G, 'n') });
   ok(G.players[0].rack.length === TB.RACK_MAX, `rack should stop at ${TB.RACK_MAX}, got ${G.players[0].rack.length}`);
 }
 
 console.log('— XB-42 —');
 {
   const G = stage('castle', { rack0: ['xb42'], rack1: ['roxy', 'jumbo', 'skully'] });
-  TB.applyMove(G, 0, { kind: 'place', tile: G.players[0].rack[0].id, node: nodeAt(G, 1, 4) });
+  TB.applyMove(G, 0, { kind: 'place', tile: G.players[0].rack[0].id, node: at(G, 'n') });
   ok(G.players[1].rack.length === 2, `XB-42 should blast one off their rack, they hold ${G.players[1].rack.length}`);
   ok(G.discard.length === 1 && G.discard[0].owner === 1, 'the blasted Troop goes to the discard faceup');
 }
@@ -148,17 +155,17 @@ console.log('— XB-42 —');
 console.log('— Jumbo —');
 {
   const G = stage('castle', { rack0: ['jumbo'], board: {
-    [nodeAt(stage('castle'), 1, 4)]: [['roxy', 0]],
-    [nodeAt(stage('castle'), 1, 3)]: [['skully', 1]],
+    [NODE.castle('n')]: [['roxy', 0]],
+    [NODE.castle('j')]: [['skully', 1]],
   } });
   // Jumbo lands next to the enemy Troop, then may shove it
-  const r = TB.applyMove(G, 0, { kind: 'place', tile: G.players[0].rack[0].id, node: nodeAt(G, 0, 4) });
+  const r = TB.applyMove(G, 0, { kind: 'place', tile: G.players[0].rack[0].id, node: at(G, 'o') });
   ok(r.ok, 'Jumbo placement: ' + r.error);
   ok(!G.pending, 'Jumbo with no adjacent enemy should not stop to ask');
 }
 {
   const G = stage('castle');
-  const foot = nodeAt(G, 1, 4), target = nodeAt(G, 1, 3);
+  const foot = at(G, 'n'), target = at(G, 'l');
   G.board[foot] = [mk('roxy', 0)];
   G.board[target] = [mk('skully', 1)];
   G.players[0].rack = [mk('jumbo', 0)];
@@ -214,7 +221,7 @@ console.log('— the tie goes against whoever ran dry —');
   G.turn = 1;
   // blue has nothing at all; ending the turn hands the turn to blue, who is stuck
   G.players[1].rack = [mk('roxy', 1)];
-  TB.applyMove(G, 1, { kind: 'place', tile: G.players[1].rack[0].id, node: nodeAt(G, 1, 1) });
+  TB.applyMove(G, 1, { kind: 'place', tile: G.players[1].rack[0].id, node: at(G, 'a') });
   ok(G.phase === 'over', 'a player who can neither draw nor place ends the game');
   ok(G.winner === 1, 'on a Medals tie the player who ran dry loses, so Red should win');
 }

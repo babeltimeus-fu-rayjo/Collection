@@ -90,14 +90,34 @@ console.log('— but it does read its own rack —');
 
 console.log('\n— and it takes a win when one is there —');
 {
-  const NODE = (t, x, y) => t.nodes.find((n) => n.x === x && n.y === y).id;
+  // build the chain out of whatever the board actually is, rather than naming
+  // coordinates a re-transcribed board would not have: walk from blue's H.Q.
+  // to red's and hold every base along the way
   const castle = TB.terrainByKey('castle');
+  const chainToRed = (() => {
+    const adj = castle.nodes.map(() => []);
+    for (const [x, y] of castle.edges) { adj[x].push(y); adj[y].push(x); }
+    const goal = castle.nodes.find((n) => n.hq === 1).id;
+    const from = castle.nodes.filter((n) => n.hq === 0).map((n) => n.id);
+    const prev = new Map(from.map((n) => [n, null]));
+    const queue = [...from];
+    while (queue.length) {
+      const n = queue.shift();
+      for (const m of adj[n]) {
+        if (prev.has(m)) continue;
+        prev.set(m, n);
+        if (m === goal) { const path = []; let at = n; while (at !== null && castle.nodes[at].hq === null) { path.push(at); at = prev.get(at); } return path; }
+        if (castle.nodes[m].hq === null) queue.push(m);
+      }
+    }
+    return [];
+  })();
   let took = 0;
   for (const level of ['quick', 'steady', 'sharp']) {
     const G = TB.newMatch(roster(), { terrain: 'castle' });
     G.turn = 0;
     G.board = G.terrain.nodes.map(() => []);
-    for (const y of [4, 3, 2, 1]) G.board[NODE(castle, 1, y)] = [{ id: 'x' + y, key: 'roxy', owner: 0 }];
+    chainToRed.forEach((n, i) => { G.board[n] = [{ id: 'x' + i, key: 'roxy', owner: 0 }]; });
     G.players[0].rack = [{ id: 'w', key: 'skully', owner: 0 }];
     const mv = TB.botChoose(G, 0, { level });
     const isWin = mv && mv.kind === 'place' && G.terrain.nodes[mv.node].hq === 1;
