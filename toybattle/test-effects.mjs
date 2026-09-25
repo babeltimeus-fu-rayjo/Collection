@@ -22,6 +22,32 @@ const at = (G, label) => G.terrain.nodes.find((n) => n.label === label).id;
 const NODE = {};
 for (const t of TB.TERRAINS) NODE[t.key] = (label) => t.nodes.find((n) => n.label === label).id;
 
+// The shortest run of bases from blue's H.Q. to the nearest special base, so
+// a test can hold the run and then step onto the special. Worked out from the
+// board rather than named, because on the printed boards no special base sits
+// beside an H.Q. and re-reading a board must not break the tests.
+function approach(key, seat = 0) {
+  const t = TB.terrainByKey(key);
+  const start = t.nodes.filter((n) => n.hq === seat).map((n) => n.id);
+  const prev = new Map(start.map((n) => [n, null]));
+  const queue = [...start];
+  while (queue.length) {
+    const n = queue.shift();
+    for (const m of t.adj[n]) {
+      if (prev.has(m) || t.nodes[m].hq !== null) continue;
+      prev.set(m, n);
+      if (t.nodes[m].special) {
+        const hold = [];
+        for (let at = n; at !== null && t.nodes[at].hq === null; at = prev.get(at)) hold.push(at);
+        return { hold, target: m };
+      }
+      queue.push(m);
+    }
+  }
+  return null;
+}
+const holding = (ids) => Object.fromEntries(ids.map((id) => [id, [['roxy', 0]]]));
+
 // A blank board with exactly the Troops we say, and nothing else.
 function stage(terrainKey, { rack0 = [], rack1 = [], board = {}, turn = 0, discard = [] } = {}) {
   const G = TB.newMatch(ROSTER, { terrain: terrainKey });
@@ -109,8 +135,10 @@ console.log('— every printed board pays Medals = bases − 2 —');
       checked++;
     }
     const total = terrain.regions.reduce((s, r) => s + r.medals, 0);
-    // and the printed objective has been exactly half the board every time
-    ok(terrain.target * 2 === total, `${terrain.name}: objective ${terrain.target} is not half its ${total} Medals — check the badge`);
+    // and the two sides' objectives have added up to the board's Medals every
+    // time — half each on a symmetric board
+    ok(terrain.targets[0] + terrain.targets[1] === total,
+      `${terrain.name}: objectives ${terrain.targets.join(' + ')} do not add up to its ${total} Medals — check the badges`);
   }
   console.log(`  ${checked} regions on ${TB.TERRAINS.filter((x) => x.source === 'board').length} printed boards, all consistent`);
 }
@@ -212,29 +240,23 @@ console.log('— Jumbo —');
 
 console.log('— Station Metal-X shields Troop effects —');
 {
-  const G = stage('metalx', { rack0: ['skully'] });
-  const plate = G.terrain.nodes.find((n) => n.special && TB.reachable(G, 0).has(n.id));
-  ok(plate, 'a shielded plate should be reachable from the blue H.Q. at the start');
-  if (plate) {
-    TB.applyMove(G, 0, { kind: 'place', tile: G.players[0].rack[0].id, node: plate.id });
+  const way = approach('metalx');
+  ok(way, 'blue should be able to reach a shielded plate');
+  if (way) {
+    const G = stage('metalx', { rack0: ['skully'], board: holding(way.hold) });
+    const r = TB.applyMove(G, 0, { kind: 'place', tile: G.players[0].rack[0].id, node: way.target });
+    ok(r.ok, 'stepping onto the plate: ' + r.error);
     ok(G.players[0].rack.length === 0, 'Skully on a shielded plate draws nothing');
   }
 }
 
 console.log('— Cursed Cemetery raises the dead —');
 {
-  // On the printed board no H.Q. touches a grave, so blue has to hold the base
-  // beside one first. Found by walking the board rather than naming nodes, so
-  // re-reading the board cannot break the test.
-  const G0 = stage('cemetery');
-  const blueHq = G0.terrain.nodes.filter((n) => n.hq === 0).map((n) => n.id);
-  const step = G0.terrain.nodes.find((n) => n.hq === null && blueHq.some((h) => G0.terrain.adj[h].includes(n.id))
-    && G0.terrain.adj[n.id].some((m) => G0.terrain.nodes[m].special));
-  ok(step, 'some base beside the blue H.Q. should lead to a grave');
-  const graveId = step && G0.terrain.adj[step.id].find((m) => G0.terrain.nodes[m].special);
-  if (step) {
-    const G = stage('cemetery', { rack0: ['roxy'], discard: [['skully', 0], ['jumbo', 1]], board: { [step.id]: [['roxy', 0]] } });
-    TB.applyMove(G, 0, { kind: 'place', tile: G.players[0].rack[0].id, node: graveId });
+  const way = approach('cemetery');
+  ok(way, 'blue should be able to reach a grave');
+  if (way) {
+    const G = stage('cemetery', { rack0: ['roxy'], discard: [['skully', 0], ['jumbo', 1]], board: holding(way.hold) });
+    TB.applyMove(G, 0, { kind: 'place', tile: G.players[0].rack[0].id, node: way.target });
     ok(G.pending && G.pending.kind === 'undead', 'the grave should offer a Troop back');
     const mine = G.discard.find((x) => x.owner === 0);
     const r = TB.applyMove(G, 0, { kind: 'undead', tile: mine.id });
@@ -242,8 +264,8 @@ console.log('— Cursed Cemetery raises the dead —');
     ok(G.players[0].rack.some((x) => x.key === 'skully'), 'it should be on the rack');
     ok(!G.discard.some((x) => x.id === mine.id), 'and out of the discard');
 
-    const H = stage('cemetery', { rack0: ['roxy'], discard: [['jumbo', 1]], board: { [step.id]: [['roxy', 0]] } });
-    TB.applyMove(H, 0, { kind: 'place', tile: H.players[0].rack[0].id, node: graveId });
+    const H = stage('cemetery', { rack0: ['roxy'], discard: [['jumbo', 1]], board: holding(way.hold) });
+    TB.applyMove(H, 0, { kind: 'place', tile: H.players[0].rack[0].id, node: way.target });
     ok(!H.pending, 'with only the enemy’s Troops in the discard the grave should not stop to ask');
   }
 }
