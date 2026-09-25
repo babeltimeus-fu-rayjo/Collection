@@ -16,7 +16,7 @@
 
 import {
   RAW, MANUFACTURED, RESOURCES, RES_NAME, COLOUR_NAME,
-  BASE_AGES, GUILDS, WONDERS, CITY_CARDS, DEBT_VP,
+  BASE_AGES, GUILDS, WONDERS, EXTRA_WONDERS, CITY_CARDS, DEBT_VP,
   LEADERS, LEADERS_PER_PLAYER,
   START_COINS, START_COINS_LEADERS, CARDS_PER_AGE,
   MILITARY_WIN, MILITARY_LOSS, SCIENCE_SET_BONUS,
@@ -346,7 +346,9 @@ export function newMatch(roster, opts = {}) {
     cities: !!opts.cities, leaders: !!opts.leaders,
     teams: !!opts.teams, sideMode: opts.sideMode || 'random',
   };
-  const boards = shuffle(WONDERS.slice());
+  // Each expansion brings two more boards, which also means eight players get
+  // eight different ones rather than two of them sharing.
+  const boards = shuffle(WONDERS.concat(EXTRA_WONDERS.filter((w) => o[w.needs])));
   const G = {
     proto: PROTO,
     mid: `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`,  // a new match clears the log
@@ -363,6 +365,8 @@ export function newMatch(roster, opts = {}) {
         seat: r.seat, name: r.name, bot: !!r.bot, botFor: false, connected: r.connected !== false,
         team: o.teams ? Math.floor(r.seat / 2) : null,
         wonder: board.n, side, wonderRes: board.res,
+        power: board.power ? board.power[side] : null,   // Roma: the board itself
+        entombed: [],          // Abu Simbel: leaders put under the board
         stages: board.sides[side].map((s) => ({ ...s })),
         stagesBuilt: [],
         coins: o.leaders ? START_COINS_LEADERS : START_COINS,
@@ -381,8 +385,8 @@ export function newMatch(roster, opts = {}) {
     }),
     hands: {},
     discard: [],
-    salvage: null,             // who is digging through it right now
-    salvageAsk: [],            // ... and who has earned the right to
+    choice: null,              // who the table is waiting on to pick something
+    choiceAsk: [],             // ... and who is queued behind them
     lastCard: [],              // Babylon: who still owes the Age one more card
     lateCards: 0,              // ... and how many it has played rather than binned
     picks: {},
@@ -415,6 +419,7 @@ const leaderDeck = (opts) => LEADERS
 function dealLeaders(G) {
   const deck = shuffle(leaderDeck(G.opts));
   for (const p of G.players) p.draft = deck.splice(0, LEADERS_PER_PLAYER);
+  G.leaderBox = deck;                 // what is left over — Roma comes back for it
   G.draftRound = 1;
   G.phase = 'draft';
   G.picks = {};
@@ -453,20 +458,30 @@ export function coinCost(card, age) {
   return card.coin === 'age' ? age : (card.coin || 0);
 }
 
+// What a leader costs this seat: its printed price, less Roma's discount and
+// less any her neighbours get for sitting beside her, and nothing at all for
+// Maecenas or for Roma's day side.
+export function leaderPrice(G, seat, card) {
+  const p = playerBySeat(G, seat);
+  if (p.built.some((c) => c.freeLeaders) || (p.power && p.power.freeLeaders)) return 0;
+  let off = (p.power && p.power.leaderOff) || 0;
+  for (const sn of [leftOf(G, seat), rightOf(G, seat)]) {
+    const q = playerBySeat(G, sn);
+    if (q && q.seat !== seat && q.power && q.power.nbLeaderOff) off += q.power.nbLeaderOff;
+  }
+  return Math.max(0, coinCost(card, G.age) - off);
+}
+
 // The same shape optionsFor returns, so one renderer draws both. The
 // difference is that a leader's price is always coins and never resources.
 export function leaderOptionsFor(G, seat) {
   const p = playerBySeat(G, seat);
   if (!p) return [];
-  const free = p.built.some((c) => c.freeLeaders);          // Maecenas
   const stage = nextStage(p);
-  const freeStages = p.built.some((c) => c.freeStages);
-  const stagePay = stage
-    ? (freeStages ? { coins: 0, left: 0, right: 0 } : payWithDiscount(G, seat, stage.cost, 'stage'))
-    : null;
+  const stagePay = stageBill(G, seat, stage);
   const canStage = !!(stage && stagePay && stagePay.coins <= p.coins);
   return p.leaders.map((card) => {
-    const price = free ? 0 : coinCost(card, G.age);
+    const price = leaderPrice(G, seat, card);
     return {
       id: card.id, name: card.n, colour: 'white',
       play: price <= p.coins ? { coins: price, left: 0, right: 0, coin: price } : null,
@@ -514,7 +529,9 @@ function resolveRecruit(G) {
     if (pick.how === 'wonder') {
       buildStage(G, p, card, charges);
     } else {
-      p.built.push(card);
+      // the Age is remembered because Abu Simbel pays double the leader's cost
+      // and an Age-priced leader's cost is whichever Age you took it in
+      p.built.push({ ...card, recruitedIn: G.age });
       applyImmediate(G, p, card);
       recruitEffects(G, p, card);
       chargeFor(G, p, card, charges);
@@ -531,7 +548,7 @@ function resolveRecruit(G) {
 // Solomon is recruited before the Age is dealt, so his dig through the pile
 // happens on last Age's leavings — which is the whole point of him.
 function finishRecruit(G) {
-  if (G.salvageAsk.length) return openSalvage(G, 'recruit');
+  if (G.choiceAsk.length) return openChoice(G, 'recruit');
   dealAge(G);
 }
 
@@ -600,15 +617,24 @@ export function nextStage(p) {
 // Everything a player could legally do with each card in hand, priced. The UI
 // renders straight off this and applyMove re-derives it, so the two can never
 // disagree about what was on offer.
+// What the next stage of a wonder costs. Petra is the only board that charges
+// coins on top of resources, and the Architect Firm — which stops you paying
+// resources for stages — does not cover those: its own rules sheet says the
+// coin cost is still owed.
+function stageBill(G, seat, stage) {
+  if (!stage) return null;
+  const p = playerBySeat(G, seat);
+  const free = p.built.some((c) => c.freeStages);
+  const bill = free ? { coins: 0, left: 0, right: 0 } : payWithDiscount(G, seat, stage.cost, 'stage');
+  return bill ? { ...bill, coins: bill.coins + (stage.coin || 0) } : null;
+}
+
 export function optionsFor(G, seat) {
   const p = playerBySeat(G, seat);
   if (!p) return [];
   const unlocked = chainUnlocks(p);
   const stage = nextStage(p);
-  const freeStages = p.built.some((c) => c.freeStages);   // Cities: Architect Firm
-  const stagePay = stage
-    ? (freeStages ? { coins: 0, left: 0, right: 0 } : payWithDiscount(G, seat, stage.cost, 'stage'))
-    : null;
+  const stagePay = stageBill(G, seat, stage);
 
   // Ramses waives a whole colour for good, so there is nothing to save and it
   // is applied without asking. Caligula waives one black card an Age and
@@ -670,10 +696,10 @@ export function applyMove(G, seat, move) {
   const p = playerBySeat(G, seat);
   if (!p) return { ok: false, error: 'Not at the table' };
   if (G.phase === 'over') return { ok: false, error: 'The game is over' };
-  if (G.phase === 'salvage') {
-    return move.kind === 'salvage'
-      ? doSalvage(G, p, move)
-      : { ok: false, error: 'Somebody is choosing from the discard' };
+  if (G.phase === 'choose') {
+    return move.kind === 'choose'
+      ? doChoose(G, p, move)
+      : { ok: false, error: 'Somebody is still choosing' };
   }
   if (G.phase === 'lastcard') {
     return move.kind === 'pick' ? doLastCard(G, p, move) : { ok: false, error: 'One last card to play' };
@@ -720,7 +746,7 @@ function doPick(G, p, move) {
 const SIMULTANEOUS = ['play', 'draft', 'recruit'];
 
 export function waitingOn(G) {
-  if (G.phase === 'salvage') return G.salvage ? [G.salvage.queue[0].seat] : [];
+  if (G.phase === 'choose') return G.choice ? [G.choice.queue[0].seat] : [];
   if (G.phase === 'lastcard') return G.lastCard.slice();
   if (!SIMULTANEOUS.includes(G.phase)) return [];
   return G.players.filter((p) => !G.picks[p.seat]).map((p) => p.seat);
@@ -755,7 +781,7 @@ function resolveTurn(G) {
 // they choose while the rest of the table waits — and the turn resumes from
 // this same function once the pile has been put back.
 function finishTurn(G) {
-  if (G.salvageAsk.length) return openSalvage(G, 'turn');
+  if (G.choiceAsk.length) return openChoice(G, 'turn');
   // shields and immediate coins are settled; now pass the hands on
   if (G.turn >= G.handSize - 1) return endAge(G);
   passHands(G);
@@ -763,59 +789,67 @@ function finishTurn(G) {
   G.phase = 'play';
 }
 
-// ---------------------------------------------------------------- the discard
+// ---------------------------------------------------------------- choosing
 //
-// Four things in the box reach into the discard pile and they all say the same
-// sentence: take the whole pile, choose one card, construct it for nothing.
-// Solomon and Cities' Forging Agency are word-for-word identical, and every
-// stage of Halikarnassos does it too. What they need from the engine is not a
-// field but a PHASE — one player choosing while everybody else waits — which
-// is why all four arrived together.
+// Some cards and some wonder stages do not resolve on their own: they stop the
+// table and ask one player to pick something. There are three of them, and they
+// share one phase, one queue and one way back to whatever was interrupted.
 //
-// The pile is not public. The rules have you pick it up, look through it,
-// take one and put the rest back without showing anyone, so viewFor hands the
-// list to the seat that is choosing and to nobody else.
+//   discard  take the whole discard pile and build one card out of it free.
+//            Halikarnassos, Solomon and Cities' Forging Agency all say this in
+//            the same words. The pile is NOT public — the rules have you pick it
+//            up, look through it and put the rest back without showing anyone —
+//            so viewFor hands the list to the chooser and to nobody else. And
+//            leaders sold during recruitment are set aside rather than
+//            discarded, so a thrown-away leader is not in there.
+//   bury     Abu Simbel puts a leader already standing in your city under the
+//            board. It stops doing whatever it did and pays twice its cost.
+//   extra    Roma's night side recruits one more leader out of hand, paid for.
 //
-// Leaders sold during Recruitment are NOT in here. They are set aside rather
-// than discarded, so a leader somebody threw away cannot be salvaged; the
-// discard pile is the Age-card pile.
+// Only the discard may be declined: the other two are things the card says you
+// do, and if there is nothing to do them with the turn skips straight past.
 
-// What this seat may take. Not the whole pile: you can never hold two cards of
-// the same name, so your own city thins it before you ever see it.
-export function salvageOptions(G, seat) {
+export function choiceOptions(G, seat, kind) {
   const p = playerBySeat(G, seat);
   if (!p) return [];
+  if (kind === 'bury') return p.built.filter((c) => c.c === 'white');
+  if (kind === 'extra') return p.leaders.filter((c) => leaderPrice(G, seat, c) <= p.coins);
+  // you can never hold two cards of the same name, so your own city thins the
+  // pile before you ever see it
   return G.discard.filter((c) => !alreadyBuilt(p, c.n));
 }
 
 const byRank = (a, b) => a.rank - b.rank;   // stable, so ties stay in seat order
 
-function openSalvage(G, resume) {
-  G.salvage = { queue: G.salvageAsk.sort(byRank), resume };
-  G.salvageAsk = [];
-  G.phase = 'salvage';
-  bumpFx(G, { kind: 'salvage', seat: G.salvage.queue[0].seat });
-  nextSalvage(G);
+function openChoice(G, resume) {
+  G.choice = { queue: G.choiceAsk.sort(byRank), resume };
+  G.choiceAsk = [];
+  G.phase = 'choose';
+  bumpFx(G, { kind: 'choose', seat: G.choice.queue[0].seat });
+  nextChoice(G);
 }
 
-// Hand the pile to the next person owed a look, skipping anyone it holds
-// nothing for, and resume the turn once nobody is left. A card taken out of
-// the pile can itself reach back into it — the Forging Agency is in there —
-// so the queue is drained rather than walked.
-function nextSalvage(G) {
+// Hand it to the next person owed a choice, skipping anyone who has nothing to
+// choose between, and resume once nobody is left. A card taken out of the pile
+// can itself reach back into it — the Forging Agency is in there — so the queue
+// is drained rather than walked.
+function nextChoice(G) {
   for (;;) {
-    if (G.salvageAsk.length) {
-      G.salvage.queue.push(...G.salvageAsk.sort(byRank));
-      G.salvageAsk = [];
+    if (G.choiceAsk.length) {
+      G.choice.queue.push(...G.choiceAsk.sort(byRank));
+      G.choiceAsk = [];
     }
-    const head = G.salvage.queue[0];
+    const head = G.choice.queue[0];
     if (!head) break;
-    if (salvageOptions(G, head.seat).length) return;
-    G.salvage.queue.shift();
-    addLog(G, `${playerBySeat(G, head.seat).name} finds nothing to take from the discard.`);
+    if (choiceOptions(G, head.seat, head.kind).length) return;
+    G.choice.queue.shift();
+    const who = playerBySeat(G, head.seat).name;
+    addLog(G, head.kind === 'discard' ? `${who} finds nothing to take from the discard.`
+      : head.kind === 'bury' ? `${who} has no leader to entomb.`
+      : `${who} cannot afford another leader.`);
   }
-  const resume = G.salvage.resume;
-  G.salvage = null;
+  const resume = G.choice.resume;
+  G.choice = null;
   if (resume === 'recruit') finishRecruit(G);
   else if (resume === 'age') resolveAge(G);
   else finishTurn(G);
@@ -834,19 +868,44 @@ function takeFromDiscard(G, p, card, why) {
   addLog(G, `${p.name} builds ${card.n} out of the discard for nothing (${why}).`);
 }
 
-function doSalvage(G, p, move) {
-  const head = G.salvage && G.salvage.queue[0];
+// Abu Simbel. The leader goes under the board: nothing that counts the white
+// cards in your city counts it any more, and it pays twice what it cost —
+// which for an Age-priced leader is whichever Age you took it in.
+function entomb(G, p, card) {
+  p.built = p.built.filter((c) => c.id !== card.id);
+  p.entombed.push(card);
+  addLog(G, `${p.name} seals ${card.n} beneath the wonder.`);
+}
+
+// Roma. One more leader, out of hand, at whatever it costs her.
+function recruitExtra(G, p, card) {
+  const price = leaderPrice(G, p.seat, card);
+  p.leaders = p.leaders.filter((c) => c.id !== card.id);
+  p.coins -= price;
+  const charges = [];
+  p.built.push({ ...card, recruitedIn: G.age });
+  applyImmediate(G, p, card);
+  recruitEffects(G, p, card);
+  chargeFor(G, p, card, charges);
+  applyCharges(G, charges);
+  addLog(G, `${p.name} also recruits ${card.n}${price ? ` for ${price}` : ''}.`);
+}
+
+function doChoose(G, p, move) {
+  const head = G.choice && G.choice.queue[0];
   if (!head || head.seat !== p.seat) return { ok: false, error: 'Somebody else is choosing' };
   if (move.how === 'pass') {
+    if (head.kind !== 'discard') return { ok: false, error: 'You have to pick one' };
     addLog(G, `${p.name} puts the discard back untouched.`);
   } else {
-    const card = G.discard.find((c) => c.id === move.cardId);
-    if (!card) return { ok: false, error: 'That card is not in the discard' };
-    if (alreadyBuilt(p, card.n)) return { ok: false, error: 'You have already built that' };
-    takeFromDiscard(G, p, card, head.why);
+    const card = choiceOptions(G, p.seat, head.kind).find((c) => c.id === move.cardId);
+    if (!card) return { ok: false, error: 'That is not one of your choices' };
+    if (head.kind === 'bury') entomb(G, p, card);
+    else if (head.kind === 'extra') recruitExtra(G, p, card);
+    else takeFromDiscard(G, p, card, head.why);
   }
-  G.salvage.queue.shift();
-  nextSalvage(G);
+  G.choice.queue.shift();
+  nextChoice(G);
   return { ok: true };
 }
 
@@ -902,16 +961,18 @@ function settlePick(G, p, card, pick, charges) {
 }
 
 function applyImmediate(G, p, thing) {
-  // A card, or a wonder stage, that reaches into the discard pile. It cannot
-  // be settled here — the turn everybody else is in the middle of has to
+  // A card, or a wonder stage, that stops the table to ask for a choice. It
+  // cannot be settled here — the turn everybody else is in the middle of has to
   // finish first — so it joins a queue that finishTurn picks up.
-  // The publisher's clarification: when more than one of these fires in the
-  // same turn, the wonder goes first, then Solomon, then the Forging Agency.
+  // The publisher's clarification, for the discard: when more than one fires in
+  // the same turn the wonder goes first, then Solomon, then the Forging Agency.
   // A stage has no name of its own, a leader is white and a black card is not.
   if (thing.salvage) {
     const rank = !thing.n ? 0 : thing.c === 'white' ? 1 : 2;
-    G.salvageAsk.push({ seat: p.seat, why: thing.n || p.wonder, rank });
+    G.choiceAsk.push({ seat: p.seat, why: thing.n || p.wonder, kind: 'discard', rank });
   }
+  if (thing.bury) G.choiceAsk.push({ seat: p.seat, why: p.wonder, kind: 'bury', rank: 0 });
+  if (thing.extra) G.choiceAsk.push({ seat: p.seat, why: p.wonder, kind: 'extra', rank: 0 });
   if (thing.shield) p.shields += thing.shield;
   if (thing.coins) gainCoins(G, p, thing.coins);
   if (thing.diplo) p.diplo += thing.diplo;
@@ -940,6 +1001,14 @@ function applyImmediate(G, p, thing) {
     }
   }
   if (thing.purgeDefeats) p.tokens = p.tokens.filter((t) => t >= 0);
+  // Roma: the box still has the leaders nobody drafted, and she helps herself
+  if (thing.drawLeaders && G.leaderBox) {
+    const take = G.leaderBox.splice(0, thing.drawLeaders);
+    if (take.length) {
+      p.leaders.push(...take);
+      addLog(G, `${p.name} draws ${take.length} more leader${take.length > 1 ? 's' : ''} out of the box.`);
+    }
+  }
   if (thing.nbCoins) {
     // a gambling den pays the house AND the people either side of it
     for (const s of [leftOf(G, p.seat), rightOf(G, p.seat)]) {
@@ -961,6 +1030,7 @@ function buildStage(G, p, card, charges) {
   const stage = nextStage(p);
   p.stagesBuilt.push({ ...stage, buried: card.n });
   applyImmediate(G, p, stage);
+  chargeFor(G, p, { ...stage, n: p.wonder }, charges);   // Petra: everybody else pays
   for (const c of p.built) {            // Leaders: Octavia throws a parade
     if (!c.onStage) continue;
     gainCoins(G, p, c.onStage.coins);
@@ -1071,7 +1141,7 @@ function doLastCard(G, p, move) {
   G.lastCard = G.lastCard.filter((s) => s !== p.seat);
   if (G.lastCard.length) return { ok: true };
   // that card may have been the Forging Agency, or raised a stage that digs
-  if (G.salvageAsk.length) openSalvage(G, 'age');
+  if (G.choiceAsk.length) openChoice(G, 'age');
   else resolveAge(G);
   return { ok: true };
 }
@@ -1305,7 +1375,8 @@ export function scoreFor(G, seat) {
   const parts = {
     military: p.tokens.reduce((a, b) => a + b, 0),
     coins: Math.floor(p.coins / 3),
-    wonder: p.stagesBuilt.reduce((a, s) => a + (s.vp || 0), 0),
+    wonder: p.stagesBuilt.reduce((a, s) => a + (s.vp || 0), 0)
+      + p.entombed.reduce((a, c) => a + 2 * coinCost(c, c.recruitedIn || 1), 0),
     civilian: p.built.filter((c) => c.c === 'blue').reduce((a, c) => a + (c.vp || 0), 0),
     commercial: perVp(p.built.filter((c) => c.c === 'yellow')),
     guild: perVp(p.built.filter((c) => c.c === 'purple')) + guildBonus,
@@ -1370,12 +1441,15 @@ export function viewFor(G, seat, code, opts = {}) {
     draftHand: G.phase === 'draft' && me ? me.draft : [],
     myLeaders: me ? me.leaders : [],
     leaderOptions: G.phase === 'recruit' && me && !G.picks[seat] ? leaderOptionsFor(G, seat) : [],
-    salvage: G.salvage ? {
-      seat: G.salvage.queue[0].seat,
-      why: G.salvage.queue[0].why,
+    choice: G.choice ? {
+      seat: G.choice.queue[0].seat,
+      why: G.choice.queue[0].why,
+      kind: G.choice.queue[0].kind,
+      canPass: G.choice.queue[0].kind === 'discard',
       // You pick the pile up, look through it and put the rest back without
       // showing anyone — so only the seat that is choosing gets the list.
-      cards: G.salvage.queue[0].seat === seat ? salvageOptions(G, seat) : null,
+      cards: G.choice.queue[0].seat === seat
+        ? choiceOptions(G, seat, G.choice.queue[0].kind) : null,
     } : null,
     players: G.players.map((p) => ({
       seat: p.seat, name: p.name, bot: p.bot, connected: p.connected, team: p.team,
@@ -1383,7 +1457,7 @@ export function viewFor(G, seat, code, opts = {}) {
       stages: p.stages, stagesBuilt: p.stagesBuilt.length,
       nextStageCost: nextStage(p) ? nextStage(p).cost : null,
       coins: p.coins, shields: p.shields, tokens: p.tokens, debt: p.debt, diplo: p.diplo,
-      leaders: p.leaders.length,
+      leaders: p.leaders.length, power: p.power,
       // Testing: the host may turn the bots' hands face up. Nobody else can —
       // only the host builds views, so this is the host's decision for the
       // whole table, and it is off unless they say otherwise.
@@ -1671,22 +1745,29 @@ function botRecruit(G, seat) {
   return { kind: 'pick', how: scored[0].how, cardId: scored[0].cardId };
 }
 
-// Nothing clever: the best card in the pile by the same yardstick the bot
-// uses on its own hand, and never a pass while anything is left worth taking.
-function botSalvage(G, seat) {
-  const opts = salvageOptions(G, seat);
-  if (!opts.length) return { kind: 'salvage', how: 'pass' };
+// Nothing clever: whichever of the offered cards is worth most by the same
+// yardstick the bot uses on its own hand. Burying is the odd one — the points
+// are certain and what the leader was doing is given up for them.
+function botPick(G, seat, kind) {
+  const opts = choiceOptions(G, seat, kind);
+  if (!opts.length) return { kind: 'choose', how: 'pass' };
+  const worth = (c) => {
+    if (kind === 'bury') return 2 * coinCost(c, c.recruitedIn || G.age) - leaderValue(G, seat, c);
+    if (kind === 'extra') return leaderValue(G, seat, c) - leaderPrice(G, seat, c) * 0.45;
+    return valueOf(G, seat, c);
+  };
   let best = null;
   for (const c of opts) {
-    const v = valueOf(G, seat, c);
+    const v = worth(c);
     if (!best || v > best.v) best = { v, cardId: c.id };
   }
-  return { kind: 'salvage', cardId: best.cardId };
+  return { kind: 'choose', cardId: best.cardId };
 }
 
 export function botChoose(G, seat) {
-  if (G.phase === 'salvage') {
-    return G.salvage && G.salvage.queue[0].seat === seat ? botSalvage(G, seat) : null;
+  if (G.phase === 'choose') {
+    const head = G.choice && G.choice.queue[0];
+    return head && head.seat === seat ? botPick(G, seat, head.kind) : null;
   }
   if (G.phase === 'lastcard') return G.lastCard.includes(seat) ? botPlay(G, seat) : null;
   if (G.phase === 'draft') return G.picks[seat] ? null : botDraft(G, seat);

@@ -210,6 +210,18 @@ export const BASE_AGES = [AGE1, AGE2, AGE3];
 //   playLast           play the seventh card of an Age instead of binning it,
 //                      as a turn of your own after everyone else has finished
 //   salvage            take the discard pile and build one card out of it free
+//   bury               put one leader already in your city under the board, for
+//                      twice its cost in points and none of its effect
+//   extra              recruit one more leader out of hand, paying for it
+//   drawLeaders        take this many leaders out of the box into your hand
+//
+// A stage may also carry `coin`, a cost in coins on top of its resources —
+// Petra is the only board that does, and the Architect Firm's "you no longer
+// pay resources" does not cover it, which is what its own rules sheet says.
+//
+// A side may carry a `power`, which is an ability the board has from the start
+// rather than one a stage grants. Roma is the only board with one, and it is
+// also the only board with no starting resource at all.
 //
 // A stage that produces a resource produces it for you only — wonder production
 // can't be sold to a neighbour, which is what notTrade marks.
@@ -248,6 +260,32 @@ export const WONDERS = [
   { n: 'Halikarnassos', res: 'T', sides: {
     A: [{ cost: 'OO', vp: 3 }, { cost: 'GP', salvage: true }, { cost: 'SSS', vp: 7 }],
     B: [{ cost: 'CC', vp: 2, salvage: true }, { cost: 'GP', vp: 1, salvage: true }, { cost: 'WWW', salvage: true }],
+  } },
+];
+
+// The four boards the expansions bring. Byzantium and Petra come in the Cities
+// box, Roma and Abu Simbel in Leaders, and `needs` is what keeps them out of a
+// game that is not playing with it. Their numbers are the wiki's; the Cities
+// and Leaders rulebooks confirm which box each one is in but do not print the
+// boards, exactly as the base rulebook does not.
+export const EXTRA_WONDERS = [
+  { n: 'Byzantium', res: 'S', needs: 'cities', sides: {
+    A: [{ cost: 'CO', vp: 3 }, { cost: 'PWW', vp: 4, diplo: 1 }, { cost: 'CCGT', vp: 7 }],
+    B: [{ cost: 'OPW', vp: 4, diplo: 1 }, { cost: 'GOOT', vp: 6, diplo: 1 }],
+  } },
+  { n: 'Petra', res: 'C', needs: 'cities', sides: {
+    A: [{ cost: 'SW', vp: 3 }, { coin: 5, vp: 7 }, { cost: 'PSSW', vp: 7 }],
+    B: [{ cost: 'CCOO', vp: 3, loss: 2 }, { coin: 10, vp: 14 }],
+  } },
+  { n: 'Roma', res: '', needs: 'leaders',
+    power: { A: { freeLeaders: true }, B: { leaderOff: 2, nbLeaderOff: 1 } },
+    sides: {
+      A: [{ cost: 'COW', vp: 4 }, { cost: 'CSST', vp: 6 }],
+      B: [{ cost: 'CW', coins: 5, drawLeaders: 4 }, { cost: 'CGS', vp: 3, extra: true }, { cost: 'PSS', vp: 3, extra: true }],
+    } },
+  { n: 'Abu Simbel', res: 'P', needs: 'leaders', sides: {
+    A: [{ cost: 'CS', vp: 3 }, { cost: 'OW', vp: 5 }, { cost: 'GSST', bury: true }],
+    B: [{ cost: 'CCT', vp: 3, bury: true }, { cost: 'GWW', vp: 5, bury: true }],
   } },
 ];
 

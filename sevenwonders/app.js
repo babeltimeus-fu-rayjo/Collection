@@ -672,7 +672,7 @@ class HostSession {
   // bot-covered seat that has not chosen yet is fair game.
   botActor() {
     const g = this.G;
-    if (!g || !['play', 'draft', 'recruit', 'salvage', 'lastcard'].includes(g.phase)) return null;
+    if (!g || !['play', 'draft', 'recruit', 'choose', 'lastcard'].includes(g.phase)) return null;
     const pending = waitingOn(g).filter((seat) => this.seatCovered(seat));
     return pending.length ? pending[0] : null;
   }
@@ -1144,8 +1144,8 @@ function ensureResignBtn(sess) {
 
 
 const EXPANSIONS = [
-  { key: 'cities', name: 'Cities', blurb: 'Black cards, debt and diplomacy. Hands are eight cards, so you play seven an Age instead of six — and it brings the eighth seat, which the base box cannot deal.' },
-  { key: 'leaders', name: 'Leaders', blurb: 'Draft four leaders before Age I, then play one at the start of every Age: recruit it for coins, bury it under your wonder, or sell it for 3. Everyone starts with 6 coins instead of 3, and the fourth leader is never played. The six Cities leaders join the deck only when Cities does.' },
+  { key: 'cities', name: 'Cities', blurb: 'Black cards, debt and diplomacy, plus the Byzantium and Petra boards. Hands are eight cards, so you play seven an Age instead of six — and it brings the eighth seat, which the base box cannot deal.' },
+  { key: 'leaders', name: 'Leaders', blurb: 'Draft four leaders before Age I, then play one at the start of every Age: recruit it for coins, bury it under your wonder, or sell it for 3. Everyone starts with 6 coins instead of 3, and the fourth leader is never played. It also brings Roma, who hires cheaply and has no starting resource at all, and Abu Simbel, who seals leaders under the board for twice what they cost. The six Cities leaders join the deck only when Cities does.' },
   { key: 'teams', name: 'Teams', blurb: 'Pairs sitting side by side, scoring together. You never fight your partner, so the one border you do have counts double. 4, 6 or 8 players.' },
 ];
 
@@ -1347,6 +1347,11 @@ const AGE_ROMAN = { 1: 'I', 2: 'II', 3: 'III' };
 // A city, compact enough that seven of them fit round the table: the wonder and
 // its progress, the money and shields you can be attacked over, and the cards
 // stacked by colour the way they sit on a real table.
+// What a stage costs, in words: resources, coins, both, or nothing at all.
+function stageCostText(st) {
+  return [st.cost || '', st.coin ? `${st.coin} coins` : ''].filter(Boolean).join(' + ') || 'free';
+}
+
 function cityEl(view, p, tag) {
   const box = el('div', `city${p.seat === view.mySeat ? ' mine' : ''}`);
   const head = el('div', 'city-head');
@@ -1371,12 +1376,21 @@ function cityEl(view, p, tag) {
   box.append(stat);
 
   const w = el('div', 'city-wonder');
-  w.append(el('span', 'w-name', `${p.wonder} ${p.side}`));
+  const wn = el('span', 'w-name', `${p.wonder} ${p.side}`);
+  // Roma is the only board whose power is printed on the board rather than
+  // granted by a stage, and the only one with no starting resource to show.
+  if (p.power) {
+    wn.title = p.power.freeLeaders
+      ? 'Recruits every leader for nothing'
+      : `Leaders cost ${p.power.leaderOff} less here, and ${p.power.nbLeaderOff} less for each neighbour`;
+    wn.classList.add('w-power');
+  }
+  w.append(wn);
   w.append(resRow(p.wonderRes, 'w-res'));
   const pips = el('span', 'w-pips');
   for (let i = 0; i < p.stages.length; i++) {
     const pip = el('span', `pip${i < p.stagesBuilt ? ' on' : ''}`);
-    pip.title = i < p.stagesBuilt ? `Stage ${i + 1} built` : `Stage ${i + 1}: ${p.stages[i].cost || 'free'}`;
+    pip.title = i < p.stagesBuilt ? `Stage ${i + 1} built` : `Stage ${i + 1}: ${stageCostText(p.stages[i])}`;
     pips.append(pip);
   }
   w.append(pips);
@@ -1453,20 +1467,27 @@ function renderRecruit(view) {
   });
 }
 
-// The discard pile, face up, for the seat that has earned a look. Everyone
-// else gets the waiting line and no list at all — which is what the rules say:
-// you take the pile, look through it, and put it back without showing anyone.
-function renderSalvage(view) {
-  const s = view.salvage;
+// Whatever the table is waiting on one player to pick, laid out for that one
+// player. Everyone else gets the waiting line and no list at all — which for
+// the discard is what the rules say: you take the pile, look through it, and
+// put it back without showing anyone.
+const CHOICE_VERB = { discard: 'Build · free', bury: 'Seal it in', extra: null };
+
+function renderChoice(view) {
+  const s = view.choice;
   if (!s || !s.cards) return;
-  leaderRow(view, s.cards, (c) => [actBtn('Build · free', 'go', { kind: 'salvage', cardId: c.id })]);
+  leaderRow(view, s.cards, (c) => [actBtn(
+    CHOICE_VERB[s.kind] || `Recruit · ${c.coin === 'age' ? view.age : (c.coin || 0)}`,
+    'go', { kind: 'choose', cardId: c.id },
+  )]);
+  if (!s.canPass) return;
   const out = el('div', 'hand-card');
   const face = el('div', 'swcard ghost');
   face.append(el('div', 'sw-name', 'Or nothing'));
   face.append(el('div', 'sw-gist', 'Put the pile back and carry on with the turn.'));
   out.append(face);
   const acts = el('div', 'card-acts');
-  acts.append(actBtn('Take nothing', 'sell', { kind: 'salvage', how: 'pass' }));
+  acts.append(actBtn('Take nothing', 'sell', { kind: 'choose', how: 'pass' }));
   out.append(acts);
   $('#hand').append(out);
 }
@@ -1474,7 +1495,7 @@ function renderSalvage(view) {
 function renderHand(view) {
   const hand = $('#hand');
   hand.replaceChildren();
-  if (view.phase === 'salvage') return renderSalvage(view);
+  if (view.phase === 'choose') return renderChoice(view);
   // Babylon's extra card is an ordinary turn with one card in it, so it is
   // drawn by the ordinary hand — but only for whoever is owed it.
   if (view.phase === 'lastcard' && !view.lastCard.includes(view.mySeat)) return;
@@ -1541,10 +1562,13 @@ function renderGame(view, sess) {
   lastView = view;
   lastSess = sess;
   $('#room-chip').textContent = view.code;
-  if (view.phase === 'salvage') {
+  if (view.phase === 'choose') {
+    const k = view.choice ? view.choice.kind : 'discard';
     $('#age-chip').textContent = `Age ${AGE_ROMAN[view.age]}`;
-    $('#turn-chip').textContent = 'The discard pile';
-    $('#pass-chip').textContent = `${view.discardCount} card${view.discardCount === 1 ? '' : 's'}`;
+    $('#turn-chip').textContent = k === 'bury' ? 'Beneath the wonder'
+      : k === 'extra' ? 'One more leader' : 'The discard pile';
+    $('#pass-chip').textContent = k === 'discard'
+      ? `${view.discardCount} card${view.discardCount === 1 ? '' : 's'}` : view.choice.why;
   } else if (view.phase === 'lastcard') {
     $('#age-chip').textContent = `Age ${AGE_ROMAN[view.age]}`;
     $('#turn-chip').textContent = 'The last card';
@@ -1589,11 +1613,18 @@ function renderGame(view, sess) {
     waiting.textContent = mine
       ? 'One more card before the Age ends: build it, bury it under your wonder, or sell it.'
       : `Waiting for ${who} to play the last card of the Age…`;
-  } else if (view.phase === 'salvage' && view.salvage) {
-    const who = (view.players.find((q) => q.seat === view.salvage.seat) || {}).name;
-    waiting.textContent = view.salvage.cards
-      ? `${view.salvage.why}: take one card out of the pile and build it for nothing.`
+  } else if (view.phase === 'choose' && view.choice) {
+    const c = view.choice;
+    const who = (view.players.find((q) => q.seat === c.seat) || {}).name;
+    const mine = c.kind === 'bury'
+      ? `${c.why}: put one of your leaders under the board. It stops doing what it did, and pays twice what it cost.`
+      : c.kind === 'extra'
+        ? `${c.why}: recruit one more leader out of your hand, and pay for it.`
+        : `${c.why}: take one card out of the pile and build it for nothing.`;
+    const theirs = c.kind === 'bury' ? `Waiting for ${who} to seal a leader under their wonder…`
+      : c.kind === 'extra' ? `Waiting for ${who} to recruit one more leader…`
       : `Waiting for ${who} to pick a card out of the discard…`;
+    waiting.textContent = c.cards ? mine : theirs;
   } else if (['play', 'draft', 'recruit'].includes(view.phase) && view.waiting.length) {
     const names = view.waiting
       .filter((s) => s !== view.mySeat)
@@ -1647,15 +1678,17 @@ function bindStep() {
 function renderActions(view, sess) {
   const bar = $('#action-bar');
   bar.replaceChildren();
-  if (!['play', 'recruit', 'salvage', 'lastcard'].includes(view.phase)) return;
+  if (!['play', 'recruit', 'choose', 'lastcard'].includes(view.phase)) return;
   const me = view.players.find((q) => q.seat === view.mySeat);
   if (!me) return;
   const note = el('span', 'act-note');
-  const stageCost = me.stagesBuilt < me.stages.length ? me.stages[me.stagesBuilt].cost : null;
+  const stage = me.stagesBuilt < me.stages.length ? me.stages[me.stagesBuilt] : null;
   note.append(el('span', '', `You have ${me.coins} coins. `));
-  if (stageCost != null) {
-    note.append(el('span', '', `Next wonder stage costs `));
-    note.append(resRow(stageCost));
+  if (stage) {
+    note.append(el('span', '', 'Next wonder stage costs '));
+    if (stage.cost) note.append(resRow(stage.cost));
+    if (stage.coin) note.append(el('span', 'coin-chip', `${stage.coin}`));
+    if (!stage.cost && !stage.coin) note.append(el('span', 'sw-free', 'nothing'));
   } else {
     note.append(el('span', '', 'Your wonder is finished.'));
   }

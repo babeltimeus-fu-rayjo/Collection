@@ -19,7 +19,9 @@ const lead = (name) => {
 // hand instead of drafted ones.
 function atRecruit(n, age, hands, opts = {}) {
   const G = mk(n, opts);
-  for (const p of G.players) { p.draft = []; p.leaders = []; }
+  // Roma is in the board pool now and takes coins off her neighbours' leaders,
+  // so a test about what a leader costs has to be sure she is not at the table
+  for (const p of G.players) { p.draft = []; p.leaders = []; p.power = null; }
   G.age = age;
   G.phase = 'recruit';
   G.picks = {};
@@ -77,7 +79,10 @@ const drive = (G, until = () => G.phase === 'over') => {
 // ---- three Ages against four leaders
 {
   const G = drive(mk(4));
-  ok(G.players.every((p) => p.leaders.length === 1), 'one leader is never played: three Ages, four leaders');
+  // ... unless Roma's night side went back to the box for four more
+  const romaN = G.players.some((q) => q.wonder === 'Roma' && q.side === 'B');
+  ok(G.players.every((p) => p.leaders.length === 1) || romaN,
+     'one leader is never played: three Ages, four leaders');
   ok(G.players.every((p) => p.built.filter((c) => c.c === 'white').length <= 3), 'and at most three are recruited');
 }
 
@@ -306,7 +311,9 @@ const sci = (n, sym) => Array.from({ length: n }, (_, i) => ({ n: `${sym}${i}`, 
   for (const n of [3, 5, 8]) {
     for (let i = 0; i < 20; i++) {
       const G = drive(mk(n, { cities: true }));
-      if (G.players.some((p) => p.leaders.length !== 1)) { ok(false, `${n}p: leftover leaders`); break; }
+      const drew = G.players.some((q) => q.wonder === 'Roma' && q.side === 'B');
+      if (G.players.some((p) => p.leaders.length !== 1) && !drew) { ok(false, `${n}p: leftover leaders`); break; }
+      if (G.players.some((p) => p.leaders.length < 1)) { ok(false, `${n}p: no leader left over at all`); break; }
       if (G.result.scores.some((s) => !Number.isFinite(s.total))) { ok(false, `${n}p: bad score`); break; }
       games++;
     }

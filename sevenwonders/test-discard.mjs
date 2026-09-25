@@ -40,16 +40,16 @@ function turn(G, how = 'discard', seat = 0) {
   withSalvageStage(G);
   G.discard = [junk('d1'), junk('d2')];
   turn(G, 'wonder');
-  ok(G.phase === 'salvage', `building the stage opens the discard (phase ${G.phase})`);
+  ok(G.phase === 'choose', `building the stage opens the discard (phase ${G.phase})`);
   ok(JSON.stringify(SW.waitingOn(G)) === '[0]', `and the table waits on exactly one seat (${JSON.stringify(SW.waitingOn(G))})`);
 
-  const mine = SW.viewFor(G, 0, 'X').salvage;
-  const theirs = SW.viewFor(G, 1, 'X').salvage;
+  const mine = SW.viewFor(G, 0, 'X').choice;
+  const theirs = SW.viewFor(G, 1, 'X').choice;
   ok(mine && Array.isArray(mine.cards), 'the seat that is choosing is handed the pile');
   ok(theirs && theirs.cards === null, 'and nobody else sees what is in it');
   ok(theirs && theirs.seat === 0 && theirs.why === 'Halikarnassos', `everyone can see who is choosing, and why (${theirs.why})`);
 
-  const no = SW.applyMove(G, 1, { kind: 'salvage', cardId: 'd1' });
+  const no = SW.applyMove(G, 1, { kind: 'choose', cardId: 'd1' });
   ok(!no.ok, `somebody else cannot take the card instead (${no.error})`);
   const bad = SW.applyMove(G, 0, { kind: 'pick', how: 'discard', cardId: 'd1' });
   ok(!bad.ok, `and the normal moves are refused while the pile is open (${bad.error})`);
@@ -62,7 +62,7 @@ function turn(G, how = 'discard', seat = 0) {
   me.coins = 0;
   G.discard = [junk('d1'), { n: 'Pricey', c: 'blue', cost: 'SSSSSSS', vp: 8, id: 'd2' }];
   turn(G, 'wonder');
-  const r = SW.applyMove(G, 0, { kind: 'salvage', cardId: 'd2' });
+  const r = SW.applyMove(G, 0, { kind: 'choose', cardId: 'd2' });
   ok(r.ok, 'you may take a card you could never have paid for');
   ok(me.coins === 0, `and it costs nothing (${me.coins} coins)`);
   ok(me.built.some((c) => c.n === 'Pricey'), 'the card is standing in your city');
@@ -81,12 +81,12 @@ function turn(G, how = 'discard', seat = 0) {
   turn(G, 'wonder');
   // the other three sold a card each this turn, so the pile is bigger than the
   // two put there by hand — what matters is which one is missing from it
-  const cards = SW.viewFor(G, 0, 'X').salvage.cards;
+  const cards = SW.viewFor(G, 0, 'X').choice.cards;
   ok(!cards.some((c) => c.n === 'Baths') && cards.some((c) => c.id === 'd2'),
      `a card you have already built is not on offer (${cards.map((c) => c.n).join(', ')})`);
-  const no = SW.applyMove(G, 0, { kind: 'salvage', cardId: 'd1' });
+  const no = SW.applyMove(G, 0, { kind: 'choose', cardId: 'd1' });
   ok(!no.ok, `and asking for it anyway is refused (${no.error})`);
-  ok(SW.applyMove(G, 0, { kind: 'salvage', how: 'pass' }).ok, 'you may always put the pile back untouched');
+  ok(SW.applyMove(G, 0, { kind: 'choose', how: 'pass' }).ok, 'you may always put the pile back untouched');
   ok(G.phase === 'play', 'which also lets the turn carry on');
 }
 
@@ -103,7 +103,7 @@ function turn(G, how = 'discard', seat = 0) {
   H.discard = [];
   for (const q of H.players) if (q.seat) q.built = [];
   turn(H, 'wonder', 0);
-  ok(H.phase !== 'salvage' || H.discard.length > 0, 'a pile with something in it opens; an empty one is skipped');
+  ok(H.phase !== 'choose' || H.discard.length > 0, 'a pile with something in it opens; an empty one is skipped');
 
   const K = mk(4);
   const k = withSalvageStage(K);
@@ -136,9 +136,9 @@ function turn(G, how = 'discard', seat = 0) {
     SW.applyMove(G, p.seat, { kind: 'pick', how: 'discard', cardId: `L${p.seat}` });
   }
   SW.applyMove(G, 0, { kind: 'pick', how: 'play', cardId: 'L-Sol' });
-  ok(G.phase === 'salvage', `recruiting Solomon opens the pile (${G.phase})`);
+  ok(G.phase === 'choose', `recruiting Solomon opens the pile (${G.phase})`);
   ok(!G.players.some((p) => p.hand.length), 'and the Age is not dealt until he has finished');
-  SW.applyMove(G, 0, { kind: 'salvage', cardId: 'd1' });
+  SW.applyMove(G, 0, { kind: 'choose', cardId: 'd1' });
   ok(me.built.some((c) => c.n === 'Aqueduct'), 'he builds it for nothing');
   ok(G.phase === 'play' && G.players.every((p) => p.hand.length === G.handSize), 'and only then is the Age dealt');
 }
@@ -154,8 +154,8 @@ function turn(G, how = 'discard', seat = 0) {
   me.hand[0] = { ...agency, id: 'fa' };
   G.discard = [{ n: 'Temple', c: 'blue', cost: 'WCG', vp: 3, id: 'd1' }];
   turn(G, 'play');
-  ok(G.phase === 'salvage', `building it opens the pile (${G.phase})`);
-  SW.applyMove(G, 0, { kind: 'salvage', cardId: 'd1' });
+  ok(G.phase === 'choose', `building it opens the pile (${G.phase})`);
+  SW.applyMove(G, 0, { kind: 'choose', cardId: 'd1' });
   ok(me.built.some((c) => c.n === 'Temple'), 'and a card comes out of it');
   ok(G.phase === 'play' && G.turn === 2, 'then the turn carries on');
 }
@@ -172,7 +172,7 @@ function turn(G, how = 'discard', seat = 0) {
   me.coins = 0;
   G.discard = [{ n: 'Tavern', c: 'yellow', coins: 5, id: 'd1' }];
   turn(G, 'wonder');
-  SW.applyMove(G, 0, { kind: 'salvage', cardId: 'd1' });
+  SW.applyMove(G, 0, { kind: 'choose', cardId: 'd1' });
   ok(me.coins === 7, `the card's own effect and Xenophon both pay out (5 + 2 = ${me.coins})`);
 }
 
@@ -185,13 +185,13 @@ function turn(G, how = 'discard', seat = 0) {
   SW.applyMove(G, 0, { kind: 'pick', how: 'wonder', cardId: a.hand[0].id });
   SW.applyMove(G, 2, { kind: 'pick', how: 'wonder', cardId: b.hand[0].id });
   for (const q of G.players) if (!G.picks[q.seat]) SW.applyMove(G, q.seat, { kind: 'pick', how: 'discard', cardId: q.hand[0].id });
-  ok(G.phase === 'salvage' && SW.waitingOn(G)[0] === 0, `the lower seat goes first (${SW.waitingOn(G)})`);
-  const first = SW.viewFor(G, 0, 'X').salvage.cards.length;
-  SW.applyMove(G, 0, { kind: 'salvage', cardId: 'd1' });
-  ok(G.phase === 'salvage' && SW.waitingOn(G)[0] === 2, `then the other one (${SW.waitingOn(G)})`);
-  const second = SW.viewFor(G, 2, 'X').salvage.cards.length;
+  ok(G.phase === 'choose' && SW.waitingOn(G)[0] === 0, `the lower seat goes first (${SW.waitingOn(G)})`);
+  const first = SW.viewFor(G, 0, 'X').choice.cards.length;
+  SW.applyMove(G, 0, { kind: 'choose', cardId: 'd1' });
+  ok(G.phase === 'choose' && SW.waitingOn(G)[0] === 2, `then the other one (${SW.waitingOn(G)})`);
+  const second = SW.viewFor(G, 2, 'X').choice.cards.length;
   ok(second === first - 1, `and the second sees one fewer card than the first (${first} then ${second})`);
-  SW.applyMove(G, 2, { kind: 'salvage', how: 'pass' });
+  SW.applyMove(G, 2, { kind: 'choose', how: 'pass' });
   ok(G.phase === 'play' && G.turn === 2, 'the turn resumes once both are done');
 }
 
@@ -208,11 +208,11 @@ function turn(G, how = 'discard', seat = 0) {
   SW.applyMove(G, 0, { kind: 'pick', how: 'play', cardId: 'fa' });
   SW.applyMove(G, 2, { kind: 'pick', how: 'wonder', cardId: late.hand[0].id });
   for (const q of G.players) if (!G.picks[q.seat]) SW.applyMove(G, q.seat, { kind: 'pick', how: 'discard', cardId: q.hand[0].id });
-  ok(G.phase === 'salvage' && SW.waitingOn(G)[0] === 2,
+  ok(G.phase === 'choose' && SW.waitingOn(G)[0] === 2,
      `the wonder digs before the Forging Agency, whatever the seats are (${SW.waitingOn(G)})`);
-  SW.applyMove(G, 2, { kind: 'salvage', how: 'pass' });
+  SW.applyMove(G, 2, { kind: 'choose', how: 'pass' });
   ok(SW.waitingOn(G)[0] === 0, `and the Agency goes second (${SW.waitingOn(G)})`);
-  SW.applyMove(G, 0, { kind: 'salvage', how: 'pass' });
+  SW.applyMove(G, 0, { kind: 'choose', how: 'pass' });
   ok(G.phase === 'play', 'then the turn carries on');
 }
 
@@ -223,9 +223,9 @@ function turn(G, how = 'discard', seat = 0) {
   G.turn = G.handSize - 1;
   G.discard = [{ n: 'Walls', c: 'red', cost: 'SSS', shield: 2, id: 'd1' }];
   turn(G, 'wonder');
-  ok(G.phase === 'salvage', 'the pile opens before the conflict is counted');
+  ok(G.phase === 'choose', 'the pile opens before the conflict is counted');
   ok(G.age === 1, 'and the Age has not turned over yet');
-  SW.applyMove(G, 0, { kind: 'salvage', cardId: 'd1' });
+  SW.applyMove(G, 0, { kind: 'choose', cardId: 'd1' });
   ok(G.age === 2, `then the Age ends (now Age ${G.age})`);
   ok(me.tokens.length > 0 || G.players.every((p) => !p.tokens.length),
      'and the shields taken out of the pile counted towards it');

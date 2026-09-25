@@ -3,7 +3,7 @@
 // so there is no copied guild here — see the Decorators Guild instead.
 // Run with `node test-wonders.mjs`.
 import * as SW from './game.js';
-import { WONDERS, CITY_CARDS, GUILDS } from './cards.js';
+import { WONDERS, EXTRA_WONDERS, CITY_CARDS, GUILDS, LEADERS } from './cards.js';
 
 let fails = 0;
 const ok = (c, m) => { console.log(`${c ? 'PASS' : '**FAIL**'}  ${m}`); if (!c) fails++; };
@@ -28,6 +28,54 @@ const others = (G, seat) => {
     SW.applyMove(G, q.seat, { kind: 'pick', how: 'discard', cardId: q.hand[0].id });
   }
 };
+
+// one seat does what it is told and the rest get out of the way
+function turn(G, how = 'discard', seat = 0) {
+  const me = SW.playerBySeat(G, seat);
+  const r = SW.applyMove(G, seat, { kind: 'pick', how, cardId: me.hand[0].id });
+  if (!r.ok) { console.log(`**FAIL**  setup: seat ${seat} could not ${how}: ${r.error}`); fails++; }
+  others(G, seat);
+}
+
+// a game parked at the start of an Age's recruitment, with chosen leaders in
+// hand and no Roma at the table to move the prices about
+function atRecruit(n, age, hands, opts = {}) {
+  const G = mk(n, { leaders: true, ...opts });
+  for (const p of G.players) { p.draft = []; p.leaders = []; p.power = null; }
+  G.age = age;
+  G.phase = 'recruit';
+  G.picks = {};
+  hands.forEach((names, seat) => {
+    SW.playerBySeat(G, seat).leaders = names.map((nm) => {
+      const l = LEADERS.find((x) => x.n === nm);
+      if (!l) { console.log(`**FAIL**  no such leader: ${nm}`); fails++; }
+      return { ...l, c: 'white', id: `L-${seat}-${nm}` };
+    });
+  });
+  return G;
+}
+
+// play on with bots until whatever we are waiting for
+const drive = (G, until) => {
+  let guard = 0;
+  while (!until() && G.phase !== 'over') {
+    if (++guard > 5000) throw new Error('stuck in ' + G.phase);
+    for (const seat of SW.waitingOn(G)) {
+      const m = SW.botChoose(G, seat);
+      if (m) SW.applyMove(G, seat, m);
+      if (until() || G.phase === 'over') break;
+    }
+  }
+  return G;
+};
+
+function allRecruit(G, choices) {
+  for (const p of G.players) {
+    const c = choices[p.seat] || { name: p.leaders[0].n, how: 'discard' };
+    const r = SW.applyMove(G, p.seat, { kind: 'pick', how: c.how || 'play', cardId: `L-${p.seat}-${c.name}` });
+    if (!r.ok) { console.log(`**FAIL**  setup: seat ${p.seat} could not ${c.how || 'play'} ${c.name}: ${r.error}`); fails++; }
+  }
+}
 
 // ---- the boards carry what the second edition prints on them
 {
@@ -153,10 +201,10 @@ const others = (G, seat) => {
   me.hand = [card('P0', 'brown', { give: 'W' }), { ...agency, id: 'N0' }];
   for (const p of G.players) SW.applyMove(G, p.seat, { kind: 'pick', how: 'discard', cardId: `P${p.seat}` });
   SW.applyMove(G, 0, { kind: 'pick', how: 'play', cardId: 'N0' });
-  ok(G.phase === 'salvage', `the pile opens off the back of the last card (${G.phase})`);
+  ok(G.phase === 'choose', `the pile opens off the back of the last card (${G.phase})`);
   ok(G.age === 1, 'and the Age still has not turned over');
-  const take = SW.viewFor(G, 0, 'X').salvage.cards[0];
-  SW.applyMove(G, 0, { kind: 'salvage', cardId: take.id });
+  const take = SW.viewFor(G, 0, 'X').choice.cards[0];
+  SW.applyMove(G, 0, { kind: 'choose', cardId: take.id });
   ok(G.age === 2, `then everything finishes in order (Age ${G.age})`);
 }
 
@@ -174,6 +222,143 @@ const others = (G, seat) => {
   ok(SW.scoreFor(G, 0).guild === 0, 'half a wonder is worth nothing to them');
   me.stagesBuilt = [{ cost: '' }, { cost: '' }];
   ok(SW.scoreFor(G, 0).guild === 7, 'a finished one is worth seven');
+}
+
+// ---- the expansion boards, and the box each one comes out of
+{
+  const names = (o, tries = 40) => {
+    const found = new Set();
+    for (let i = 0; i < tries; i++) for (const p of mk(7, o).players) found.add(p.wonder);
+    return found;
+  };
+  const base = names({});
+  ok(!['Byzantium', 'Petra', 'Roma', 'Abu Simbel'].some((n) => base.has(n)),
+     'a base game deals none of the four expansion boards');
+  const withCities = names({ cities: true });
+  ok(withCities.has('Byzantium') && withCities.has('Petra'), 'Cities brings Byzantium and Petra');
+  ok(!withCities.has('Roma') && !withCities.has('Abu Simbel'), 'and not the two from Leaders');
+  const withLeaders = names({ leaders: true });
+  ok(withLeaders.has('Roma') && withLeaders.has('Abu Simbel'), 'Leaders brings Roma and Abu Simbel');
+  ok(!withLeaders.has('Byzantium') && !withLeaders.has('Petra'), 'and not the two from Cities');
+
+  // eight seats used to mean two players sharing a board; nine boards fixes it
+  const eight = mk(8, { cities: true });
+  ok(new Set(eight.players.map((p) => p.wonder)).size === 8,
+     'eight players get eight different boards now there are nine to deal');
+}
+
+// ---- Byzantium hands out diplomacy
+{
+  const G = mk(4, { cities: true });
+  const me = SW.playerBySeat(G, 0);
+  me.stages = [{ cost: '', vp: 4, diplo: 1 }];
+  me.stagesBuilt = [];
+  me.diplo = 0;
+  turn(G, 'wonder');
+  ok(me.diplo === 1, `a Byzantium stage takes a diplomacy token (${me.diplo})`);
+}
+
+// ---- Petra charges coins for a stage, and charges everybody else too
+{
+  const G = mk(4, { cities: true });
+  const me = SW.playerBySeat(G, 0);
+  me.stages = [{ coin: 5, vp: 7 }, { cost: 'SSSSSSS', vp: 1 }];
+  me.stagesBuilt = [];
+  me.coins = 4;
+  ok(SW.optionsFor(G, 0)[0].wonder === null, 'four coins is not enough for a five coin stage');
+  me.coins = 5;
+  const w = SW.optionsFor(G, 0)[0].wonder;
+  ok(w && w.coins === 5, `five is (${w && w.coins})`);
+
+  // the Architect Firm stops you paying RESOURCES; the coins are still owed
+  me.built = [{ n: 'Architect Firm', c: 'black', freeStages: true }];
+  ok(SW.optionsFor(G, 0)[0].wonder.coins === 5, 'and the Architect Firm does not cover them');
+
+  const H = mk(4, { cities: true });
+  const you = SW.playerBySeat(H, 0);
+  you.stages = [{ cost: '', vp: 3, loss: 2 }];
+  you.stagesBuilt = [];
+  for (const q of H.players) q.coins = 10;
+  turn(H, 'wonder');
+  const rest = H.players.filter((q) => q.seat);
+  ok(rest.every((q) => q.coins === 10 + 3 - 2), `Petra's night side takes 2 off everyone else (${rest.map((q) => q.coins).join(',')})`);
+}
+
+// ---- Roma: no board resource at all, and leaders come cheap
+{
+  const roma = EXTRA_WONDERS.find((w) => w.n === 'Roma');
+  ok(roma.res === '', 'Roma is the one board with no starting resource');
+
+  const G = atRecruit(3, 2, [['Cleopatra'], ['Sappho'], ['Sappho']]);
+  const me = SW.playerBySeat(G, 0);
+  ok(SW.leaderOptionsFor(G, 0)[0].play.coins === 4, 'Cleopatra costs her printed 4');
+  me.power = { freeLeaders: true };
+  ok(SW.leaderOptionsFor(G, 0)[0].play.coins === 0, 'Roma by day recruits every leader for nothing');
+  me.power = { leaderOff: 2 };
+  ok(SW.leaderOptionsFor(G, 0)[0].play.coins === 2, 'Roma by night takes 2 off her own');
+  me.power = null;
+  SW.playerBySeat(G, SW.leftOf(G, 0)).power = { nbLeaderOff: 1 };
+  ok(SW.leaderOptionsFor(G, 0)[0].play.coins === 3, 'and 1 off her neighbours\u2019, which is their good luck');
+}
+
+// ---- Roma goes back to the box, and recruits out of turn
+{
+  // get the recruitment out of the way first, or a bot spends the stage on it
+  const G = mk(4, { leaders: true });
+  drive(G, () => G.phase === 'play');
+  const me = SW.playerBySeat(G, 0);
+  const box = G.leaderBox.length;
+  ok(box > 0, `the leaders nobody drafted are kept, not binned (${box} of them)`);
+  me.stages = [{ cost: '', coins: 5, drawLeaders: 4 }, { cost: 'SSSSSSS', vp: 1 }];
+  me.stagesBuilt = [];
+  const before = me.leaders.length;
+  turn(G, 'wonder');
+  ok(me.leaders.length === before + 4, `Roma draws four more out of the box (${me.leaders.length} from ${before})`);
+  ok(G.leaderBox.length === box - 4, 'and the box is four lighter');
+}
+
+{
+  const G = atRecruit(4, 2, [['Cleopatra', 'Sappho'], ['Sappho'], ['Sappho'], ['Sappho']]);
+  const me = SW.playerBySeat(G, 0);
+  me.coins = 20;
+  me.stages = [{ cost: '', vp: 3, extra: true }];
+  me.stagesBuilt = [];
+  allRecruit(G, { 0: { name: 'Sappho' } });
+  ok(G.phase === 'play', 'recruitment finishes as usual');
+  for (const p of G.players) p.hand = [card(`H${p.seat}`, 'brown', { give: 'W' })];
+  turn(G, 'wonder');
+  ok(G.phase === 'choose' && SW.waitingOn(G)[0] === 0, `the extra recruitment stops the table (${G.phase})`);
+  const offered = SW.viewFor(G, 0, 'X').choice;
+  ok(offered.kind === 'extra' && offered.cards.length === 1 && offered.cards[0].n === 'Cleopatra',
+     'and offers what is left in hand');
+  const purse = me.coins;
+  SW.applyMove(G, 0, { kind: 'choose', cardId: offered.cards[0].id });
+  ok(me.built.some((c) => c.n === 'Cleopatra'), 'the extra leader is recruited');
+  ok(me.coins === purse - 4, `and paid for (${purse - me.coins})`);
+  ok(G.phase === 'play', 'then the turn carries on');
+}
+
+// ---- Abu Simbel seals a leader under the board
+{
+  const G = atRecruit(4, 2, [['Cleopatra'], ['Sappho'], ['Sappho'], ['Sappho']]);
+  const me = SW.playerBySeat(G, 0);
+  me.coins = 20;
+  allRecruit(G, { 0: { name: 'Cleopatra' } });
+  ok(me.built.some((c) => c.n === 'Cleopatra'), 'Cleopatra is recruited first');
+  me.stages = [{ cost: '', bury: true }];
+  me.stagesBuilt = [];
+  for (const p of G.players) p.hand = [card(`B${p.seat}`, 'brown', { give: 'W' })];
+  turn(G, 'wonder');
+  ok(G.phase === 'choose', `building the stage asks which leader (${G.phase})`);
+  const offered = SW.viewFor(G, 0, 'X').choice;
+  ok(offered.kind === 'bury' && offered.canPass === false, 'burying is not something you may decline');
+  const before = SW.scoreFor(G, 0);
+  SW.applyMove(G, 0, { kind: 'choose', cardId: offered.cards[0].id });
+  ok(!me.built.some((c) => c.n === 'Cleopatra'), 'the leader leaves your city');
+  ok(me.entombed.length === 1, 'and goes under the board');
+  const after = SW.scoreFor(G, 0);
+  ok(after.wonder === before.wonder + 8, `paying twice her 4 coins (${after.wonder - before.wonder})`);
+  ok(after.leaders === before.leaders - 5, 'and no longer paying her own 5 points');
 }
 
 // ---- and the whole thing, over and over
