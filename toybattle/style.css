@@ -1101,14 +1101,14 @@ a {
 }
 
 #board {
-  width: min(560px, 100%);
+  width: min(640px, 100%);
 }
 
 .board-svg {
   display: block;
   width: 100%;
   height: auto;
-  max-height: 58vh;
+  max-height: 64vh;
   overflow: visible;
 }
 
@@ -1398,7 +1398,7 @@ a {
   }
 
   .board-svg {
-    max-height: 48vh;
+    max-height: 52vh;
   }
 
   .tb-troop {

@@ -1152,8 +1152,15 @@ function sv(tag, cls, attrs = {}) {
 
 // ---------------------------------------------------------------- the board
 
-const CELL = 96;     // distance between neighbouring node centres
-const PAD = 60;
+// Every Terrain is taller than it is wide, and drawing them on a square
+// lattice made that worse: Castle Field came out 312x600, so on a laptop the
+// board shrank to fit the available height and used about a quarter of the
+// width it had been given. Spreading the columns and tightening the rows
+// costs the graph nothing — a path is a path wherever it is drawn.
+const CELL_X = 116;  // horizontal distance between neighbouring node centres
+const CELL_Y = 88;   // vertical
+const PAD_X = 58;
+const PAD_Y = 52;
 const BASE = 62;     // side of a base square
 const HQ = 76;
 
@@ -1164,7 +1171,7 @@ function place(view, x, y) {
   const flip = view.you === 1;
   const px = flip ? view.terrain.w - x : x;
   const py = flip ? view.terrain.h - y : y;
-  return [PAD + px * CELL, PAD + py * CELL];
+  return [PAD_X + px * CELL_X, PAD_Y + py * CELL_Y];
 }
 
 // Which nodes the click handler should accept right now, and why.
@@ -1211,8 +1218,8 @@ function shadow(view) {
 function renderBoard(view) {
   const t = view.terrain;
   const host = $('#board');
-  const W = PAD * 2 + t.w * CELL;
-  const H = PAD * 2 + t.h * CELL;
+  const W = PAD_X * 2 + t.w * CELL_X;
+  const H = PAD_Y * 2 + t.h * CELL_Y;
   const svg = sv('svg', 'board-svg', { viewBox: `0 0 ${W} ${H}`, role: 'img' });
   const targets = liveTargets(view);
 
@@ -1227,7 +1234,7 @@ function renderBoard(view) {
   for (const r of t.regions) {
     const [cx, cy] = place(view, r.x, r.y);
     const g = sv('g', `tb-region${r.owner === null ? '' : ` taken ${side(r.owner)}`}`);
-    g.append(sv('rect', 'tb-region-pad', { x: cx - 26, y: cy - 26, width: 52, height: 52, rx: 12 }));
+    g.append(sv('rect', 'tb-region-pad', { x: cx - 30, y: cy - 23, width: 60, height: 46, rx: 12 }));
     if (r.owner === null) {
       for (let i = 0; i < r.medals; i++) {
         const off = (i - (r.medals - 1) / 2) * 20;
@@ -1263,7 +1270,8 @@ function renderBoard(view) {
       g.append(flag);
     } else if (n.only) {
       const lab = sv('text', 'tb-only', { x: cx, y: cy - size / 2 - 7, 'text-anchor': 'middle' });
-      lab.textContent = n.only.join('');
+      // the board prints its list; the joker shows as a star
+      lab.textContent = n.only.map((v) => (v === 'joker' ? '★' : v)).join('');
       g.append(lab);
     }
     if (n.special) g.append(sv('circle', 'tb-spark', { cx: cx + size / 2 - 11, cy: cy - size / 2 + 11, r: 6 }));

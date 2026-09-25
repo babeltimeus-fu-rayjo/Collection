@@ -169,8 +169,10 @@ const TERRAIN_DEFS = [
       '. B .',
     ],
     links: [['1,0', '0,1'], ['1,0', '2,1'], ['1,5', '0,4'], ['1,5', '2,4']],
-    only: { L: [1, 2, 3, 4] },
-    hqOnly: [5, 6, 7],
+    // which values a buoy or an H.Q. accepts is printed on the real board and
+    // we have never seen one; these lists are ours, the 'joker' entry is not
+    only: { L: [1, 2, 3, 4, 'joker'] },
+    hqOnly: [5, 6, 7, 'joker'],
   },
   {
     key: 'clouds', name: 'City of Clouds', power: 'splendor', target: 4,
@@ -438,15 +440,15 @@ export function reachable(G, seat) {
 }
 
 // Does this Terrain let this tile stand on this node at all? Tropical Pool's
-// buoys and H.Q. list the values they accept. Kwak has no value, so it is not
-// one of "the indicated values" and cannot take a restricted slot — our
-// reading of a case the aid does not spell out.
+// buoys and H.Q. list the values they accept, and the list can name the joker
+// as well as numbers — La Croisette's restricted bases read "a strength of 4,
+// 5, 6, 7, or a joker", so 'joker' is a member of the list like any other.
 export function valueAllowed(G, node, key) {
   const n = G.terrain.nodes[node];
   const only = n.hq !== null ? G.terrain.hqOnly : n.only;
   if (!only) return true;
   const s = strengthOf(key);
-  return s !== null && only.includes(s);
+  return only.includes(s === null ? 'joker' : s);
 }
 
 // The four slots the rulebook lists, plus the connection rule. `hook` is the

@@ -66,7 +66,13 @@ console.log('— Tropical Pool restrictions —');
   ok(buoy, 'Tropical Pool should carry value-restricted bases');
   ok(TB.valueAllowed(G, buoy.id, 'skully'), 'a 1 may take a buoy that lists 1–4');
   ok(!TB.valueAllowed(G, buoy.id, 'roxy'), 'a 7 may not take a buoy that lists 1–4');
-  ok(!TB.valueAllowed(G, buoy.id, 'kwak'), 'Kwak has no value, so it is not one of the indicated values');
+  // La Croisette's sheet prints "a strength of 4, 5, 6, 7, or a joker", so the
+  // joker is a member of the list when the board lists it — and is not when it
+  // does not. Both directions matter, so both are checked.
+  ok(TB.valueAllowed(G, buoy.id, 'kwak'), 'the joker is on this buoy\'s list, so it may take it');
+  const noJoker = { ...G, terrain: { ...G.terrain, nodes: G.terrain.nodes.map((n) => (n.id === buoy.id ? { ...n, only: [1, 2, 3, 4] } : n)) } };
+  ok(!TB.valueAllowed(noJoker, buoy.id, 'kwak'), 'a list without the joker keeps the joker out');
+  ok(TB.valueAllowed(noJoker, buoy.id, 'skully'), 'and still admits the numbers it names');
   const hq = nodeAt(G, 1, 0);
   ok(TB.valueAllowed(G, hq, 'roxy'), 'the H.Q. lists 5–7, so a 7 may storm it');
   ok(!TB.valueAllowed(G, hq, 'skully'), 'a 1 may not storm an H.Q. that lists 5–7');
