@@ -309,12 +309,10 @@ const TERRAIN_DEFS = [
     // Transcribed from a photograph of the printed board with its paths marked
     // by the board's owner, 2026-09-25. Asymmetric by design, as the player
     // aid says: two blue H.Q. (the docks, top) and one red (the ship, bottom),
-    // no special bases. The two sides print different objectives. Red's badge
-    // reads 5; blue's was cut off in the photo, and 6 is the pattern's answer —
-    // on every board so far the two objectives add up to the Medals on it —
-    // so blue's number is PENDING confirmation. b-k is the long bridge.
-    key: 'caribbean', name: 'Caribbean Sea', power: 'quarter', target: { blue: 6, red: 5 }, source: 'board',
-    tag: 'Two blue docks against one red ship. Different objectives for each side.',
+    // no special bases — but both badges print the same objective, 5, which
+    // the owner confirmed. b-k is the long bridge.
+    key: 'caribbean', name: 'Caribbean Sea', power: 'quarter', target: 5, source: 'board',
+    tag: 'Two blue docks against one red ship. The red ship has fewer ways in.',
     nodes: {
       B1: [19, 12, 'hq0'], a: [50, 12], B2: [78, 12, 'hq0'],
       b: [36, 33], c: [58, 42], d: [79, 42],
@@ -340,9 +338,9 @@ const TERRAIN_DEFS = [
     // by the board's owner, 2026-09-25. Landscape: blue's H.Q. top-left, red's
     // bottom-right, three shield plates (d, g, j) on the energy beam. Laid out
     // in a 150 x 100 frame. Half-turn symmetric: a↔m b↔l c↔k d↔j e↔i f↔h B↔R.
-    // h-i was not marked, but its mirror e-f was, a printed track runs there,
-    // and without it the two Medal spaces on that side would share a region —
-    // so it is in, PENDING the owner's confirmation.
+    // h-i was missed off the markings at first; its mirror e-f, the printed
+    // track and the Medal spaces all said it was there, and the owner
+    // confirmed it.
     key: 'metalx', name: 'Station Metal-X', power: 'shield', target: 7, source: 'board',
     tag: 'Shielded plates down the energy beam. Land on one and your Troop does nothing.',
     nodes: {
@@ -502,14 +500,7 @@ function parseTerrain(def) {
     if (!nodes.some((n) => n.hq === seat)) throw new Error(`${def.key}: no H.Q. for seat ${seat}`);
   }
 
-  // Each side has its own badge. On a symmetric board they print the same
-  // number; Caribbean Sea's asymmetric sides print different ones. So the
-  // objective is a pair, blue's then red's, and there is no single `target`
-  // left for anything to read by mistake.
-  const targets = typeof def.target === 'number' ? [def.target, def.target]
-    : def.target && Number.isInteger(def.target.blue) && Number.isInteger(def.target.red) ? [def.target.blue, def.target.red]
-      : null;
-  if (!targets) throw new Error(`${def.key}: target must be a number, or { blue, red } when the sides differ`);
+  if (!Number.isInteger(def.target) || def.target < 1) throw new Error(`${def.key}: target must be the printed objective`);
 
   if (def.source !== 'board' && def.source !== 'invented') {
     throw new Error(`${def.key}: source must be 'board' or 'invented', so nobody mistakes one for the other`);
@@ -518,7 +509,7 @@ function parseTerrain(def) {
   const xs = nodes.map((n) => n.x);
   const ys = nodes.map((n) => n.y);
   return {
-    key: def.key, name: def.name, tag: def.tag, power: def.power, targets,
+    key: def.key, name: def.name, tag: def.tag, power: def.power, target: def.target,
     source: def.source,
     nodes, regions, adj,
     x0: Math.min(...xs), y0: Math.min(...ys),
@@ -708,8 +699,7 @@ export function newMatch(roster, opts = {}) {
     for (let i = 0; i < n; i++) p.rack.push(p.reserve.pop());
   }
 
-  const [tb, tr] = terrain.targets;
-  note(G, `${terrain.name}. ${bySeat(G, starter).name} opens — ${tb === tr ? `first to ${tb} Medals` : `blue needs ${tb} Medals, red ${tr}`}, or take the enemy H.Q.`);
+  note(G, `${terrain.name}. ${bySeat(G, starter).name} opens — first to ${terrain.target} Medals, or take the enemy H.Q.`);
   return G;
 }
 
@@ -800,9 +790,8 @@ function putTile(G, seat, node, tile) {
 
 function checkMedals(G, p) {
   if (G.phase === 'over') return true;
-  const need = G.terrain.targets[p.seat];
-  if (p.medals >= need) {
-    finish(G, p.seat, `${p.name} reached the Medals objective (${need}).`);
+  if (p.medals >= G.terrain.target) {
+    finish(G, p.seat, `${p.name} reached the Medals objective (${G.terrain.target}).`);
     return true;
   }
   return false;
@@ -1334,11 +1323,11 @@ function evaluate(G, seat) {
   const foe = other(seat);
   const me = bySeat(G, seat);
   const them = bySeat(G, foe);
-  const [myGoal, theirGoal] = [G.terrain.targets[seat], G.terrain.targets[foe]];
+  const target = G.terrain.target;
 
   let v = (me.medals - them.medals) * W.medal;
   // the last Medal is the one that ends the game, so the curve steepens
-  v += (Math.pow(me.medals / myGoal, 2) - Math.pow(them.medals / theirGoal, 2)) * 500;
+  v += (Math.pow(me.medals / target, 2) - Math.pow(them.medals / target, 2)) * 500;
 
   for (const r of G.terrain.regions) {
     if (r.owner !== null) continue;
@@ -1583,7 +1572,7 @@ export function viewFor(G, seat, code) {
     turn: G.turn,
     terrain: {
       key: G.terrain.key, name: G.terrain.name, tag: G.terrain.tag,
-      power: G.terrain.power, targets: G.terrain.targets,
+      power: G.terrain.power, target: G.terrain.target,
       nodes: G.terrain.nodes, edges: G.terrain.edges, regions: G.terrain.regions,
       x0: G.terrain.x0, y0: G.terrain.y0, w: G.terrain.w, h: G.terrain.h,
     },

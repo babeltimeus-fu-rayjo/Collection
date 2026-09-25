@@ -75,11 +75,11 @@ for (const terrain of TB.TERRAINS) {
     else if (/Medals objective/.test(why)) seen.medals++;
     else seen.stuck++;
     // the stated reason has to match the state it left behind
-    if (/Medals objective/.test(why) && TB.bySeat(G, G.winner).medals < G.terrain.targets[G.winner]) {
-      bad(`${tag}: claims the Medals objective with ${TB.bySeat(G, G.winner).medals}/${G.terrain.targets[G.winner]}`);
+    if (/Medals objective/.test(why) && TB.bySeat(G, G.winner).medals < G.terrain.target) {
+      bad(`${tag}: claims the Medals objective with ${TB.bySeat(G, G.winner).medals}/${G.terrain.target}`);
     }
   }
-  console.log(`${terrain.name.padEnd(18)} ${GAMES} games ok — ${terrain.nodes.filter((n) => n.hq === null).length} bases, ${terrain.regions.length} regions, objective ${terrain.targets.join('/')}`);
+  console.log(`${terrain.name.padEnd(18)} ${GAMES} games ok — ${terrain.nodes.filter((n) => n.hq === null).length} bases, ${terrain.regions.length} regions, objective ${terrain.target}`);
 }
 
 const total = seen.hq + seen.medals + seen.stuck;

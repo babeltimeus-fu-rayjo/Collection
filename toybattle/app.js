@@ -1100,9 +1100,7 @@ function renderLobby(lob, sess) {
   blurb.replaceChildren(
     el('div', 'tb-blurb-tag', chosen.tag),
     el('div', 'tb-blurb-power', `${POWERS[chosen.power].cry} — ${POWERS[chosen.power].text}`),
-    el('div', 'tb-blurb-goal', chosen.targets[0] === chosen.targets[1]
-      ? `Medals objective: ${chosen.targets[0]}`
-      : `Medals objective: blue ${chosen.targets[0]}, red ${chosen.targets[1]}`),
+    el('div', 'tb-blurb-goal', `Medals objective: ${chosen.target}`),
     el('div', `tb-blurb-source ${chosen.source}`, chosen.source === 'board'
       ? 'Layout read off the printed board.'
       : 'Invented layout — not the printed board.'),
@@ -1451,7 +1449,7 @@ function renderSeats(view) {
     }
     card.append(head);
     const bar = el('div', 'tb-seat-stats');
-    bar.append(el('span', 'tb-stat medals', `★ ${p.medals}/${view.terrain.targets[p.seat]}`));
+    bar.append(el('span', 'tb-stat medals', `★ ${p.medals}/${view.terrain.target}`));
     bar.append(el('span', 'tb-stat', `🂠 ${p.rackCount}`));
     bar.append(el('span', 'tb-stat dim', `${p.reserveCount} in reserve`));
     if (p.frozen) bar.append(el('span', 'tb-stat pin', '📌 pinned'));
@@ -1565,7 +1563,7 @@ function renderTroopRef() {
   for (const t of TERRAINS) {
     const row = el('li', 'tb-ref-row');
     const body = el('div', 'tb-ref-body');
-    body.append(el('b', '', `${t.name} — objective ${t.targets[0] === t.targets[1] ? t.targets[0] : `blue ${t.targets[0]}, red ${t.targets[1]}`}`));
+    body.append(el('b', '', `${t.name} — objective ${t.target}`));
     body.append(el('i', 'tb-ref-cry', POWERS[t.power].cry));
     body.append(el('span', '', POWERS[t.power].text));
     row.append(body);
@@ -1733,8 +1731,7 @@ function renderGame(view, sess) {
   const tc = $('#terrain-chip');
   tc.textContent = view.terrain.name;
   tc.title = `${POWERS[view.terrain.power].cry} ${POWERS[view.terrain.power].text}`;
-  // your own badge — on Caribbean Sea the two sides need different numbers
-  $('#goal-chip').textContent = `★ ${view.terrain.targets[view.you === 1 ? 1 : 0]} to win`;
+  $('#goal-chip').textContent = `★ ${view.terrain.target} to win`;
 
   renderSeats(view);
   renderBoard(view);

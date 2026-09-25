@@ -135,10 +135,10 @@ console.log('— every printed board pays Medals = bases − 2 —');
       checked++;
     }
     const total = terrain.regions.reduce((s, r) => s + r.medals, 0);
-    // and the two sides' objectives have added up to the board's Medals every
-    // time — half each on a symmetric board
-    ok(terrain.targets[0] + terrain.targets[1] === total,
-      `${terrain.name}: objectives ${terrain.targets.join(' + ')} do not add up to its ${total} Medals — check the badges`);
+    // and the printed objective is half the board's Medals, rounded down —
+    // Caribbean Sea's 11 Medals give 5, the rest are even
+    ok(terrain.target === Math.floor(total / 2),
+      `${terrain.name}: objective ${terrain.target} is not half its ${total} Medals rounded down — check the badge`);
   }
   console.log(`  ${checked} regions on ${TB.TERRAINS.filter((x) => x.source === 'board').length} printed boards, all consistent`);
 }
