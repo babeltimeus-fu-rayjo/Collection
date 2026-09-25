@@ -1016,6 +1016,15 @@ a {
   font-weight: 700;
 }
 
+.tb-blurb-source {
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.tb-blurb-source.invented {
+  font-style: italic;
+}
+
 #terrain-chip,
 #goal-chip {
   font-size: 12.5px;

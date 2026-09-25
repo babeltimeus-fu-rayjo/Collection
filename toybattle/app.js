@@ -1101,6 +1101,9 @@ function renderLobby(lob, sess) {
     el('div', 'tb-blurb-tag', chosen.tag),
     el('div', 'tb-blurb-power', `${POWERS[chosen.power].cry} — ${POWERS[chosen.power].text}`),
     el('div', 'tb-blurb-goal', `Medals objective: ${chosen.target}`),
+    el('div', `tb-blurb-source ${chosen.source}`, chosen.source === 'board'
+      ? 'Layout read off the printed board.'
+      : 'Invented layout — not the printed board.'),
   );
 
   $('#btn-start').classList.toggle('hidden', !sess.isHost);
@@ -1302,10 +1305,11 @@ function renderBoard(view) {
       const flag = sv('text', 'tb-hq-mark', { x: cx, y: cy + 9, 'text-anchor': 'middle' });
       flag.textContent = n.hq === view.you ? '⌂' : '⚑';
       g.append(flag);
-    } else if (n.only) {
+    }
+    if (n.only) {
       const lab = sv('text', 'tb-only', { x: cx, y: cy - size / 2 - 7, 'text-anchor': 'middle' });
       // the board prints its list; the joker shows as a star
-      lab.textContent = n.only.map((v) => (v === 'joker' ? '★' : v)).join('');
+      lab.textContent = n.only.map((v) => (v === 'joker' ? '★' : v)).join('/');
       g.append(lab);
     }
     if (n.special) g.append(sv('circle', 'tb-spark', { cx: cx + size / 2 - 11, cy: cy - size / 2 + 11, r: 6 }));

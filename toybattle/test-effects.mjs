@@ -66,21 +66,32 @@ console.log('— the connection rule —');
 
 console.log('— Tropical Pool restrictions —');
 {
-  const G = stage('pool', { rack0: ['roxy', 'skully', 'kwak'] });
-  const buoy = G.terrain.nodes.find((n) => n.only);
-  ok(buoy, 'Tropical Pool should carry value-restricted bases');
-  ok(TB.valueAllowed(G, buoy.id, 'skully'), 'a 1 may take a buoy that lists 1–4');
-  ok(!TB.valueAllowed(G, buoy.id, 'roxy'), 'a 7 may not take a buoy that lists 1–4');
-  // La Croisette's sheet prints "a strength of 4, 5, 6, 7, or a joker", so the
-  // joker is a member of the list when the board lists it — and is not when it
-  // does not. Both directions matter, so both are checked.
-  ok(TB.valueAllowed(G, buoy.id, 'kwak'), 'the joker is on this buoy\'s list, so it may take it');
-  const noJoker = { ...G, terrain: { ...G.terrain, nodes: G.terrain.nodes.map((n) => (n.id === buoy.id ? { ...n, only: [1, 2, 3, 4] } : n)) } };
-  ok(!TB.valueAllowed(noJoker, buoy.id, 'kwak'), 'a list without the joker keeps the joker out');
-  ok(TB.valueAllowed(noJoker, buoy.id, 'skully'), 'and still admits the numbers it names');
-  const hq = at(G, 'R');
-  ok(TB.valueAllowed(G, hq, 'roxy'), 'the H.Q. lists 5–7, so a 7 may storm it');
-  ok(!TB.valueAllowed(G, hq, 'skully'), 'a 1 may not storm an H.Q. that lists 5–7');
+  // Written against whatever lists the board carries rather than particular
+  // numbers, so re-reading the printed triangles cannot break it: for every
+  // restricted node, each Troop is admitted exactly when the list names its
+  // strength — or names the joker, for Kwak.
+  const G = stage('pool');
+  const restricted = G.terrain.nodes.filter((n) => n.only);
+  ok(restricted.some((n) => n.hq === null), 'Tropical Pool should carry value-restricted bases');
+  ok(restricted.some((n) => n.hq !== null), 'and at least one value-restricted H.Q.');
+  for (const n of restricted) {
+    for (const key of TB.TROOP_ORDER) {
+      const s = TB.strengthOf(key);
+      const want = n.only.includes(s === null ? 'joker' : s);
+      ok(TB.valueAllowed(G, n.id, key) === want,
+        `${n.label} lists ${n.only.join('/')}: ${TB.troopLabel(key)} should be ${want ? 'admitted' : 'refused'}`);
+    }
+  }
+  // Both directions of the joker rule, on a list we control: La Croisette's
+  // sheet prints "a strength of 4, 5, 6, 7, or a joker", so the joker is a
+  // member of the list when the board names it and is kept out when it does not.
+  const buoy = restricted.find((n) => n.hq === null);
+  const withList = (only) => ({ ...G, terrain: { ...G.terrain, nodes: G.terrain.nodes.map((x) => (x.id === buoy.id ? { ...x, only } : x)) } });
+  ok(TB.valueAllowed(withList([4, 5, 6, 7, 'joker']), buoy.id, 'kwak'), 'a list naming the joker admits Kwak');
+  ok(!TB.valueAllowed(withList([4, 5, 6, 7]), buoy.id, 'kwak'), 'a list without the joker keeps Kwak out');
+  // an unrestricted H.Q. takes anything, where the board has one
+  const open = G.terrain.nodes.find((n) => n.hq !== null && !n.only);
+  if (open) ok(TB.TROOP_ORDER.every((k) => TB.valueAllowed(G, open.id, k)), `${open.label} has no triangle and should take any Troop`);
 }
 
 console.log('— capturing an H.Q. ends it at once —');

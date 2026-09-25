@@ -12,26 +12,26 @@
 //   (toy-en01-rules) and English player aid (toy-en01-player-aid). The eight
 //   Terrain powers are likewise transcribed word for word.
 //
-//   The BOARDS are not. Repos publishes no readable scan of the eight
-//   Terrains: every image of them is a perspective render or a fanned
-//   marketing shot with six boards overlapping. So the layouts below are
-//   ours — built in the game's grammar (a lattice of bases joined by paths,
-//   regions enclosed between them, H.Q. facing each other across it) and
-//   carrying each Terrain's real name and real power, but they are NOT the
-//   printed boards. Medal counts are ours too, and each Medals objective was
-//   picked by simulation: whichever number left H.Q. capture, the Medals
-//   race and running dry all live on that board. Swap in the real geometry
-//   if you ever get a straight-down photo of the boards; the parser below is
-//   the only thing that needs feeding.
+//   The BOARDS are being transcribed one at a time from photographs of the
+//   physical boards, and each Terrain below says which it is in `source`:
+//     'board'     read off the printed board and checked against it —
+//                 bases, paths, regions, Medals and the printed objective
+//     'invented'  our own layout in the game's grammar, carrying the
+//                 Terrain's real name and real power but NOT its printed
+//                 geometry; its Medals objective was picked by simulation.
+//   Repos publishes no readable scan of the Terrains, so the photographs are
+//   the only source. The lobby shows each board's source to the players.
 //
 // A Terrain is written out as its nodes, its paths and its regions, because
 // the printed boards are irregular: the paths fork and run at angles, the
 // bases are not on a lattice, and a region can be ringed by three bases or by
 // five. An earlier grid format could not express any of that.
 //
-//   nodes    label: [x, y] — and a third entry tags it:
+//   nodes    label: [x, y] — and a third entry of space-separated tags:
 //              'hq0' blue H.Q.   'hq1' red H.Q.   'special' a special base
-//              'only:4,5,6,7,joker' a base that admits just those Troops
+//              'only:4,5,6,7,joker' admits just those Troops — on a base or
+//              on an H.Q., since Tropical Pool prints its value triangles
+//              beside individual H.Q. and not across the whole board
 //            x and y are in whatever units suit the board; only their
 //            relative positions matter, and the renderer scales to fit.
 //   paths    'a-b b-c ...', one pair per path segment, in either order
@@ -136,11 +136,11 @@ export const POWERS = {
 
 const TERRAIN_DEFS = [
   {
-    // Transcribed from a photograph of the printed board, 2026-09-25. The
-    // board is a half-turn symmetric, so the bottom half is the top half
-    // rotated; coordinates are percentages of the board, origin top-left.
-    // Its Medals objective is printed in the corner: seven.
-    key: 'castle', name: 'Castle Field', power: 'retreat', target: 7,
+    // Transcribed from a photograph of the printed board and confirmed against
+    // it by the owner, 2026-09-25. The board is half-turn symmetric, so the
+    // bottom half is the top half rotated; coordinates are percentages of the
+    // board, origin top-left. Its Medals objective is printed in the corner.
+    key: 'castle', name: 'Castle Field', power: 'retreat', target: 7, source: 'board',
     tag: 'Stone keeps on a green field, a moat at each end and a river across the middle.',
     nodes: {
       R: [50, 4, 'hq1'],
@@ -183,37 +183,51 @@ const TERRAIN_DEFS = [
     ],
   },
   {
-    key: 'pool', name: 'Tropical Pool', power: 'buoy', target: 4,
-    tag: "Only the lighter toys float out to a buoy — and only the heaviest storm an H.Q.",
-    hqOnly: [5, 6, 7, 'joker'],
+    // Transcribed from a photograph of the printed board; paths and Medals
+    // corrected and confirmed by its owner, 2026-09-25. Half-turn symmetric:
+    // a↔m b↔l c↔k d↔j e↔i f↔h R1↔B2 R2↔B1, with g in the centre. Two H.Q. a
+    // side, each with a single way in, and only R1 and B2 carry a triangle.
+    // STILL PENDING: the numbers printed on the value triangles. The lists
+    // below on d, e, g, i, j, R1 and B2 are placeholders, not the board's.
+    key: 'pool', name: 'Tropical Pool', power: 'buoy', target: 6, source: 'board',
+    tag: 'Tyres and floats across a pool. The floats only take the Troops their triangle names.',
     nodes: {
-      R: [1, 0, 'hq1'],
-      a: [0, 1],
-      b: [1, 1],
-      c: [2, 1],
-      d: [0, 2, 'only:1,2,3,4,joker'],
-      e: [1, 2],
-      f: [2, 2],
-      g: [0, 3],
-      h: [1, 3],
-      i: [2, 3, 'only:1,2,3,4,joker'],
-      j: [0, 4],
-      k: [1, 4],
-      l: [2, 4],
-      B: [1, 5, 'hq0'],
+      R1: [25, 12, 'hq1 only:6,7'],
+      a: [50, 14],
+      R2: [75, 12, 'hq1'],
+      b: [25, 26],
+      c: [50, 28],
+      d: [75, 26, 'only:1,2'],
+      e: [25, 41, 'only:3,4,5'],
+      f: [75, 40],
+      g: [50, 50, 'only:6,7'],
+      h: [25, 60],
+      i: [75, 59, 'only:3,4,5'],
+      j: [25, 74, 'only:1,2'],
+      k: [50, 72],
+      l: [75, 74],
+      B1: [25, 88, 'hq0'],
+      m: [50, 86],
+      B2: [75, 88, 'hq0 only:6,7'],
     },
-    paths: 'R-b a-b b-c a-d b-e c-f d-e e-f d-g e-h f-i g-h h-i g-j h-k i-l j-k k-l k-B R-a R-c j-B l-B',
+    // paths confirmed by the user against the board, 2026-09-25: every H.Q.
+    // has a single way in, and the centre float is a six-way hub
+    paths: 'a-R2 a-c b-c c-d b-e e-h h-j d-f f-i i-l c-g g-k b-g g-l j-k k-l k-m B1-m '
+      + 'R1-c a-d h-g g-f j-m k-B2',
+    // Medals as read off the board by its owner, 2026-09-25
     regions: [
-      [1, 'a b d e'],
-      [1, 'b c e f'],
-      [2, 'd e g h'],
-      [2, 'e f h i'],
-      [1, 'g h j k'],
-      [1, 'h i k l'],
+      [1, 'a c d'],
+      [1, 'b c g'],
+      [2, 'c d f g'],
+      [2, 'b e h g'],
+      [2, 'f g i l'],
+      [2, 'g h j k'],
+      [1, 'g k l'],
+      [1, 'j k m'],
     ],
   },
   {
-    key: 'clouds', name: 'City of Clouds', power: 'splendor', target: 4,
+    key: 'clouds', name: 'City of Clouds', power: 'splendor', target: 4, source: 'invented',
     tag: "A wide, airy shelf of cloud. Short lines, long views.",
     nodes: {
       R: [1, 0, 'hq1'],
@@ -247,7 +261,7 @@ const TERRAIN_DEFS = [
     ],
   },
   {
-    key: 'jungle', name: 'Volcanic Jungle', power: 'eruption', target: 5,
+    key: 'jungle', name: 'Volcanic Jungle', power: 'eruption', target: 5, source: 'invented',
     tag: "The volcano does not take sides. It throws whoever stands too close.",
     nodes: {
       R: [1, 0, 'hq1'],
@@ -283,7 +297,7 @@ const TERRAIN_DEFS = [
     ],
   },
   {
-    key: 'cemetery', name: 'Cursed Cemetery', power: 'undead', target: 5,
+    key: 'cemetery', name: 'Cursed Cemetery', power: 'undead', target: 5, source: 'invented',
     tag: "Nothing here stays buried. Four open graves hand your losses back.",
     nodes: {
       R: [2, 0, 'hq1'],
@@ -319,7 +333,7 @@ const TERRAIN_DEFS = [
     ],
   },
   {
-    key: 'caribbean', name: 'Caribbean Sea', power: 'quarter', target: 5,
+    key: 'caribbean', name: 'Caribbean Sea', power: 'quarter', target: 5, source: 'invented',
     tag: "Asymmetric: two blue H.Q. against one red. Red has to be quicker.",
     nodes: {
       R: [2, 0, 'hq1'],
@@ -359,7 +373,7 @@ const TERRAIN_DEFS = [
     ],
   },
   {
-    key: 'metalx', name: 'Station Metal-X', power: 'shield', target: 4,
+    key: 'metalx', name: 'Station Metal-X', power: 'shield', target: 4, source: 'invented',
     tag: "Shielded plates swallow a Troop’s effect. Land there and you land plain.",
     nodes: {
       R: [1, 0, 'hq1'],
@@ -394,7 +408,7 @@ const TERRAIN_DEFS = [
     ],
   },
   {
-    key: 'battlefield', name: 'Battlefield', power: 'sniper', target: 5,
+    key: 'battlefield', name: 'Battlefield', power: 'sniper', target: 5, source: 'invented',
     tag: "Two nests overlooking the sand. Take a nest, pin a Troop on their rack.",
     nodes: {
       R: [2, 0, 'hq1'],
@@ -470,20 +484,32 @@ function parseTerrain(def) {
   const nodes = [];
   const idOf = new Map();
   for (const [label, spec] of Object.entries(def.nodes)) {
-    const [x, y, tag = ''] = spec;
+    const [x, y, tagText = ''] = spec;
     if (idOf.has(label)) throw new Error(`${def.key}: two nodes called ${label}`);
     idOf.set(label, nodes.length);
-    const restricted = tag.startsWith('only:');
+    const tags = tagText.split(/\s+/).filter(Boolean);
+    for (const t of tags) {
+      if (!/^(hq0|hq1|special|only:[\w,]+)$/.test(t)) throw new Error(`${def.key}: node ${label} has an unknown tag ${t}`);
+    }
+    const hq = tags.includes('hq0') ? 0 : tags.includes('hq1') ? 1 : null;
+    const onlyTag = tags.find((t) => t.startsWith('only:'));
+    const only = onlyTag
+      ? onlyTag.slice(5).split(',').map((v) => {
+        if (v === 'joker') return 'joker';
+        const s = Number(v);
+        if (!Number.isInteger(s) || s < 1 || s > 7) throw new Error(`${def.key}: node ${label} lists a strength ${v} that no Troop has`);
+        return s;
+      })
+      : null;
     nodes.push({
       id: nodes.length,
       label,
       x,
       y,
-      hq: tag === 'hq0' ? 0 : tag === 'hq1' ? 1 : null,
-      special: tag === 'special' || restricted,
-      only: restricted
-        ? tag.slice(5).split(',').map((v) => (v === 'joker' ? 'joker' : Number(v)))
-        : null,
+      hq,
+      // a restricted base is a special base; a restricted H.Q. is still an H.Q.
+      special: hq === null && (tags.includes('special') || only !== null),
+      only,
     });
   }
 
@@ -537,11 +563,15 @@ function parseTerrain(def) {
     if (!nodes.some((n) => n.hq === seat)) throw new Error(`${def.key}: no H.Q. for seat ${seat}`);
   }
 
+  if (def.source !== 'board' && def.source !== 'invented') {
+    throw new Error(`${def.key}: source must be 'board' or 'invented', so nobody mistakes one for the other`);
+  }
+
   const xs = nodes.map((n) => n.x);
   const ys = nodes.map((n) => n.y);
   return {
     key: def.key, name: def.name, tag: def.tag, power: def.power, target: def.target,
-    hqOnly: def.hqOnly ? def.hqOnly.slice() : null,
+    source: def.source,
     nodes, regions, adj,
     x0: Math.min(...xs), y0: Math.min(...ys),
     w: Math.max(...xs) - Math.min(...xs),
@@ -623,7 +653,7 @@ export function reachable(G, seat) {
 // 5, 6, 7, or a joker", so 'joker' is a member of the list like any other.
 export function valueAllowed(G, node, key) {
   const n = G.terrain.nodes[node];
-  const only = n.hq !== null ? G.terrain.hqOnly : n.only;
+  const only = n.only;
   if (!only) return true;
   const s = strengthOf(key);
   return only.includes(s === null ? 'joker' : s);
@@ -1079,18 +1109,35 @@ const WIN = 1e7;
 // its cuts early, and it is what `botChoose` falls back to when the node
 // budget is set to zero.
 
-// the Terrain never changes shape, so where the H.Q. are is worth caching
-const hqCache = new WeakMap();
-// Caribbean Sea gives blue two H.Q., and this returns whichever comes first.
-// That is fine for what it feeds — a distance term in the move ordering — but
-// it is not the right thing to build a rule on.
-function hqNode(G, seat) {
-  let cached = hqCache.get(G.terrain.nodes);
-  if (!cached) {
-    cached = [G.terrain.nodes.find((n) => n.hq === 0), G.terrain.nodes.find((n) => n.hq === 1)];
-    hqCache.set(G.terrain.nodes, cached);
+// Distances only mean something relative to how far apart neighbouring bases
+// are. The transcribed boards are written in percentages of the printed board
+// and the invented ones in lattice cells, so a raw distance term was twenty
+// times stronger on one than the other. Measure in path-lengths instead: the
+// median distance between joined nodes on that board. The Terrain never
+// changes shape, so the step is cached per board.
+const stepCache = new WeakMap();
+function boardStep(G) {
+  let step = stepCache.get(G.terrain.nodes);
+  if (step === undefined) {
+    const { nodes, edges } = G.terrain;
+    const lens = edges.map(([a, b]) => Math.hypot(nodes[a].x - nodes[b].x, nodes[a].y - nodes[b].y)).sort((p, q) => p - q);
+    step = (lens.length && lens[Math.floor(lens.length / 2)]) || 1;
+    stepCache.set(nodes, step);
   }
-  return cached[seat];
+  return step;
+}
+
+// How far a node is from the NEAREST H.Q. that `seat` owns, in path-lengths.
+// A side can hold two — Tropical Pool gives both sides two, Caribbean Sea
+// gives blue two — and aiming at whichever happened to be listed first sent
+// one bot at a restricted H.Q. and the other at an open one.
+function hqDistance(G, seat, node) {
+  const n = G.terrain.nodes[node];
+  let best = Infinity;
+  for (const h of G.terrain.nodes) {
+    if (h.hq === seat) best = Math.min(best, Math.hypot(n.x - h.x, n.y - h.y));
+  }
+  return best / boardStep(G);
 }
 
 function regionValue(G, seat, node) {
@@ -1152,8 +1199,8 @@ function scorePlacement(G, seat, node, key, reach, siege) {
   s -= (strengthOf(key) === null ? 3 : strengthOf(key)) * 1.5;
   if (key === 'kwak' && top && top.owner === foe) s += 14;
 
-  const hq = hqNode(G, foe);
-  if (hq) s -= Math.hypot(n.x - hq.x, n.y - hq.y) * 1.5;
+  const far = hqDistance(G, foe, node);
+  if (Number.isFinite(far)) s -= far * 1.5;
   return s;
 }
 
@@ -1586,7 +1633,7 @@ export function viewFor(G, seat, code) {
     turn: G.turn,
     terrain: {
       key: G.terrain.key, name: G.terrain.name, tag: G.terrain.tag,
-      power: G.terrain.power, target: G.terrain.target, hqOnly: G.terrain.hqOnly,
+      power: G.terrain.power, target: G.terrain.target,
       nodes: G.terrain.nodes, edges: G.terrain.edges, regions: G.terrain.regions,
       x0: G.terrain.x0, y0: G.terrain.y0, w: G.terrain.w, h: G.terrain.h,
     },
