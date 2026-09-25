@@ -162,18 +162,24 @@ const TERRAIN_DEFS = [
       B: [50, 96, 'hq0'],
     },
     // The keep's only ways out are the two drawbridges over its moat, and each
-    // leads to a corner base — nothing runs from the keep to the inner pair.
-    paths: 'R-a R-b a-c a-e b-d b-f c-e d-f c-g c-h d-h d-i e-g f-i '
-      + 'B-n B-o n-l n-j o-m o-k l-j m-k l-h l-g m-h m-i j-g k-i',
+    // leads to a corner base. A corner base does not touch the winch tower
+    // beside it, and neither does the inner base below it — the tower hangs
+    // off the two bases on its own flank.
+    paths: 'R-a R-b a-c b-d c-e d-f c-g c-h d-h d-i e-g f-i '
+      + 'B-n B-o n-l o-m l-j m-k l-h l-g m-h m-i j-g k-i',
     regions: [
-      [3, 'c h d'],
-      [1, 'a e c'],
-      [1, 'b f d'],
+      // The big one at each end: the whole apron in front of a keep, walled
+      // by its own moat between the two drawbridges. Five bases to close.
+      [3, 'R b d h c a'],
+      [3, 'B n l h m o'],
+      // a triangle around each winch tower
+      [1, 'c e g'],
+      [1, 'd f i'],
+      [1, 'g j l'],
+      [1, 'i k m'],
+      // and the river, either side of the middle bridge
       [2, 'c g l h'],
       [2, 'd h m i'],
-      [3, 'l h m'],
-      [1, 'o k m'],
-      [1, 'n j l'],
     ],
   },
   {
