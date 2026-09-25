@@ -1,0 +1,1086 @@
+// Toy Battle — engine.
+//
+// An unofficial implementation of TOY BATTLE by Paolo Mori and Alessandro
+// Zucchini (© Repos Production, 2025). Two players, ~15 minutes.
+//
+// PROVENANCE, because it matters and the two halves are not equal:
+//
+//   The RULES are exact. Troop strengths, every troop effect and its printed
+//   Note, the two turn actions, the placement and connection rules, region
+//   control, the rack cap, the ordering of effects and all three end
+//   conditions are transcribed from the publisher's own English rulebook
+//   (toy-en01-rules) and English player aid (toy-en01-player-aid). The eight
+//   Terrain powers are likewise transcribed word for word.
+//
+//   The BOARDS are not. Repos publishes no readable scan of the eight
+//   Terrains: every image of them is a perspective render or a fanned
+//   marketing shot with six boards overlapping. So the layouts below are
+//   ours — built in the game's grammar (a lattice of bases joined by paths,
+//   regions enclosed between them, H.Q. facing each other across it) and
+//   carrying each Terrain's real name and real power, but they are NOT the
+//   printed boards. Medal counts are ours too, and each Medals objective was
+//   picked by simulation: whichever number left H.Q. capture, the Medals
+//   race and running dry all live on that board. Swap in the real geometry
+//   if you ever get a straight-down photo of the boards; the parser below is
+//   the only thing that needs feeding.
+//
+// The map format is deliberately something a person can audit by eye. A
+// Terrain is a grid of strings; character positions alternate meaning:
+//
+//     even row, even col →  a node:   # base   * special base
+//                                     L base restricted to the values in
+//                                       the Terrain's `only` legend
+//                                     R red H.Q.   B blue H.Q.   . nothing
+//     even row, odd col  →  '-' a path running east-west
+//     odd row,  even col →  '|' a path running north-south
+//     odd row,  odd col  →  a region: a digit is how many Medals sit in it,
+//                           '.' or ' ' is open ground worth nothing
+//
+// so `#-#` is two bases joined by a path and `|2|` is a region holding two
+// Medals. Diagonals and H.Q. fans don't fit a grid, so they're listed
+// separately in `links` as "col,row" pairs in node coordinates.
+
+export const PROTO = 1;
+export const MIN_PLAYERS = 2;
+export const MAX_PLAYERS = 2;
+
+export const RACK_MAX = 8;       // "Your rack can hold up to 8 Troops maximum."
+export const SET_ASIDE = 4;      // "Remove 4 Troops from your reserve"
+export const COPIES = 3;         // "Each Troop, with 3 copies of each"
+
+// ---------------------------------------------------------------- the troops
+//
+// `str: null` is Kwak's joker. Everything in `text` is the player aid's own
+// wording; `note` is the Note printed under it.
+
+export const TROOPS = {
+  kwak: {
+    key: 'kwak', name: 'Kwak', str: null, order: 0, glyph: '🦆',
+    cry: 'You’ll never see me coming!',
+    text: 'Kwak has no effect. As a joker, Kwak may be placed on top of any enemy Troop, but any enemy Troop may also cover it.',
+  },
+  skully: {
+    key: 'skully', name: 'Skully', str: 1, order: 1, glyph: '💀',
+    cry: 'Get ready for invasion…',
+    text: 'You may draw 2 Troops from your reserve and place them on your rack.',
+    note: 'If you already have 7 Troops on your rack, you draw only one.',
+  },
+  capn: {
+    key: 'capn', name: 'Cap’n', str: 2, order: 2, glyph: '🪖',
+    cry: 'You there… With me!',
+    text: 'You may place 1 extra Troop on the Terrain and apply its effect.',
+    note: 'First apply all the effects of Troops you just placed, then apply any special base effects.',
+  },
+  jumbo: {
+    key: 'jumbo', name: 'Jumbo', str: 3, order: 3, glyph: '🤖',
+    cry: 'Bit of advice: keep your distance…',
+    text: 'You may choose 1 visible enemy Troop — adjacent to Jumbo — and discard it faceup.',
+    note: 'Troops are adjacent if they are connected by a single section of path.',
+  },
+  hook: {
+    key: 'hook', name: 'Hook', str: 4, order: 4, glyph: '🐵',
+    cry: 'My specialty: jump straight across enemy lines.',
+    text: 'You may ignore the connection rule and place Hook on any base whether or not it is connected to your H.Q.',
+    note: 'To place Hook on the enemy H.Q. (which is not a base), it must be connected to your H.Q.',
+  },
+  xb42: {
+    key: 'xb42', name: 'XB-42', str: 5, order: 5, glyph: '👾',
+    cry: 'My blasters always hit their mark.',
+    text: 'You may take, at random, 1 Troop from your opponent’s rack and discard it faceup.',
+  },
+  star: {
+    key: 'star', name: 'Star', str: 6, order: 6, glyph: '🦄',
+    cry: 'Who’s with me?',
+    text: 'You may draw 1 Troop from your reserve and place it on your rack.',
+  },
+  roxy: {
+    key: 'roxy', name: 'Roxy', str: 7, order: 7, glyph: '🦖',
+    cry: 'It’s MY base!',
+    text: 'Roxy has no effect.',
+  },
+};
+
+export const TROOP_ORDER = Object.values(TROOPS).sort((a, b) => a.order - b.order).map((t) => t.key);
+
+export const troop = (key) => TROOPS[key];
+export const strengthOf = (key) => TROOPS[key].str;
+export const troopLabel = (key) => {
+  const t = TROOPS[key];
+  return t.str === null ? `${t.name} (joker)` : `${t.name} (${t.str})`;
+};
+
+// A tile covers the one under it if it is stronger — or if either of them is
+// the joker, which is the whole of Kwak: it climbs on anything, and anything
+// climbs on it.
+export function canCover(key, underKey) {
+  if (underKey === null || underKey === undefined) return true;
+  if (key === 'kwak' || underKey === 'kwak') return true;
+  return strengthOf(key) > strengthOf(underKey);
+}
+
+// ------------------------------------------------------------- the terrains
+
+// Each Terrain's `power` text is the player aid's, verbatim. `special` is the
+// handler key the engine switches on.
+export const POWERS = {
+  retreat: { cry: 'The drums sound the retreat.', text: 'You may choose 1 of your other Troops, no matter where it is on the Terrain, and place it back on your rack.' },
+  buoy: { cry: 'Get to your buoy!', text: 'Only Troops with the indicated values can be placed on these special bases and H.Q.' },
+  splendor: { cry: 'How can we resist its splendor…', text: 'You may draw 1 Troop from your reserve and place it on your rack.' },
+  eruption: { cry: 'Eruptiooooooooon!', text: 'You may choose 1 enemy Troop that is adjacent to this special base. Move it to a base that is adjacent to its starting base, ignoring the placement rules.' },
+  undead: { cry: 'They’re back… Eek!', text: 'You may choose 1 of your Troops in the discard and place it on your rack.' },
+  quarter: { cry: 'Give no quarter!', text: 'This Terrain has no special bases, but it is asymmetric with 2 blue H.Q. and 1 red H.Q.' },
+  shield: { cry: 'Anti-effect shield activated!', text: 'Troop effects are not applied on these special bases.' },
+  sniper: { cry: 'Snipers sighted, find cover!', text: 'Point to 1 Troop on your opponent’s rack, without looking at it. Your opponent lays it down, facedown, and cannot place it on their turn. At the end of their turn, your opponent places the Troop back on their rack: it’s available again.' },
+};
+
+const TERRAIN_DEFS = [
+  {
+    key: 'castle', name: 'Castle Field', power: 'retreat', target: 4,
+    tag: 'Stone keeps on a green field. The gentlest of the eight — start here.',
+    map: [
+      '. R .',
+      '. | .',
+      '#-#-#',
+      '|1|1|',
+      '#-*-#',
+      '|2|2|',
+      '#-*-#',
+      '|1|1|',
+      '#-#-#',
+      '. | .',
+      '. B .',
+    ],
+    links: [['1,0', '0,1'], ['1,0', '2,1'], ['1,5', '0,4'], ['1,5', '2,4']],
+  },
+  {
+    key: 'pool', name: 'Tropical Pool', power: 'buoy', target: 4,
+    tag: 'Only the lighter toys float out to a buoy — and only the heaviest storm an H.Q.',
+    map: [
+      '. R .',
+      '. | .',
+      '#-#-#',
+      '|1|1|',
+      'L-#-#',
+      '|2|2|',
+      '#-#-L',
+      '|1|1|',
+      '#-#-#',
+      '. | .',
+      '. B .',
+    ],
+    links: [['1,0', '0,1'], ['1,0', '2,1'], ['1,5', '0,4'], ['1,5', '2,4']],
+    only: { L: [1, 2, 3, 4] },
+    hqOnly: [5, 6, 7],
+  },
+  {
+    key: 'clouds', name: 'City of Clouds', power: 'splendor', target: 4,
+    tag: 'A wide, airy shelf of cloud. Short lines, long views.',
+    map: [
+      '. R . .',
+      '. | . .',
+      '#-#-#-#',
+      '|1|2|1|',
+      '#-*-#-#',
+      '| |1| |',
+      '#-#-*-#',
+      '|1|2|1|',
+      '#-#-#-#',
+      '. . | .',
+      '. . B .',
+    ],
+    links: [['1,0', '0,1'], ['1,0', '2,1'], ['2,5', '1,4'], ['2,5', '3,4']],
+  },
+  {
+    key: 'jungle', name: 'Volcanic Jungle', power: 'eruption', target: 5,
+    tag: 'The volcano does not take sides. It throws whoever stands too close.',
+    map: [
+      '. R . .',
+      '. | . .',
+      '#-#-#-#',
+      '|1|2|1|',
+      '#-*-#-#',
+      '|1|1|1|',
+      '#-#-*-#',
+      '|1|2|1|',
+      '#-#-#-#',
+      '. . | .',
+      '. . B .',
+    ],
+    links: [['1,0', '0,1'], ['1,0', '2,1'], ['2,5', '1,4'], ['2,5', '3,4']],
+  },
+  {
+    key: 'cemetery', name: 'Cursed Cemetery', power: 'undead', target: 5,
+    tag: 'Nothing here stays buried. Four open graves hand your losses back.',
+    map: [
+      '. . R .',
+      '. . | .',
+      '#-#-*-#',
+      '|1|1|1|',
+      '#-*-#-#',
+      '|1|2|1|',
+      '#-#-*-#',
+      '|1|1|1|',
+      '#-*-#-#',
+      '. | . .',
+      '. B . .',
+    ],
+    links: [['2,0', '1,1'], ['2,0', '3,1'], ['1,5', '0,4'], ['1,5', '2,4']],
+  },
+  {
+    key: 'caribbean', name: 'Caribbean Sea', power: 'quarter', target: 5,
+    tag: 'Asymmetric: two blue H.Q. against one red. Red has to be quicker.',
+    map: [
+      '. . R . .',
+      '. . | . .',
+      '#-#-#-#-#',
+      '|1|2|2|1|',
+      '#-#-#-#-#',
+      '| | | | |',
+      '#-#-#-#-#',
+      '|1|2|2|1|',
+      '#-#-#-#-#',
+      '| . . . |',
+      'B . . . B',
+    ],
+    links: [['2,0', '1,1'], ['2,0', '3,1'], ['0,5', '1,4'], ['4,5', '3,4']],
+  },
+  {
+    key: 'metalx', name: 'Station Metal-X', power: 'shield', target: 4,
+    tag: 'Shielded plates swallow a Troop’s effect. Land there and you land plain.',
+    map: [
+      '. R . .',
+      '. | . .',
+      '#-#-*-#',
+      '|2|1|1|',
+      '#-#-#-#',
+      '|1| |1|',
+      '#-#-#-#',
+      '|1|1|2|',
+      '#-*-#-#',
+      '. . | .',
+      '. . B .',
+    ],
+    links: [['1,0', '0,1'], ['1,0', '2,1'], ['2,5', '1,4'], ['2,5', '3,4']],
+  },
+  {
+    key: 'battlefield', name: 'Battlefield', power: 'sniper', target: 5,
+    tag: 'Two nests overlooking the sand. Take a nest, pin a Troop on their rack.',
+    map: [
+      '. . R .',
+      '. . | .',
+      '#-#-#-#',
+      '|1|1|1|',
+      '#-*-#-#',
+      '|2|1|2|',
+      '#-#-*-#',
+      '|1|1|1|',
+      '#-#-#-#',
+      '. | . .',
+      '. B . .',
+    ],
+    links: [['2,0', '1,1'], ['2,0', '3,1'], ['1,5', '0,4'], ['1,5', '2,4']],
+  },
+];
+
+// -------------------------------------------------------------- map parsing
+
+const NODE_CHARS = '#*LHRB';
+
+function parseTerrain(def) {
+  const nodes = [];
+  const at = new Map();          // "col,row" → node index
+  const edges = new Set();       // "a|b" with a < b
+  const regions = [];
+
+  const cell = (row, col) => {
+    const line = def.map[row];
+    return line && col < line.length ? line[col] : ' ';
+  };
+  const addEdge = (a, b) => {
+    if (a === undefined || b === undefined || a === b) return;
+    edges.add(a < b ? `${a}|${b}` : `${b}|${a}`);
+  };
+
+  for (let r = 0; r < def.map.length; r += 2) {
+    for (let c = 0; c < def.map[r].length; c += 2) {
+      const ch = cell(r, c);
+      if (!NODE_CHARS.includes(ch)) continue;
+      const id = nodes.length;
+      const key = `${c / 2},${r / 2}`;
+      at.set(key, id);
+      nodes.push({
+        id,
+        x: c / 2,
+        y: r / 2,
+        hq: ch === 'B' ? 0 : ch === 'R' ? 1 : null,
+        special: ch === '*' || ch === 'L',
+        only: def.only && def.only[ch] ? def.only[ch].slice() : null,
+      });
+    }
+  }
+
+  for (let r = 0; r < def.map.length; r++) {
+    for (let c = 0; c < def.map[r].length; c++) {
+      const ch = cell(r, c);
+      const evenRow = r % 2 === 0, evenCol = c % 2 === 0;
+      if (evenRow && !evenCol && ch === '-') {
+        addEdge(at.get(`${(c - 1) / 2},${r / 2}`), at.get(`${(c + 1) / 2},${r / 2}`));
+      } else if (!evenRow && evenCol && ch === '|') {
+        addEdge(at.get(`${c / 2},${(r - 1) / 2}`), at.get(`${c / 2},${(r + 1) / 2}`));
+      } else if (!evenRow && !evenCol && ch >= '1' && ch <= '9') {
+        const around = [
+          at.get(`${(c - 1) / 2},${(r - 1) / 2}`), at.get(`${(c + 1) / 2},${(r - 1) / 2}`),
+          at.get(`${(c - 1) / 2},${(r + 1) / 2}`), at.get(`${(c + 1) / 2},${(r + 1) / 2}`),
+        ];
+        if (around.some((n) => n === undefined)) throw new Error(`${def.key}: region at ${c},${r} has a missing corner`);
+        regions.push({ id: regions.length, x: c / 2, y: r / 2, medals: Number(ch), around, owner: null });
+      }
+    }
+  }
+
+  for (const [a, b] of def.links || []) addEdge(at.get(a), at.get(b));
+
+  // A region only exists if the paths actually close around it. The map can
+  // look right and be wrong: write a '*' where a '|' belongs and the wall
+  // silently goes missing, leaving a "region" that is open on one side and
+  // can never be enclosed. That is a data file and its consumer disagreeing
+  // in silence, so it is a hard error rather than a quiet no-op.
+  const has = (a, b) => edges.has(a < b ? `${a}|${b}` : `${b}|${a}`);
+  for (const r of regions) {
+    const [nw, ne, sw, se] = r.around;
+    for (const [a, b, side] of [[nw, ne, 'north'], [sw, se, 'south'], [nw, sw, 'west'], [ne, se, 'east']]) {
+      if (!has(a, b)) throw new Error(`${def.key}: the region at ${r.x},${r.y} has no path along its ${side} side`);
+    }
+  }
+
+  const adj = nodes.map(() => []);
+  for (const e of edges) {
+    const [a, b] = e.split('|').map(Number);
+    adj[a].push(b);
+    adj[b].push(a);
+  }
+
+  const w = Math.max(...nodes.map((n) => n.x));
+  const h = Math.max(...nodes.map((n) => n.y));
+  return {
+    key: def.key, name: def.name, tag: def.tag, power: def.power, target: def.target,
+    hqOnly: def.hqOnly ? def.hqOnly.slice() : null,
+    nodes, regions, adj, w, h,
+    edges: [...edges].map((e) => e.split('|').map(Number)),
+  };
+}
+
+export const TERRAINS = TERRAIN_DEFS.map(parseTerrain);
+export const terrainByKey = (key) => TERRAINS.find((t) => t.key === key) || TERRAINS[0];
+
+// ------------------------------------------------------------------ helpers
+
+function shuffle(a) {
+  const out = a.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+export const bySeat = (G, seat) => G.players.find((p) => p.seat === seat);
+const other = (seat) => (seat === 0 ? 1 : 0);
+
+export const topOf = (G, node) => {
+  const st = G.board[node];
+  return st.length ? st[st.length - 1] : null;
+};
+const occupant = (G, node) => {
+  const t = topOf(G, node);
+  return t ? t.owner : null;
+};
+
+function note(G, text) {
+  G.logSeq += 1;
+  G.log.push({ id: G.logSeq, text });
+  if (G.log.length > 60) G.log.shift();
+}
+function bumpFx(G, fx) {
+  G.fxSeq += 1;
+  G.fx = { seq: G.fxSeq, ...fx };
+}
+
+// ------------------------------------------------------------- the rule core
+
+// Every H.Q. belonging to `seat`. Caribbean Sea gives blue two of them, so
+// connection has to start from any one.
+const hqsOf = (G, seat) => G.terrain.nodes.filter((n) => n.hq === seat).map((n) => n.id);
+
+// The connection rule: "you must always follow a continuous path from your
+// H.Q. (starting point) to the Troop you are placing, passing only through
+// bases you occupy." The destination itself is not required to be occupied —
+// only everything strictly between.
+export function reachable(G, seat) {
+  const seen = new Set();
+  const out = new Set();
+  const stack = hqsOf(G, seat);
+  for (const h of stack) seen.add(h);
+  while (stack.length) {
+    const n = stack.pop();
+    for (const m of G.terrain.adj[n]) {
+      if (!out.has(m)) out.add(m);
+      if (seen.has(m)) continue;
+      // you may only keep walking through a base you occupy — and an H.Q. is
+      // not a base, so a chain may never run through one
+      if (G.terrain.nodes[m].hq === null && occupant(G, m) === seat) {
+        seen.add(m);
+        stack.push(m);
+      }
+    }
+  }
+  return out;
+}
+
+// Does this Terrain let this tile stand on this node at all? Tropical Pool's
+// buoys and H.Q. list the values they accept. Kwak has no value, so it is not
+// one of "the indicated values" and cannot take a restricted slot — our
+// reading of a case the aid does not spell out.
+export function valueAllowed(G, node, key) {
+  const n = G.terrain.nodes[node];
+  const only = n.hq !== null ? G.terrain.hqOnly : n.only;
+  if (!only) return true;
+  const s = strengthOf(key);
+  return s !== null && only.includes(s);
+}
+
+// The four slots the rulebook lists, plus the connection rule. `hook` is the
+// one exception it grants: Hook ignores connection, but only onto a base —
+// the enemy H.Q. is not a base, so Hook still has to be connected for that.
+export function canPlace(G, seat, node, key) {
+  const n = G.terrain.nodes[node];
+  if (n.hq === seat) return false;                       // never your own H.Q.
+  if (!valueAllowed(G, node, key)) return false;
+  const top = topOf(G, node);
+  if (n.hq === null) {
+    if (top && top.owner !== seat && !canCover(key, top.key)) return false;
+  }
+  if (key === 'hook' && n.hq === null) return true;      // Hook skips the walk
+  return reachable(G, seat).has(node);
+}
+
+export function placeOptions(G, seat, key) {
+  const out = [];
+  for (const n of G.terrain.nodes) if (canPlace(G, seat, n.id, key)) out.push(n.id);
+  return out;
+}
+
+const adjacentTo = (G, node) => G.terrain.adj[node];
+
+// "as soon as you occupy all bases surrounding a region, you take control of
+// this region" — so this runs after every single mutation, not at end of turn.
+function claimRegions(G) {
+  for (const r of G.terrain.regions) {
+    if (r.owner !== null) continue;
+    const who = occupant(G, r.around[0]);
+    if (who === null) continue;
+    if (!r.around.every((n) => occupant(G, n) === who)) continue;
+    r.owner = who;
+    const p = bySeat(G, who);
+    p.medals += r.medals;
+    note(G, `${p.name} takes control of a region — ${r.medals} Medal${r.medals === 1 ? '' : 's'}.`);
+    bumpFx(G, { kind: 'medals', seat: who, region: r.id, medals: r.medals });
+  }
+}
+
+function discardTile(G, tile) {
+  G.discard.push(tile);
+}
+
+// ------------------------------------------------------------------- setup
+
+export function newMatch(roster, opts = {}) {
+  const terrain = terrainByKey(opts.terrain || TERRAINS[Math.floor(Math.random() * TERRAINS.length)].key);
+  // the boards carry their own colours: blue is seat 0, red is seat 1
+  const starter = Math.floor(Math.random() * 2);
+  let uid = 0;
+
+  const G = {
+    mid: Math.floor(Math.random() * 1e9),
+    proto: PROTO,
+    phase: 'playing',
+    terrain: JSON.parse(JSON.stringify(terrain)),
+    turn: starter,
+    starter,
+    board: terrain.nodes.map(() => []),
+    discard: [],
+    pending: null,
+    troopQ: [],
+    baseQ: [],
+    placedThisTurn: [],
+    winner: null,
+    result: null,
+    endedBy: null,
+    log: [],
+    logSeq: 0,
+    fx: null,
+    fxSeq: 0,
+    players: roster.map((p) => ({
+      seat: p.seat,
+      name: p.name,
+      bot: !!p.bot,
+      connected: p.connected !== false,
+      rack: [],
+      reserve: [],
+      medals: 0,
+      frozen: null,          // tile id pinned by a sniper, for one turn
+      lastAction: null,
+    })),
+  };
+
+  for (const p of G.players) {
+    const bag = [];
+    for (const key of TROOP_ORDER) for (let i = 0; i < COPIES; i++) bag.push({ id: `t${uid++}`, key, owner: p.seat });
+    // "Remove 4 Troops from your reserve and return them to the box, without
+    // looking at them; they will not be used this game."
+    p.reserve = shuffle(bag).slice(SET_ASIDE);
+  }
+  // "This player takes 3 Troops from their reserve... Their opponent does the
+  // same, but with 4 Troops."
+  for (const p of G.players) {
+    const n = p.seat === starter ? 3 : 4;
+    for (let i = 0; i < n; i++) p.rack.push(p.reserve.pop());
+  }
+
+  note(G, `${terrain.name}. ${bySeat(G, starter).name} opens — first to ${terrain.target} Medals, or take the enemy H.Q.`);
+  return G;
+}
+
+// ------------------------------------------------------------- turn actions
+
+const rackFull = (p) => p.rack.length >= RACK_MAX;
+export const canDraw = (p) => p.reserve.length > 0 && !rackFull(p);
+
+function drawUpTo(G, p, want) {
+  let got = 0;
+  while (got < want && p.reserve.length && !rackFull(p)) {
+    p.rack.push(p.reserve.pop());
+    got++;
+  }
+  return got;
+}
+
+// A Troop that a sniper pinned cannot be placed this turn.
+const playable = (p) => p.rack.filter((t) => t.id !== p.frozen);
+
+function canAct(G, seat) {
+  const p = bySeat(G, seat);
+  if (!p) return false;
+  if (canDraw(p)) return true;
+  return playable(p).some((t) => placeOptions(G, seat, t.key).length > 0);
+}
+
+function endTurn(G) {
+  const p = bySeat(G, G.turn);
+  p.frozen = null;                       // "At the end of their turn... it's available again."
+  G.placedThisTurn = [];
+  G.turn = other(G.turn);
+  const next = bySeat(G, G.turn);
+  if (!canAct(G, G.turn)) {
+    // "The game also ends if a player cannot draw or place a Troop."
+    finish(G, null, `${next.name} can neither draw nor place.`, G.turn);
+  }
+}
+
+function finish(G, winnerSeat, why, stuckSeat = null) {
+  G.phase = 'over';
+  G.pending = null;
+  G.troopQ = [];
+  G.baseQ = [];
+  let winner = winnerSeat;
+  if (winner === null) {
+    const [a, b] = G.players;
+    // "compare your Medals... In case of tie, the player who ended the game
+    // loses and their opponent wins."
+    if (a.medals > b.medals) winner = a.seat;
+    else if (b.medals > a.medals) winner = b.seat;
+    else winner = other(stuckSeat);
+  }
+  G.winner = winner;
+  G.endedBy = why;
+  G.result = {
+    winner,
+    why,
+    scores: G.players.map((p) => ({ seat: p.seat, name: p.name, medals: p.medals, rack: p.rack.length, reserve: p.reserve.length })),
+  };
+  note(G, `${why} ${bySeat(G, winner).name} wins.`);
+  bumpFx(G, { kind: 'over', seat: winner });
+}
+
+// Put a tile on a node, then run every consequence the rulebook attaches.
+function putTile(G, seat, node, tile) {
+  const p = bySeat(G, seat);
+  const n = G.terrain.nodes[node];
+  G.board[node].push(tile);
+  p.rack = p.rack.filter((t) => t.id !== tile.id);
+  G.placedThisTurn.push(node);
+  note(G, n.hq !== null ? `${p.name} marches ${troopLabel(tile.key)} into the enemy H.Q.` : `${p.name} places ${troopLabel(tile.key)}.`);
+  bumpFx(G, { kind: 'place', seat, node, key: tile.key });
+
+  if (n.hq !== null && n.hq !== seat) {
+    // "If you place one of your Troops on the enemy H.Q., you immediately win."
+    finish(G, seat, `${p.name} captured the enemy H.Q.`);
+    return;
+  }
+  claimRegions(G);
+  if (checkMedals(G, p)) return;
+
+  // Station Metal-X: "Troop effects are not applied on these special bases."
+  const shielded = G.terrain.power === 'shield' && n.special;
+  if (!shielded) G.troopQ.push({ node, key: tile.key, seat });
+  if (n.special && G.terrain.power !== 'shield' && G.terrain.power !== 'buoy') G.baseQ.push({ node, seat });
+}
+
+function checkMedals(G, p) {
+  if (G.phase === 'over') return true;
+  if (p.medals >= G.terrain.target) {
+    finish(G, p.seat, `${p.name} reached the Medals objective (${G.terrain.target}).`);
+    return true;
+  }
+  return false;
+}
+
+// --------------------------------------------------------- effect resolution
+//
+// The aid's ordering, from Cap'n's Note: "First apply all the effects of
+// Troops you just placed, then apply any special base effects." So the troop
+// queue drains completely — including anything Cap'n adds to it — before the
+// base queue starts.
+
+function pump(G) {
+  while (G.phase !== 'over' && !G.pending) {
+    if (G.troopQ.length) {
+      const step = G.troopQ.shift();
+      troopEffect(G, step);
+      continue;
+    }
+    if (G.baseQ.length) {
+      const step = G.baseQ.shift();
+      baseEffect(G, step);
+      continue;
+    }
+    endTurn(G);
+    return;
+  }
+}
+
+function troopEffect(G, { node, key, seat }) {
+  const p = bySeat(G, seat);
+  const foe = bySeat(G, other(seat));
+  if (key === 'skully') {
+    const n = drawUpTo(G, p, 2);
+    if (n) note(G, `Skully calls up ${n} more.`);
+  } else if (key === 'star') {
+    if (drawUpTo(G, p, 1)) note(G, 'Star brings a friend.');
+  } else if (key === 'xb42') {
+    if (foe.rack.length) {
+      const i = Math.floor(Math.random() * foe.rack.length);
+      const [hit] = foe.rack.splice(i, 1);
+      if (foe.frozen === hit.id) foe.frozen = null;
+      discardTile(G, hit);
+      note(G, `XB-42 blasts ${troopLabel(hit.key)} off ${foe.name}'s rack.`);
+      bumpFx(G, { kind: 'blast', seat, key: hit.key });
+    }
+  } else if (key === 'capn') {
+    if (playable(p).some((t) => placeOptions(G, seat, t.key).length)) {
+      G.pending = { kind: 'capn', seat, node };
+    }
+  } else if (key === 'jumbo') {
+    const targets = adjacentTo(G, node).filter((m) => {
+      const t = topOf(G, m);
+      return t && t.owner !== seat && G.terrain.nodes[m].hq === null;
+    });
+    if (targets.length) G.pending = { kind: 'jumbo', seat, node, options: targets };
+  }
+}
+
+function baseEffect(G, { node, seat }) {
+  const p = bySeat(G, seat);
+  const power = G.terrain.power;
+  if (power === 'splendor') {
+    if (drawUpTo(G, p, 1)) note(G, `${p.name} draws from the clouds.`);
+    return;
+  }
+  // "You can only have a maximum of 8 Troops on your rack. If you were to
+  // exceed this limit with the effect of a special base, you cannot apply
+  // this effect."
+  if (power === 'retreat') {
+    if (rackFull(p)) return;
+    const opts = visibleOwn(G, seat).filter((m) => m !== node);
+    if (opts.length) G.pending = { kind: 'retreat', seat, node, options: opts };
+  } else if (power === 'undead') {
+    if (rackFull(p)) return;
+    if (G.discard.some((t) => t.owner === seat)) G.pending = { kind: 'undead', seat, node };
+  } else if (power === 'eruption') {
+    const opts = adjacentTo(G, node).filter((m) => {
+      const t = topOf(G, m);
+      return t && t.owner !== seat && G.terrain.nodes[m].hq === null;
+    }).filter((m) => eruptionTargets(G, m).length);
+    if (opts.length) G.pending = { kind: 'eruption', seat, node, options: opts };
+  } else if (power === 'sniper') {
+    const foe = bySeat(G, other(seat));
+    if (foe.rack.length) G.pending = { kind: 'sniper', seat, node, count: foe.rack.length };
+  }
+}
+
+// Your own Troops that are actually on top of their stack — "you may only
+// interact with visible Troops."
+function visibleOwn(G, seat) {
+  const out = [];
+  for (const n of G.terrain.nodes) {
+    if (n.hq !== null) continue;
+    const t = topOf(G, n.id);
+    if (t && t.owner === seat) out.push(n.id);
+  }
+  return out;
+}
+
+// The volcano throws a Troop to "a base that is adjacent to its starting
+// base, ignoring the placement rules" — any base, whoever holds it.
+const eruptionTargets = (G, from) => adjacentTo(G, from).filter((m) => G.terrain.nodes[m].hq === null);
+
+// ------------------------------------------------------------------- moves
+
+export function applyMove(G, seat, move) {
+  if (G.phase === 'over') return { ok: false, error: 'The battle is over.' };
+  const p = bySeat(G, seat);
+  if (!p) return { ok: false, error: 'Unknown player.' };
+
+  if (G.pending) {
+    if (G.pending.seat !== seat) return { ok: false, error: 'Not your decision.' };
+    const r = resolvePending(G, seat, move);
+    if (!r.ok) return r;
+    pump(G);
+    return { ok: true };
+  }
+
+  if (G.turn !== seat) return { ok: false, error: 'Not your turn.' };
+
+  if (move && move.kind === 'draw') {
+    if (!canDraw(p)) return { ok: false, error: 'You cannot draw — reserve empty or rack full.' };
+    const n = drawUpTo(G, p, 2);
+    p.lastAction = `drew ${n}`;
+    note(G, `${p.name} draws ${n} Troop${n === 1 ? '' : 's'}.`);
+    bumpFx(G, { kind: 'draw', seat, n });
+    endTurn(G);
+    return { ok: true };
+  }
+
+  if (move && move.kind === 'place') {
+    const tile = p.rack.find((t) => t.id === move.tile);
+    if (!tile) return { ok: false, error: 'You do not hold that Troop.' };
+    if (p.frozen === tile.id) return { ok: false, error: 'A sniper has that Troop pinned this turn.' };
+    if (!canPlace(G, seat, move.node, tile.key)) return { ok: false, error: 'That slot is not open to you.' };
+    p.lastAction = `played ${TROOPS[tile.key].name}`;
+    putTile(G, seat, move.node, tile);
+    pump(G);
+    return { ok: true };
+  }
+
+  return { ok: false, error: 'Unknown move.' };
+}
+
+function resolvePending(G, seat, move) {
+  const pend = G.pending;
+  const p = bySeat(G, seat);
+  const foe = bySeat(G, other(seat));
+
+  if (move && move.kind === 'skip') {
+    G.pending = null;
+    return { ok: true };
+  }
+
+  if (pend.kind === 'capn') {
+    if (!move || move.kind !== 'place') return { ok: false, error: 'Place the extra Troop, or skip.' };
+    const tile = p.rack.find((t) => t.id === move.tile);
+    if (!tile) return { ok: false, error: 'You do not hold that Troop.' };
+    if (p.frozen === tile.id) return { ok: false, error: 'A sniper has that Troop pinned this turn.' };
+    if (!canPlace(G, seat, move.node, tile.key)) return { ok: false, error: 'That slot is not open to you.' };
+    G.pending = null;
+    putTile(G, seat, move.node, tile);
+    return { ok: true };
+  }
+
+  if (pend.kind === 'jumbo') {
+    if (!move || !pend.options.includes(move.node)) return { ok: false, error: 'Pick a neighbouring enemy Troop.' };
+    const hit = G.board[move.node].pop();
+    discardTile(G, hit);
+    note(G, `Jumbo shoves ${troopLabel(hit.key)} off the board.`);
+    bumpFx(G, { kind: 'shove', seat, node: move.node, key: hit.key });
+    G.pending = null;
+    claimRegions(G);
+    checkMedals(G, p);
+    return { ok: true };
+  }
+
+  if (pend.kind === 'retreat') {
+    if (!move || !pend.options.includes(move.node)) return { ok: false, error: 'Pick one of your own Troops.' };
+    const back = G.board[move.node].pop();
+    p.rack.push(back);
+    note(G, `${p.name} sounds the retreat — ${troopLabel(back.key)} returns to the rack.`);
+    G.pending = null;
+    claimRegions(G);
+    checkMedals(G, p);
+    return { ok: true };
+  }
+
+  if (pend.kind === 'undead') {
+    const i = G.discard.findIndex((t) => t.id === (move && move.tile));
+    if (i < 0 || G.discard[i].owner !== seat) return { ok: false, error: 'Pick one of your own discarded Troops.' };
+    const [back] = G.discard.splice(i, 1);
+    p.rack.push(back);
+    note(G, `${troopLabel(back.key)} claws its way out of the discard.`);
+    G.pending = null;
+    return { ok: true };
+  }
+
+  if (pend.kind === 'eruption') {
+    if (!move || !pend.options.includes(move.from)) return { ok: false, error: 'Pick an enemy Troop beside the volcano.' };
+    if (!eruptionTargets(G, move.from).includes(move.to)) return { ok: false, error: 'It can only be thrown to a neighbouring base.' };
+    const flung = G.board[move.from].pop();
+    G.board[move.to].push(flung);
+    note(G, `The volcano hurls ${troopLabel(flung.key)} to the next base.`);
+    bumpFx(G, { kind: 'erupt', seat, node: move.to, key: flung.key });
+    G.pending = null;
+    claimRegions(G);
+    checkMedals(G, p);
+    if (G.phase !== 'over') checkMedals(G, foe);
+    return { ok: true };
+  }
+
+  if (pend.kind === 'sniper') {
+    const i = Number(move && move.index);
+    if (!Number.isInteger(i) || i < 0 || i >= foe.rack.length) return { ok: false, error: 'Point at one of their Troops.' };
+    foe.frozen = foe.rack[i].id;
+    note(G, `${p.name} pins a Troop on ${foe.name}'s rack.`);
+    bumpFx(G, { kind: 'pin', seat });
+    G.pending = null;
+    return { ok: true };
+  }
+
+  return { ok: false, error: 'Nothing to decide.' };
+}
+
+// ------------------------------------------------------------------- the bot
+//
+// One ply, no search. The two win conditions are hard-wired ahead of every
+// heuristic; the heuristics exist to stop it doing the obviously degenerate
+// thing, which — as the first version of this file proved — is to spend the
+// whole game re-covering the same three bases next to its own H.Q. while the
+// other nine sit empty. Spreading is what wins, so spreading is what scores.
+
+// How much an unclaimed region is worth to `seat` right now: a region needing
+// one more base is worth vastly more than one needing three.
+function regionValue(G, seat, node) {
+  let v = 0;
+  for (const r of G.terrain.regions) {
+    if (r.owner !== null || !r.around.includes(node)) continue;
+    const mine = r.around.filter((n) => occupant(G, n) === seat).length;
+    v += r.medals * (mine + 1) * (mine + 1);
+  }
+  return v;
+}
+
+function scorePlacement(G, seat, node, key, reach, siege) {
+  const n = G.terrain.nodes[node];
+  const foe = other(seat);
+  if (n.hq === foe) return 1e6;                       // the game ends here
+  const top = topOf(G, node);
+  const already = top && top.owner === seat;
+  let s = 0;
+
+  // If they can already walk into one of our H.Q., nothing else on the board
+  // matters: knock the foothold out from under them. `siege` is the set of
+  // enemy-held bases adjacent to an H.Q. of ours that they can currently
+  // reach, and covering one of those breaks the chain.
+  if (siege.has(node)) s += 5000;
+
+  for (const r of G.terrain.regions) {
+    if (r.owner !== null || !r.around.includes(node)) continue;
+    const mine = r.around.filter((m) => occupant(G, m) === seat).length;
+    const after = already ? mine : mine + 1;
+    // closing a region is the whole point — nothing else comes close
+    if (after === r.around.length) s += 400 * r.medals;
+    else s += 3 * r.medals * after * after;
+    if (top && top.owner === foe) {
+      // and taking a corner off someone about to close one is nearly as good
+      const theirs = r.around.filter((m) => occupant(G, m) === foe).length;
+      s += 4 * r.medals * theirs * theirs;
+    }
+  }
+
+  if (already) {
+    s -= 30;                                          // re-covering yourself buys almost nothing
+  } else {
+    s += top ? 10 : 8;
+    let opened = 0;                                   // ground you can reach once you hold this
+    for (const m of G.terrain.adj[node]) if (!reach.has(m)) opened++;
+    s += opened * 6;
+  }
+
+  // spend the cheap Troops first; Kwak earns its keep on an enemy stack
+  s -= (strengthOf(key) === null ? 3 : strengthOf(key)) * 1.5;
+  if (key === 'kwak' && top && top.owner === foe) s += 14;
+
+  const hq = G.terrain.nodes.find((m) => m.hq === foe);
+  if (hq) s -= Math.hypot(n.x - hq.x, n.y - hq.y) * 1.5;
+  return s;
+}
+
+// The enemy Troops standing next to one of our H.Q. on a chain that already
+// reaches it — i.e. the tiles that are one turn from ending the game.
+function siegeBases(G, seat) {
+  const foe = other(seat);
+  const mine = G.terrain.nodes.filter((n) => n.hq === seat).map((n) => n.id);
+  const theirReach = reachable(G, foe);
+  const out = new Set();
+  if (!mine.some((h) => theirReach.has(h))) return out;
+  for (const h of mine) {
+    for (const m of G.terrain.adj[h]) {
+      if (G.terrain.nodes[m].hq !== null) continue;
+      if (occupant(G, m) === foe) out.add(m);
+    }
+  }
+  return out;
+}
+
+export function botChoose(G, seat) {
+  const p = bySeat(G, seat);
+  if (!p) return null;
+
+  if (G.pending && G.pending.seat === seat) {
+    const pend = G.pending;
+    if (pend.kind === 'jumbo') {
+      // clear the neighbour that is doing the most for them
+      const best = pend.options.slice().sort((a, b) =>
+        (regionValue(G, other(seat), b) * 10 + (strengthOf(topOf(G, b).key) || 0)) -
+        (regionValue(G, other(seat), a) * 10 + (strengthOf(topOf(G, a).key) || 0)))[0];
+      return { kind: 'jumbo', node: best };
+    }
+    if (pend.kind === 'retreat') {
+      if (rackFull(p)) return { kind: 'skip' };
+      // pull back a Troop that is not holding a region together
+      const idle = pend.options.filter((n) => regionValue(G, seat, n) === 0);
+      const pool = idle.length ? idle : pend.options;
+      const best = pool.slice().sort((a, b) => (strengthOf(topOf(G, b).key) || 0) - (strengthOf(topOf(G, a).key) || 0))[0];
+      return idle.length ? { kind: 'retreat', node: best } : { kind: 'skip' };
+    }
+    if (pend.kind === 'undead') {
+      const mine = G.discard.filter((t) => t.owner === seat);
+      const best = mine.slice().sort((a, b) => (strengthOf(b.key) ?? 8) - (strengthOf(a.key) ?? 8))[0];
+      return { kind: 'undead', tile: best.id };
+    }
+    if (pend.kind === 'eruption') {
+      let best = null;
+      for (const from of pend.options) {
+        for (const to of eruptionTargets(G, from)) {
+          // throw them out of ground we want and onto ground we do not
+          const gain = regionValue(G, other(seat), from) - regionValue(G, other(seat), to);
+          if (!best || gain > best.gain) best = { gain, from, to };
+        }
+      }
+      return best ? { kind: 'eruption', from: best.from, to: best.to } : { kind: 'skip' };
+    }
+    if (pend.kind === 'sniper') return { kind: 'sniper', index: Math.floor(Math.random() * pend.count) };
+    if (pend.kind === 'capn') return bestPlacement(G, seat) || { kind: 'skip' };
+    return { kind: 'skip' };
+  }
+
+  if (G.turn !== seat) return null;
+  const mv = bestPlacement(G, seat);
+  if (!mv) return canDraw(p) ? { kind: 'draw' } : null;
+  // a thin rack is a dead rack: you cannot take ground you have no Troops for
+  if (canDraw(p) && p.rack.length < 5 && mv.score < 120) return { kind: 'draw' };
+  return { kind: 'place', tile: mv.tile, node: mv.node };
+}
+
+function bestPlacement(G, seat) {
+  const p = bySeat(G, seat);
+  const reach = reachable(G, seat);
+  let best = null;
+  const siege = siegeBases(G, seat);
+  for (const tile of playable(p)) {
+    for (const node of placeOptions(G, seat, tile.key)) {
+      const s = scorePlacement(G, seat, node, tile.key, reach, siege);
+      if (!best || s > best.score) best = { score: s, tile: tile.id, node, kind: 'place' };
+    }
+  }
+  return best;
+}
+
+// -------------------------------------------------------------- the seat view
+
+// The opponent's rack is theirs: a viewer learns how many Troops are on it and
+// nothing else. Stacks are public in the real game — "You may look at the tile
+// stacks on the Terrain" — so they go out whole.
+export function viewFor(G, seat, code) {
+  const me = bySeat(G, seat);
+  return {
+    code,
+    mid: G.mid,
+    you: seat,
+    phase: G.phase,
+    turn: G.turn,
+    terrain: {
+      key: G.terrain.key, name: G.terrain.name, tag: G.terrain.tag,
+      power: G.terrain.power, target: G.terrain.target, hqOnly: G.terrain.hqOnly,
+      nodes: G.terrain.nodes, edges: G.terrain.edges, regions: G.terrain.regions,
+      w: G.terrain.w, h: G.terrain.h,
+    },
+    board: G.board.map((st) => st.map((t) => ({ id: t.id, key: t.key, owner: t.owner }))),
+    discard: G.discard.map((t) => ({ id: t.id, key: t.key, owner: t.owner })),
+    pending: G.pending ? { ...G.pending } : null,
+    players: G.players.map((p) => ({
+      seat: p.seat,
+      name: p.name,
+      bot: p.bot,
+      connected: p.connected,
+      botFor: !!p.botFor,
+      resigned: !!p.resigned,
+      medals: p.medals,
+      rackCount: p.rack.length,
+      reserveCount: p.reserve.length,
+      frozen: p.seat === seat ? p.frozen : !!p.frozen,
+      lastAction: p.lastAction,
+    })),
+    rack: me ? me.rack.map((t) => ({ id: t.id, key: t.key })) : [],
+    canDraw: me ? canDraw(me) : false,
+    result: G.result,
+    winner: G.winner,
+    log: G.log.slice(-15),
+    fx: G.fx,
+  };
+}
+
+// ------------------------------------------------- seat bookkeeping for the shell
+
+export function markReconnected(G, seat) {
+  const p = bySeat(G, seat);
+  if (p) { p.connected = true; p.botFor = false; }
+}
+export function markDisconnected(G, seat) {
+  const p = bySeat(G, seat);
+  if (p) p.connected = false;
+}
+export function markSeatClaimed(G, seat, name) {
+  const p = bySeat(G, seat);
+  if (!p) return;
+  p.name = name;
+  p.connected = true;
+  p.bot = false;
+  p.botFor = false;
+  p.resigned = false;
+}
+export function markSeatResigned(G, seat) {
+  const p = bySeat(G, seat);
+  if (p) { p.resigned = true; p.connected = false; p.botFor = true; }
+}
+export function markBotTakeover(G, seat) {
+  const p = bySeat(G, seat);
+  if (p) p.botFor = true;
+}

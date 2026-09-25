@@ -3,8 +3,21 @@
 Small static web games served from GitHub Pages — browse them at
 **https://babeltimeus-fu-rayjo.github.io/Collection/**
 
-Both games share the same architecture: a pure rules engine (`game.js`), a
+Every game shares the same architecture: a pure rules engine (`game.js`), a
 networking + UI layer (`app.js`), no build step, and no game server.
+
+## Toy Battle
+
+**Play:** https://babeltimeus-fu-rayjo.github.io/Collection/toybattle/
+
+An unofficial fan implementation of **Toy Battle** by Paolo Mori & Alessandro Zucchini (© Repos Production). Exactly 2 players; the host can fill the second seat with a bot.
+
+- Each turn is one action: **draw 2 Troops** onto your rack (cap 8), or **place 1 Troop** and apply its effect, then its base's effect if that base is special.
+- You may place on an empty base, one of your own, an enemy Troop of **strictly lower** strength, or the enemy H.Q. — and every placement must sit at the end of a continuous path from your own H.Q. running only through bases **you** occupy.
+- Win by capturing the enemy H.Q., by reaching the Terrain's Medals objective, or — if a player can neither draw nor place — on Medals, with **ties going against whoever ran dry**.
+- **Provenance, and it is uneven.** The rules, all eight Troops (Kwak the joker, Skully 1, Cap'n 2, Jumbo 3, Hook 4, XB-42 5, Star 6, Roxy 7) with their effects and printed Notes, and all eight Terrain powers are transcribed from the publisher's English [rulebook](https://cdn.svc.asmodee.net/production-rprod/storage/games/toy_battle/rules/toy-en01-rules-1744030094a4kQo.pdf) and [player aid](https://cdn.svc.asmodee.net/production-rprod/storage/games/toy_battle/helpsheet/toy-en01-player-aid-mkt-1750679915Pm3l4.pdf). **The eight board layouts are not.** Repos publishes no straight-down scan of the Terrains — every image is a perspective render or a fanned marketing shot — so the base-and-path geometry, the Medal counts and the Medals objectives in [`toybattle/game.js`](toybattle/game.js) are an original design in the game's style, carrying each Terrain's real name and real power. The objectives were then tuned by simulation so that all three endings stay live on every board.
+- Boards are written as ASCII maps at the top of `game.js` (`#` base, `*` special base, `R`/`B` H.Q., `-`/`|` paths, a digit for the Medals in a region), and the parser rejects a region whose paths do not close around it.
+- **Tests:** `node toybattle/test-play.mjs` (tile conservation, Medal bookkeeping and turn passing over 320 bot games, one check per action) and `node toybattle/test-effects.mjs` (each rule by hand, then a sweep confirming every Troop and every Terrain power actually fires in play).
 
 ## dnup
 

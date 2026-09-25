@@ -92,6 +92,13 @@
     .art.skull { background: linear-gradient(150deg, #1b2a47, #0d1526); }
     .art.harmonies { background: linear-gradient(150deg, #1b3a2a, #0c1d14); }
     .art.mahjong { background: linear-gradient(150deg, #0d3320, #061a10); }
+    .art.toy { background: linear-gradient(150deg, #2a3a1c, #121a09); }
+    .art.toy .field { display: grid; grid-template-columns: repeat(3, 34px); grid-template-rows: repeat(3, 34px); gap: 12px; position: relative; }
+    .art.toy .field i { display: block; border-radius: 6px; background: #cdc3a5; }
+    .art.toy .field i.b { background: linear-gradient(180deg, #3f74c0, #24487d); }
+    .art.toy .field i.r { background: linear-gradient(180deg, #c2452f, #8a2718); }
+    .art.toy .field::before { content: ''; position: absolute; inset: 15px; border: 3px solid rgba(205, 195, 165, .45); border-radius: 2px; }
+    .art.toy .field::after { content: '★'; position: absolute; inset: 0; display: grid; place-items: center; color: #e0b64a; font-size: 20px; }
     .art.wonders { background: linear-gradient(150deg, #3a2a12, #1c1208); }
     .art.wonders .zig { display: flex; align-items: flex-end; gap: 5px; }
     .art.wonders .zig i { display: block; width: 15px; background: #e0b352; border-radius: 2px 2px 0 0; opacity: .9; }
@@ -374,6 +381,21 @@
   <p class="sub">Games that run entirely in your browser. Share a room code to play with friends peer-to-peer — most games can fill empty seats with bots. No accounts, no downloads, no server.</p>
 
   <main class="shelf">
+    <a class="game" href="./toybattle/">
+      <div class="art toy">
+        <span class="field"><i class="b"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="r"></i></span>
+      </div>
+      <div class="body">
+        <div class="title-row">
+          <span class="name">Toy Battle</span>
+          <span class="players">2 players</span>
+        </div>
+        <p class="blurb">Draw two toys or deploy one — but only onto ground you can trace back to your own headquarters. Surround a region to pocket its medals, or march a single troop straight into the enemy H.Q.</p>
+        <div class="tags"><span class="tag">area control</span><span class="tag">bot</span><span class="tag">~15 min</span></div>
+        <span class="play">Play Toy Battle →</span>
+      </div>
+    </a>
+
     <a class="game" href="./sevenwonders/">
       <div class="art wonders">
         <span class="zig"><i></i><i></i><i></i><i></i><i></i></span>
