@@ -1268,7 +1268,8 @@ function cardGist(c) {
   if (c.perLoss) bits.push(`everyone else loses ${c.perLoss.coins} per ${c.perLoss.of === 'victory' ? 'victory token' : c.perLoss.of}`);
   if (c.diplo) bits.push('diplomacy — sit out a conflict');
   if (c.nbCoins) bits.push(`neighbours take ${c.nbCoins}`);
-  if (c.rebate) bits.push(`1 off the first buy (${c.rebate.with})`);
+  if (c.rebate) bits.push(`1 off the first buy each turn (${c.rebate.with})`);
+  if (c.smuggle) bits.push("1 off a neighbour's own board resource, every time");
   if (c.produceMissing) bits.push('produces what your city cannot');
   if (c.produceOwn) bits.push('one more a turn of something your city already makes');
   if (c.freeStages) bits.push('wonder stages cost no resources');

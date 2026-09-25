@@ -171,7 +171,7 @@ const isRaw = (r) => RAW.includes(r);
 
 // What one unit of a given resource costs from a given neighbour, after
 // trading posts and Olympia's B-side discount.
-function tradePrice(p, side, resource) {
+function tradePrice(p, side, resource, theirBoardRes) {
   const kind = isRaw(resource) ? 'raw' : 'man';
   let price = 2;
   const consider = (t) => {
@@ -180,7 +180,19 @@ function tradePrice(p, side, resource) {
   };
   for (const c of p.built) consider(c.trade);
   for (const s of p.stagesBuilt) consider(s.trade);
-  return price;
+  // Cities: the Smuggler's Cache takes a coin off the resource that neighbour's
+  // own board makes, from either side, EVERY time — where the wharves take one
+  // off whatever you happened to buy first from one side, once a turn. It lives
+  // in here rather than on the finished bill because it is exact: the flow can
+  // see which neighbour a unit is coming from and what it is.
+  //
+  // It stacks with a trading post down to nothing, which is what the publisher
+  // says the wharves do and is the same wording. Read as the resource TYPE
+  // printed on their board, not as the single unit the board itself makes:
+  // resources are fungible once bought, and the table has no way to say which
+  // of a neighbour's two stones came off the board.
+  if (theirBoardRes && resource === theirBoardRes && p.built.some((c) => c.smuggle)) price -= 1;
+  return Math.max(0, price);
 }
 
 // ---------------------------------------------------------------- paying
@@ -216,7 +228,7 @@ export function payFor(G, seat, cost, extraGens = []) {
   for (const [nb, side] of [[lp, 'left'], [rp, 'right']]) {
     if (!nb || nb.seat === seat) continue;
     for (const g of generators(nb, { sellableOnly: true })) {
-      supplies.push({ opts: g.opts, cap: g.n, from: side, price: (r) => tradePrice(me, side, r) });
+      supplies.push({ opts: g.opts, cap: g.n, from: side, price: (r) => tradePrice(me, side, r, nb.wonderRes) });
     }
   }
   // Leaders: Bilkis sells you one resource a turn out of the bank, at a coin
@@ -776,8 +788,10 @@ export function salvageOptions(G, seat) {
   return G.discard.filter((c) => !alreadyBuilt(p, c.n));
 }
 
+const byRank = (a, b) => a.rank - b.rank;   // stable, so ties stay in seat order
+
 function openSalvage(G, resume) {
-  G.salvage = { queue: G.salvageAsk, resume };
+  G.salvage = { queue: G.salvageAsk.sort(byRank), resume };
   G.salvageAsk = [];
   G.phase = 'salvage';
   bumpFx(G, { kind: 'salvage', seat: G.salvage.queue[0].seat });
@@ -791,7 +805,7 @@ function openSalvage(G, resume) {
 function nextSalvage(G) {
   for (;;) {
     if (G.salvageAsk.length) {
-      G.salvage.queue.push(...G.salvageAsk);
+      G.salvage.queue.push(...G.salvageAsk.sort(byRank));
       G.salvageAsk = [];
     }
     const head = G.salvage.queue[0];
@@ -891,7 +905,13 @@ function applyImmediate(G, p, thing) {
   // A card, or a wonder stage, that reaches into the discard pile. It cannot
   // be settled here — the turn everybody else is in the middle of has to
   // finish first — so it joins a queue that finishTurn picks up.
-  if (thing.salvage) G.salvageAsk.push({ seat: p.seat, why: thing.n || p.wonder });
+  // The publisher's clarification: when more than one of these fires in the
+  // same turn, the wonder goes first, then Solomon, then the Forging Agency.
+  // A stage has no name of its own, a leader is white and a black card is not.
+  if (thing.salvage) {
+    const rank = !thing.n ? 0 : thing.c === 'white' ? 1 : 2;
+    G.salvageAsk.push({ seat: p.seat, why: thing.n || p.wonder, rank });
+  }
   if (thing.shield) p.shields += thing.shield;
   if (thing.coins) gainCoins(G, p, thing.coins);
   if (thing.diplo) p.diplo += thing.diplo;
@@ -1487,6 +1507,7 @@ function valueOf(G, seat, card) {
     v += p4.tokens.filter((t) => t < 0).length * (card.coinsPerDefeat / 3 + 1);
   }
   if (card.produceOwn) v += (4 - G.age) * 1.2;
+  if (card.smuggle) v += (4 - G.age) * 1.1;
   if (card.vpIfWonder) {
     const p2 = playerBySeat(G, seat);
     v += card.vpIfWonder * (p2.stagesBuilt.length + 1) / (p2.stages.length + 1);

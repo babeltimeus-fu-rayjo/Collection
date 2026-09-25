@@ -277,7 +277,7 @@ export const SCIENCE_SET_BONUS = 7;
 //
 // The expansion has 42 black cards, fourteen per Age — which is what the
 // publisher's own second-edition rulebook says it has, and it lists no guilds
-// in the box. Forty-one are here; the nine missing ones are listed at the
+// in the box. All forty-two are here; the nine missing ones are listed at the
 // bottom of this block rather than faked. What was here before was a
 // third-party table whose costs were visibly filler — every Age II card cost
 // papyrus+textile, every Age III card glass+papyrus+textile — plus five cards
@@ -300,7 +300,10 @@ export const SCIENCE_SET_BONUS = 7;
 //   perLoss        every other player pays per something they own
 //   diplo          take a diplomacy token: sit out one conflict
 //   nbCoins        each of your neighbours also takes this from the bank
-//   rebate         one coin off resources bought from that side
+//   rebate         one coin off the first resource bought from that side, once
+//                  a turn, whatever it was
+//   smuggle        ... and one coin off a neighbour's own board resource, every
+//                  time, from either side
 //   produceMissing produces any resource your city does not already make
 //   produceOwn     ... and its mirror: one more of something you DO make
 //   freeStages     wonder stages stop costing resources
@@ -313,6 +316,7 @@ export const SCIENCE_SET_BONUS = 7;
 
 export const CITY_CARDS = [
   // ---- Age I
+  { n: "Smuggler's Cache",       c: 'black', age: 1,                       smuggle: true },
   { n: 'West Clandestine Wharf', c: 'black', age: 1, coin: 1,              rebate: { with: 'left' } },
   { n: 'East Clandestine Wharf', c: 'black', age: 1, coin: 1,              rebate: { with: 'right' } },
   { n: 'City Gates',             c: 'black', age: 1, coin: 1, cost: 'W',   vp: 4 },
@@ -360,18 +364,13 @@ export const CITY_CARDS = [
   { n: 'Memorial',            c: 'black', age: 3,          cost: 'STW',    coinsPerDefeat: 2, purgeDefeats: true },
 ];
 
-// The one black card NOT above:
-//
-//   Smuggler's Cache  I  "Pay 1 coin less each time you buy the starting
-//                        resource from your neighbor."
-//
-// The rebate this file has is a coin off the first resource bought from a
-// SIDE, once a turn — which is a different shape. This one keys on a resource
-// rather than a side, pays on every purchase rather than the first, and the
-// resource it keys on is the neighbour's board letter, which payFor does not
-// currently carry through the flow. The other eight that used to sit here were
-// waiting on mechanics the engine has since grown for Leaders and for the
-// discard pile, and are in the table above.
+// All forty-two are in the table above. The last one in was the Smuggler's
+// Cache, which had been held back on the belief that payFor could not carry a
+// per-resource, per-neighbour discount through the flow. It can: the price
+// function already receives both the side and the resource, and the neighbour
+// is right there at the call site, so the discount goes inside the min-cost
+// flow rather than being patched onto the bill afterwards the way the wharves
+// are. That is the better half of the two.
 
 // Cities adds no guilds. Its contents are 42 black cards, diplomacy tokens,
 // debt tokens and coins — the first edition's Counterfeiters Guild, Guild Of

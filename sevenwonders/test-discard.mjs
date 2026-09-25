@@ -195,6 +195,27 @@ function turn(G, how = 'discard', seat = 0) {
   ok(G.phase === 'play' && G.turn === 2, 'the turn resumes once both are done');
 }
 
+// ---- and the publisher's order when more than one fires at once:
+//      the wonder, then Solomon, then the Forging Agency
+{
+  const agency = CITY_CARDS.find((c) => c.n === 'Forging Agency');
+  const G = mk(4, { cities: true });
+  const late = withSalvageStage(G, 2);          // a higher seat, so seat order
+  const early = SW.playerBySeat(G, 0);          // would put the Agency first
+  early.coins = 9;
+  early.hand[0] = { ...agency, id: 'fa' };
+  G.discard = [junk('d1'), junk('d2')];
+  SW.applyMove(G, 0, { kind: 'pick', how: 'play', cardId: 'fa' });
+  SW.applyMove(G, 2, { kind: 'pick', how: 'wonder', cardId: late.hand[0].id });
+  for (const q of G.players) if (!G.picks[q.seat]) SW.applyMove(G, q.seat, { kind: 'pick', how: 'discard', cardId: q.hand[0].id });
+  ok(G.phase === 'salvage' && SW.waitingOn(G)[0] === 2,
+     `the wonder digs before the Forging Agency, whatever the seats are (${SW.waitingOn(G)})`);
+  SW.applyMove(G, 2, { kind: 'salvage', how: 'pass' });
+  ok(SW.waitingOn(G)[0] === 0, `and the Agency goes second (${SW.waitingOn(G)})`);
+  SW.applyMove(G, 0, { kind: 'salvage', how: 'pass' });
+  ok(G.phase === 'play', 'then the turn carries on');
+}
+
 // ---- the last turn of an Age: dig first, fight after
 {
   const G = mk(4);

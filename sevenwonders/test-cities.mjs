@@ -207,5 +207,29 @@ const everyoneElsePasses = (G, except) => {
   ok(SW.scoreFor(G, 0).military === 3, 'so they stop costing points as well');
 }
 
+// ---- the smuggler's cache: a coin off what their board makes, every time
+{
+  const G = mk(3);
+  const me = SW.playerBySeat(G, 0);
+  const left = SW.playerBySeat(G, SW.leftOf(G, 0));
+  const right = SW.playerBySeat(G, SW.rightOf(G, 0));
+  for (const q of G.players) q.built = [];
+  me.wonderRes = '';
+  left.wonderRes = 'S';
+  right.wonderRes = 'O';
+  left.built = [{ n: 'Quarry', c: 'brown', give: 'SS' }, { n: 'Clay Pool', c: 'brown', give: 'C' }];
+
+  ok(SW.payFor(G, 0, 'S').coins === 2, 'a stone off the left costs the usual 2');
+  me.built = [{ ...card("Smuggler's Cache") }];
+  ok(SW.payFor(G, 0, 'S').coins === 1, "and 1 once you have the cache, because stone is their board's");
+  ok(SW.payFor(G, 0, 'O').coins === 1, 'the other neighbour is discounted too, on their own resource');
+  ok(SW.payFor(G, 0, 'C').coins === 2, 'but clay is not what the left board makes, so it is still 2');
+  ok(SW.payFor(G, 0, 'SSS').coins === 3, 'and the discount is every time, not once (3 stone for 3)');
+
+  me.built.push({ n: 'West Trading Post', c: 'yellow', trade: { with: 'left', kind: 'raw' } });
+  ok(SW.payFor(G, 0, 'S').coins === 0, 'stacked with a trading post it is free');
+  ok(SW.payFor(G, 0, 'C').coins === 1, 'while the post alone still just halves the rest');
+}
+
 console.log(fails ? `\n${fails} FAILURES` : '\nCities mechanics hold');
 process.exit(fails ? 1 : 0);
