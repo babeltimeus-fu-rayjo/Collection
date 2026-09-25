@@ -24,21 +24,22 @@
 //   if you ever get a straight-down photo of the boards; the parser below is
 //   the only thing that needs feeding.
 //
-// The map format is deliberately something a person can audit by eye. A
-// Terrain is a grid of strings; character positions alternate meaning:
+// A Terrain is written out as its nodes, its paths and its regions, because
+// the printed boards are irregular: the paths fork and run at angles, the
+// bases are not on a lattice, and a region can be ringed by three bases or by
+// five. An earlier grid format could not express any of that.
 //
-//     even row, even col →  a node:   # base   * special base
-//                                     L base restricted to the values in
-//                                       the Terrain's `only` legend
-//                                     R red H.Q.   B blue H.Q.   . nothing
-//     even row, odd col  →  '-' a path running east-west
-//     odd row,  even col →  '|' a path running north-south
-//     odd row,  odd col  →  a region: a digit is how many Medals sit in it,
-//                           '.' or ' ' is open ground worth nothing
+//   nodes    label: [x, y] — and a third entry tags it:
+//              'hq0' blue H.Q.   'hq1' red H.Q.   'special' a special base
+//              'only:4,5,6,7,joker' a base that admits just those Troops
+//            x and y are in whatever units suit the board; only their
+//            relative positions matter, and the renderer scales to fit.
+//   paths    'a-b b-c ...', one pair per path segment, in either order
+//   regions  [medals, 'a b c d'] — the bases that ring it, in any order
 //
-// so `#-#` is two bases joined by a path and `|2|` is a region holding two
-// Medals. Diagonals and H.Q. fans don't fit a grid, so they're listed
-// separately in `links` as "col,row" pairs in node coordinates.
+// The parser rejects a path to a node that does not exist, and a region whose
+// bases do not actually form a closed ring, which is the mistake you make
+// copying a board off a photograph.
 
 export const PROTO = 1;
 export const MIN_PLAYERS = 2;
@@ -136,223 +137,338 @@ export const POWERS = {
 const TERRAIN_DEFS = [
   {
     key: 'castle', name: 'Castle Field', power: 'retreat', target: 4,
-    tag: 'Stone keeps on a green field. The gentlest of the eight — start here.',
-    map: [
-      '. R .',
-      '. | .',
-      '#-#-#',
-      '|1|1|',
-      '#-*-#',
-      '|2|2|',
-      '#-*-#',
-      '|1|1|',
-      '#-#-#',
-      '. | .',
-      '. B .',
+    tag: "Stone keeps on a green field. The gentlest of the eight — start here.",
+    nodes: {
+      R: [1, 0, 'hq1'],
+      a: [0, 1],
+      b: [1, 1],
+      c: [2, 1],
+      d: [0, 2],
+      e: [1, 2, 'special'],
+      f: [2, 2],
+      g: [0, 3],
+      h: [1, 3, 'special'],
+      i: [2, 3],
+      j: [0, 4],
+      k: [1, 4],
+      l: [2, 4],
+      B: [1, 5, 'hq0'],
+    },
+    paths: 'R-b a-b b-c a-d b-e c-f d-e e-f d-g e-h f-i g-h h-i g-j h-k i-l j-k k-l k-B R-a R-c j-B l-B',
+    regions: [
+      [1, 'a b d e'],
+      [1, 'b c e f'],
+      [2, 'd e g h'],
+      [2, 'e f h i'],
+      [1, 'g h j k'],
+      [1, 'h i k l'],
     ],
-    links: [['1,0', '0,1'], ['1,0', '2,1'], ['1,5', '0,4'], ['1,5', '2,4']],
   },
   {
     key: 'pool', name: 'Tropical Pool', power: 'buoy', target: 4,
-    tag: 'Only the lighter toys float out to a buoy — and only the heaviest storm an H.Q.',
-    map: [
-      '. R .',
-      '. | .',
-      '#-#-#',
-      '|1|1|',
-      'L-#-#',
-      '|2|2|',
-      '#-#-L',
-      '|1|1|',
-      '#-#-#',
-      '. | .',
-      '. B .',
-    ],
-    links: [['1,0', '0,1'], ['1,0', '2,1'], ['1,5', '0,4'], ['1,5', '2,4']],
-    // which values a buoy or an H.Q. accepts is printed on the real board and
-    // we have never seen one; these lists are ours, the 'joker' entry is not
-    only: { L: [1, 2, 3, 4, 'joker'] },
+    tag: "Only the lighter toys float out to a buoy — and only the heaviest storm an H.Q.",
     hqOnly: [5, 6, 7, 'joker'],
+    nodes: {
+      R: [1, 0, 'hq1'],
+      a: [0, 1],
+      b: [1, 1],
+      c: [2, 1],
+      d: [0, 2, 'only:1,2,3,4,joker'],
+      e: [1, 2],
+      f: [2, 2],
+      g: [0, 3],
+      h: [1, 3],
+      i: [2, 3, 'only:1,2,3,4,joker'],
+      j: [0, 4],
+      k: [1, 4],
+      l: [2, 4],
+      B: [1, 5, 'hq0'],
+    },
+    paths: 'R-b a-b b-c a-d b-e c-f d-e e-f d-g e-h f-i g-h h-i g-j h-k i-l j-k k-l k-B R-a R-c j-B l-B',
+    regions: [
+      [1, 'a b d e'],
+      [1, 'b c e f'],
+      [2, 'd e g h'],
+      [2, 'e f h i'],
+      [1, 'g h j k'],
+      [1, 'h i k l'],
+    ],
   },
   {
     key: 'clouds', name: 'City of Clouds', power: 'splendor', target: 4,
-    tag: 'A wide, airy shelf of cloud. Short lines, long views.',
-    map: [
-      '. R . .',
-      '. | . .',
-      '#-#-#-#',
-      '|1|2|1|',
-      '#-*-#-#',
-      '| |1| |',
-      '#-#-*-#',
-      '|1|2|1|',
-      '#-#-#-#',
-      '. . | .',
-      '. . B .',
+    tag: "A wide, airy shelf of cloud. Short lines, long views.",
+    nodes: {
+      R: [1, 0, 'hq1'],
+      a: [0, 1],
+      b: [1, 1],
+      c: [2, 1],
+      d: [3, 1],
+      e: [0, 2],
+      f: [1, 2, 'special'],
+      g: [2, 2],
+      h: [3, 2],
+      i: [0, 3],
+      j: [1, 3],
+      k: [2, 3, 'special'],
+      l: [3, 3],
+      m: [0, 4],
+      n: [1, 4],
+      o: [2, 4],
+      p: [3, 4],
+      B: [2, 5, 'hq0'],
+    },
+    paths: 'R-b a-b b-c c-d a-e b-f c-g d-h e-f f-g g-h e-i f-j g-k h-l i-j j-k k-l i-m j-n k-o l-p m-n n-o o-p o-B R-a R-c n-B p-B',
+    regions: [
+      [1, 'a b e f'],
+      [2, 'b c f g'],
+      [1, 'c d g h'],
+      [1, 'f g j k'],
+      [1, 'i j m n'],
+      [2, 'j k n o'],
+      [1, 'k l o p'],
     ],
-    links: [['1,0', '0,1'], ['1,0', '2,1'], ['2,5', '1,4'], ['2,5', '3,4']],
   },
   {
     key: 'jungle', name: 'Volcanic Jungle', power: 'eruption', target: 5,
-    tag: 'The volcano does not take sides. It throws whoever stands too close.',
-    map: [
-      '. R . .',
-      '. | . .',
-      '#-#-#-#',
-      '|1|2|1|',
-      '#-*-#-#',
-      '|1|1|1|',
-      '#-#-*-#',
-      '|1|2|1|',
-      '#-#-#-#',
-      '. . | .',
-      '. . B .',
+    tag: "The volcano does not take sides. It throws whoever stands too close.",
+    nodes: {
+      R: [1, 0, 'hq1'],
+      a: [0, 1],
+      b: [1, 1],
+      c: [2, 1],
+      d: [3, 1],
+      e: [0, 2],
+      f: [1, 2, 'special'],
+      g: [2, 2],
+      h: [3, 2],
+      i: [0, 3],
+      j: [1, 3],
+      k: [2, 3, 'special'],
+      l: [3, 3],
+      m: [0, 4],
+      n: [1, 4],
+      o: [2, 4],
+      p: [3, 4],
+      B: [2, 5, 'hq0'],
+    },
+    paths: 'R-b a-b b-c c-d a-e b-f c-g d-h e-f f-g g-h e-i f-j g-k h-l i-j j-k k-l i-m j-n k-o l-p m-n n-o o-p o-B R-a R-c n-B p-B',
+    regions: [
+      [1, 'a b e f'],
+      [2, 'b c f g'],
+      [1, 'c d g h'],
+      [1, 'e f i j'],
+      [1, 'f g j k'],
+      [1, 'g h k l'],
+      [1, 'i j m n'],
+      [2, 'j k n o'],
+      [1, 'k l o p'],
     ],
-    links: [['1,0', '0,1'], ['1,0', '2,1'], ['2,5', '1,4'], ['2,5', '3,4']],
   },
   {
     key: 'cemetery', name: 'Cursed Cemetery', power: 'undead', target: 5,
-    tag: 'Nothing here stays buried. Four open graves hand your losses back.',
-    map: [
-      '. . R .',
-      '. . | .',
-      '#-#-*-#',
-      '|1|1|1|',
-      '#-*-#-#',
-      '|1|2|1|',
-      '#-#-*-#',
-      '|1|1|1|',
-      '#-*-#-#',
-      '. | . .',
-      '. B . .',
+    tag: "Nothing here stays buried. Four open graves hand your losses back.",
+    nodes: {
+      R: [2, 0, 'hq1'],
+      a: [0, 1],
+      b: [1, 1],
+      c: [2, 1, 'special'],
+      d: [3, 1],
+      e: [0, 2],
+      f: [1, 2, 'special'],
+      g: [2, 2],
+      h: [3, 2],
+      i: [0, 3],
+      j: [1, 3],
+      k: [2, 3, 'special'],
+      l: [3, 3],
+      m: [0, 4],
+      n: [1, 4, 'special'],
+      o: [2, 4],
+      p: [3, 4],
+      B: [1, 5, 'hq0'],
+    },
+    paths: 'R-c a-b b-c c-d a-e b-f c-g d-h e-f f-g g-h e-i f-j g-k h-l i-j j-k k-l i-m j-n k-o l-p m-n n-o o-p n-B R-b R-d m-B o-B',
+    regions: [
+      [1, 'a b e f'],
+      [1, 'b c f g'],
+      [1, 'c d g h'],
+      [1, 'e f i j'],
+      [2, 'f g j k'],
+      [1, 'g h k l'],
+      [1, 'i j m n'],
+      [1, 'j k n o'],
+      [1, 'k l o p'],
     ],
-    links: [['2,0', '1,1'], ['2,0', '3,1'], ['1,5', '0,4'], ['1,5', '2,4']],
   },
   {
     key: 'caribbean', name: 'Caribbean Sea', power: 'quarter', target: 5,
-    tag: 'Asymmetric: two blue H.Q. against one red. Red has to be quicker.',
-    map: [
-      '. . R . .',
-      '. . | . .',
-      '#-#-#-#-#',
-      '|1|2|2|1|',
-      '#-#-#-#-#',
-      '| | | | |',
-      '#-#-#-#-#',
-      '|1|2|2|1|',
-      '#-#-#-#-#',
-      '| . . . |',
-      'B . . . B',
+    tag: "Asymmetric: two blue H.Q. against one red. Red has to be quicker.",
+    nodes: {
+      R: [2, 0, 'hq1'],
+      a: [0, 1],
+      b: [1, 1],
+      c: [2, 1],
+      d: [3, 1],
+      e: [4, 1],
+      f: [0, 2],
+      g: [1, 2],
+      h: [2, 2],
+      i: [3, 2],
+      j: [4, 2],
+      k: [0, 3],
+      l: [1, 3],
+      m: [2, 3],
+      n: [3, 3],
+      o: [4, 3],
+      p: [0, 4],
+      q: [1, 4],
+      r: [2, 4],
+      s: [3, 4],
+      t: [4, 4],
+      B: [0, 5, 'hq0'],
+      B2: [4, 5, 'hq0'],
+    },
+    paths: 'R-c a-b b-c c-d d-e a-f b-g c-h d-i e-j f-g g-h h-i i-j f-k g-l h-m i-n j-o k-l l-m m-n n-o k-p l-q m-r n-s o-t p-q q-r r-s s-t p-B t-B2 R-b R-d q-B s-B2',
+    regions: [
+      [1, 'a b f g'],
+      [2, 'b c g h'],
+      [2, 'c d h i'],
+      [1, 'd e i j'],
+      [1, 'k l p q'],
+      [2, 'l m q r'],
+      [2, 'm n r s'],
+      [1, 'n o s t'],
     ],
-    links: [['2,0', '1,1'], ['2,0', '3,1'], ['0,5', '1,4'], ['4,5', '3,4']],
   },
   {
     key: 'metalx', name: 'Station Metal-X', power: 'shield', target: 4,
-    tag: 'Shielded plates swallow a Troop’s effect. Land there and you land plain.',
-    map: [
-      '. R . .',
-      '. | . .',
-      '#-#-*-#',
-      '|2|1|1|',
-      '#-#-#-#',
-      '|1| |1|',
-      '#-#-#-#',
-      '|1|1|2|',
-      '#-*-#-#',
-      '. . | .',
-      '. . B .',
+    tag: "Shielded plates swallow a Troop’s effect. Land there and you land plain.",
+    nodes: {
+      R: [1, 0, 'hq1'],
+      a: [0, 1],
+      b: [1, 1],
+      c: [2, 1, 'special'],
+      d: [3, 1],
+      e: [0, 2],
+      f: [1, 2],
+      g: [2, 2],
+      h: [3, 2],
+      i: [0, 3],
+      j: [1, 3],
+      k: [2, 3],
+      l: [3, 3],
+      m: [0, 4],
+      n: [1, 4, 'special'],
+      o: [2, 4],
+      p: [3, 4],
+      B: [2, 5, 'hq0'],
+    },
+    paths: 'R-b a-b b-c c-d a-e b-f c-g d-h e-f f-g g-h e-i f-j g-k h-l i-j j-k k-l i-m j-n k-o l-p m-n n-o o-p o-B R-a R-c n-B p-B',
+    regions: [
+      [2, 'a b e f'],
+      [1, 'b c f g'],
+      [1, 'c d g h'],
+      [1, 'e f i j'],
+      [1, 'g h k l'],
+      [1, 'i j m n'],
+      [1, 'j k n o'],
+      [2, 'k l o p'],
     ],
-    links: [['1,0', '0,1'], ['1,0', '2,1'], ['2,5', '1,4'], ['2,5', '3,4']],
   },
   {
     key: 'battlefield', name: 'Battlefield', power: 'sniper', target: 5,
-    tag: 'Two nests overlooking the sand. Take a nest, pin a Troop on their rack.',
-    map: [
-      '. . R .',
-      '. . | .',
-      '#-#-#-#',
-      '|1|1|1|',
-      '#-*-#-#',
-      '|2|1|2|',
-      '#-#-*-#',
-      '|1|1|1|',
-      '#-#-#-#',
-      '. | . .',
-      '. B . .',
+    tag: "Two nests overlooking the sand. Take a nest, pin a Troop on their rack.",
+    nodes: {
+      R: [2, 0, 'hq1'],
+      a: [0, 1],
+      b: [1, 1],
+      c: [2, 1],
+      d: [3, 1],
+      e: [0, 2],
+      f: [1, 2, 'special'],
+      g: [2, 2],
+      h: [3, 2],
+      i: [0, 3],
+      j: [1, 3],
+      k: [2, 3, 'special'],
+      l: [3, 3],
+      m: [0, 4],
+      n: [1, 4],
+      o: [2, 4],
+      p: [3, 4],
+      B: [1, 5, 'hq0'],
+    },
+    paths: 'R-c a-b b-c c-d a-e b-f c-g d-h e-f f-g g-h e-i f-j g-k h-l i-j j-k k-l i-m j-n k-o l-p m-n n-o o-p n-B R-b R-d m-B o-B',
+    regions: [
+      [1, 'a b e f'],
+      [1, 'b c f g'],
+      [1, 'c d g h'],
+      [2, 'e f i j'],
+      [1, 'f g j k'],
+      [2, 'g h k l'],
+      [1, 'i j m n'],
+      [1, 'j k n o'],
+      [1, 'k l o p'],
     ],
-    links: [['2,0', '1,1'], ['2,0', '3,1'], ['1,5', '0,4'], ['1,5', '2,4']],
   },
 ];
 
 // -------------------------------------------------------------- map parsing
 
-const NODE_CHARS = '#*LHRB';
+// Order a region's bases into the ring they actually form, or return null if
+// they do not form one. Regions are three to six bases, so a backtracking
+// walk is instant and says exactly what is wrong when a board is mistyped.
+function ringOrder(members, adj) {
+  const n = members.length;
+  if (n < 3) return null;
+  const set = new Set(members);
+  const start = members[0];
+  const path = [start];
+  const used = new Set([start]);
+  const walk = () => {
+    if (path.length === n) return adj[path[path.length - 1]].includes(start);
+    for (const next of adj[path[path.length - 1]]) {
+      if (!set.has(next) || used.has(next)) continue;
+      used.add(next);
+      path.push(next);
+      if (walk()) return true;
+      path.pop();
+      used.delete(next);
+    }
+    return false;
+  };
+  return walk() ? path : null;
+}
 
 function parseTerrain(def) {
   const nodes = [];
-  const at = new Map();          // "col,row" → node index
-  const edges = new Set();       // "a|b" with a < b
-  const regions = [];
+  const idOf = new Map();
+  for (const [label, spec] of Object.entries(def.nodes)) {
+    const [x, y, tag = ''] = spec;
+    if (idOf.has(label)) throw new Error(`${def.key}: two nodes called ${label}`);
+    idOf.set(label, nodes.length);
+    const restricted = tag.startsWith('only:');
+    nodes.push({
+      id: nodes.length,
+      label,
+      x,
+      y,
+      hq: tag === 'hq0' ? 0 : tag === 'hq1' ? 1 : null,
+      special: tag === 'special' || restricted,
+      only: restricted
+        ? tag.slice(5).split(',').map((v) => (v === 'joker' ? 'joker' : Number(v)))
+        : null,
+    });
+  }
 
-  const cell = (row, col) => {
-    const line = def.map[row];
-    return line && col < line.length ? line[col] : ' ';
-  };
-  const addEdge = (a, b) => {
-    if (a === undefined || b === undefined || a === b) return;
+  const edges = new Set();
+  for (const pair of def.paths.trim().split(/\s+/)) {
+    const [p, q] = pair.split('-');
+    const a = idOf.get(p);
+    const b = idOf.get(q);
+    if (a === undefined || b === undefined) throw new Error(`${def.key}: path ${pair} names a node that does not exist`);
+    if (a === b) throw new Error(`${def.key}: path ${pair} joins a node to itself`);
     edges.add(a < b ? `${a}|${b}` : `${b}|${a}`);
-  };
-
-  for (let r = 0; r < def.map.length; r += 2) {
-    for (let c = 0; c < def.map[r].length; c += 2) {
-      const ch = cell(r, c);
-      if (!NODE_CHARS.includes(ch)) continue;
-      const id = nodes.length;
-      const key = `${c / 2},${r / 2}`;
-      at.set(key, id);
-      nodes.push({
-        id,
-        x: c / 2,
-        y: r / 2,
-        hq: ch === 'B' ? 0 : ch === 'R' ? 1 : null,
-        special: ch === '*' || ch === 'L',
-        only: def.only && def.only[ch] ? def.only[ch].slice() : null,
-      });
-    }
-  }
-
-  for (let r = 0; r < def.map.length; r++) {
-    for (let c = 0; c < def.map[r].length; c++) {
-      const ch = cell(r, c);
-      const evenRow = r % 2 === 0, evenCol = c % 2 === 0;
-      if (evenRow && !evenCol && ch === '-') {
-        addEdge(at.get(`${(c - 1) / 2},${r / 2}`), at.get(`${(c + 1) / 2},${r / 2}`));
-      } else if (!evenRow && evenCol && ch === '|') {
-        addEdge(at.get(`${c / 2},${(r - 1) / 2}`), at.get(`${c / 2},${(r + 1) / 2}`));
-      } else if (!evenRow && !evenCol && ch >= '1' && ch <= '9') {
-        const around = [
-          at.get(`${(c - 1) / 2},${(r - 1) / 2}`), at.get(`${(c + 1) / 2},${(r - 1) / 2}`),
-          at.get(`${(c - 1) / 2},${(r + 1) / 2}`), at.get(`${(c + 1) / 2},${(r + 1) / 2}`),
-        ];
-        if (around.some((n) => n === undefined)) throw new Error(`${def.key}: region at ${c},${r} has a missing corner`);
-        regions.push({ id: regions.length, x: c / 2, y: r / 2, medals: Number(ch), around, owner: null });
-      }
-    }
-  }
-
-  for (const [a, b] of def.links || []) addEdge(at.get(a), at.get(b));
-
-  // A region only exists if the paths actually close around it. The map can
-  // look right and be wrong: write a '*' where a '|' belongs and the wall
-  // silently goes missing, leaving a "region" that is open on one side and
-  // can never be enclosed. That is a data file and its consumer disagreeing
-  // in silence, so it is a hard error rather than a quiet no-op.
-  const has = (a, b) => edges.has(a < b ? `${a}|${b}` : `${b}|${a}`);
-  for (const r of regions) {
-    const [nw, ne, sw, se] = r.around;
-    for (const [a, b, side] of [[nw, ne, 'north'], [sw, se, 'south'], [nw, sw, 'west'], [ne, se, 'east']]) {
-      if (!has(a, b)) throw new Error(`${def.key}: the region at ${r.x},${r.y} has no path along its ${side} side`);
-    }
   }
 
   const adj = nodes.map(() => []);
@@ -362,12 +478,38 @@ function parseTerrain(def) {
     adj[b].push(a);
   }
 
-  const w = Math.max(...nodes.map((n) => n.x));
-  const h = Math.max(...nodes.map((n) => n.y));
+  const regions = def.regions.map(([medals, members], i) => {
+    const ids = members.trim().split(/\s+/).map((l) => {
+      const id = idOf.get(l);
+      if (id === undefined) throw new Error(`${def.key}: region ${i} names base ${l}, which does not exist`);
+      if (nodes[id].hq !== null) throw new Error(`${def.key}: region ${i} names ${l}, which is an H.Q. — regions are ringed by bases`);
+      return id;
+    });
+    const ring = ringOrder(ids, adj);
+    if (!ring) throw new Error(`${def.key}: region ${i} (${members}) is not closed — those bases do not ring anything`);
+    return {
+      id: i,
+      medals,
+      around: ring,
+      x: ring.reduce((a, n) => a + nodes[n].x, 0) / ring.length,
+      y: ring.reduce((a, n) => a + nodes[n].y, 0) / ring.length,
+      owner: null,
+    };
+  });
+
+  for (const seat of [0, 1]) {
+    if (!nodes.some((n) => n.hq === seat)) throw new Error(`${def.key}: no H.Q. for seat ${seat}`);
+  }
+
+  const xs = nodes.map((n) => n.x);
+  const ys = nodes.map((n) => n.y);
   return {
     key: def.key, name: def.name, tag: def.tag, power: def.power, target: def.target,
     hqOnly: def.hqOnly ? def.hqOnly.slice() : null,
-    nodes, regions, adj, w, h,
+    nodes, regions, adj,
+    x0: Math.min(...xs), y0: Math.min(...ys),
+    w: Math.max(...xs) - Math.min(...xs),
+    h: Math.max(...ys) - Math.min(...ys),
     edges: [...edges].map((e) => e.split('|').map(Number)),
   };
 }
@@ -1410,7 +1552,7 @@ export function viewFor(G, seat, code) {
       key: G.terrain.key, name: G.terrain.name, tag: G.terrain.tag,
       power: G.terrain.power, target: G.terrain.target, hqOnly: G.terrain.hqOnly,
       nodes: G.terrain.nodes, edges: G.terrain.edges, regions: G.terrain.regions,
-      w: G.terrain.w, h: G.terrain.h,
+      x0: G.terrain.x0, y0: G.terrain.y0, w: G.terrain.w, h: G.terrain.h,
     },
     board: G.board.map((st) => st.map((t) => ({ id: t.id, key: t.key, owner: t.owner }))),
     discard: G.discard.map((t) => ({ id: t.id, key: t.key, owner: t.owner })),

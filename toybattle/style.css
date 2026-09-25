@@ -1119,11 +1119,13 @@ a {
   opacity: 0.55;
 }
 
-/* regions: the ground you are trying to enclose */
+/* A region is ground, not a hole: it reads as a patch enclosed by the bases
+   around it, and takes a side's colour the moment that side closes it. */
 .tb-region-pad {
-  fill: rgba(0, 0, 0, 0.22);
-  stroke: rgba(255, 255, 255, 0.08);
+  fill: rgba(255, 255, 255, 0.055);
+  stroke: rgba(255, 255, 255, 0.14);
   stroke-width: 1.5;
+  stroke-dasharray: 5 5;
 }
 
 .tb-medal {
@@ -1132,7 +1134,7 @@ a {
   stroke-width: 1.5;
 }
 
-.tb-region.taken .tb-region-pad { stroke-width: 2.5; }
+.tb-region.taken .tb-region-pad { stroke-width: 2.5; stroke-dasharray: none; }
 .tb-region.taken.blue .tb-region-pad { fill: rgba(63, 116, 192, 0.3); stroke: var(--blue); }
 .tb-region.taken.red .tb-region-pad { fill: rgba(194, 69, 47, 0.3); stroke: var(--red); }
 

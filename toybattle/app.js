@@ -1169,9 +1169,28 @@ const HQ = 76;
 // rotated a half turn, which is what sitting opposite means.
 function place(view, x, y) {
   const flip = view.you === 1;
-  const px = flip ? view.terrain.w - x : x;
-  const py = flip ? view.terrain.h - y : y;
+  // board coordinates are arbitrary units with an arbitrary origin, so
+  // normalise against the Terrain's own bounding box before scaling
+  const nx = x - view.terrain.x0;
+  const ny = y - view.terrain.y0;
+  const px = flip ? view.terrain.w - nx : nx;
+  const py = flip ? view.terrain.h - ny : ny;
   return [PAD_X + px * CELL_X, PAD_Y + py * CELL_Y];
+}
+
+// A region is the ground enclosed by the bases that ring it, so it is drawn
+// as their polygon pulled in off the bases themselves. That works for a ring
+// of three as well as a ring of six, which a fixed square never did.
+function regionPath(pts) {
+  const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
+  const cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+  const inner = pts.map(([x, y]) => {
+    const dx = cx - x, dy = cy - y;
+    const d = Math.hypot(dx, dy) || 1;
+    const k = Math.min(42, d * 0.42) / d;
+    return [(x + dx * k).toFixed(1), (y + dy * k).toFixed(1)];
+  });
+  return 'M' + inner.map((p) => p.join(' ')).join('L') + 'Z';
 }
 
 // Which nodes the click handler should accept right now, and why.
@@ -1234,7 +1253,7 @@ function renderBoard(view) {
   for (const r of t.regions) {
     const [cx, cy] = place(view, r.x, r.y);
     const g = sv('g', `tb-region${r.owner === null ? '' : ` taken ${side(r.owner)}`}`);
-    g.append(sv('rect', 'tb-region-pad', { x: cx - 30, y: cy - 23, width: 60, height: 46, rx: 12 }));
+    g.append(sv('path', 'tb-region-pad', { d: regionPath(r.around.map((n) => place(view, t.nodes[n].x, t.nodes[n].y))) }));
     if (r.owner === null) {
       for (let i = 0; i < r.medals; i++) {
         const off = (i - (r.medals - 1) / 2) * 20;
