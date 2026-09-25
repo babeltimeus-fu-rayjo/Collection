@@ -452,7 +452,9 @@ export function valueAllowed(G, node, key) {
 // The four slots the rulebook lists, plus the connection rule. `hook` is the
 // one exception it grants: Hook ignores connection, but only onto a base —
 // the enemy H.Q. is not a base, so Hook still has to be connected for that.
-export function canPlace(G, seat, node, key) {
+// `reach` is the caller's cached reachable(G, seat). It is only ever an
+// optimisation — leave it out and the answer is the same, just slower.
+export function canPlace(G, seat, node, key, reach) {
   const n = G.terrain.nodes[node];
   if (n.hq === seat) return false;                       // never your own H.Q.
   if (!valueAllowed(G, node, key)) return false;
@@ -461,12 +463,13 @@ export function canPlace(G, seat, node, key) {
     if (top && top.owner !== seat && !canCover(key, top.key)) return false;
   }
   if (key === 'hook' && n.hq === null) return true;      // Hook skips the walk
-  return reachable(G, seat).has(node);
+  return (reach || reachable(G, seat)).has(node);
 }
 
-export function placeOptions(G, seat, key) {
+export function placeOptions(G, seat, key, reach) {
+  const r = reach || reachable(G, seat);
   const out = [];
-  for (const n of G.terrain.nodes) if (canPlace(G, seat, n.id, key)) out.push(n.id);
+  for (const n of G.terrain.nodes) if (canPlace(G, seat, n.id, key, r)) out.push(n.id);
   return out;
 }
 
@@ -868,14 +871,48 @@ function resolvePending(G, seat, move) {
 
 // ------------------------------------------------------------------- the bot
 //
-// One ply, no search. The two win conditions are hard-wired ahead of every
-// heuristic; the heuristics exist to stop it doing the obviously degenerate
-// thing, which — as the first version of this file proved — is to spend the
-// whole game re-covering the same three bases next to its own H.Q. while the
-// other nine sit empty. Spreading is what wins, so spreading is what scores.
+// Alpha-beta search over the real engine, not a pile of heuristics. The first
+// version of this file scored each placement on its own and played the best
+// one, which meant it could not see the obvious: that taking a base hands the
+// opponent a cover, or that the Troop it just played opens a lane to its own
+// H.Q. One ply cannot see a reply, and this game is all replies.
+//
+// Two things make searching honest here rather than clairvoyant:
+//
+//   The opponent's rack is hidden and both reserves are shuffled, so the bot
+//   may not read them. `determinize` throws away everything it is not
+//   entitled to know and deals a plausible hand from what is public — its own
+//   rack, the stacks on the board (which the rules let anyone inspect), the
+//   discard, and how many Troops the opponent is holding. The search then
+//   runs on that guess. Sampling more than one guess costs depth, so the
+//   trade is a knob.
+//
+//   Pointing at a Troop on the opponent's rack is blind by the rules, so the
+//   sniper generates a single move standing for all of them. In a
+//   determinized world the bot could otherwise "see" which one to pin.
 
-// How much an unclaimed region is worth to `seat` right now: a region needing
-// one more base is worth vastly more than one needing three.
+const WIN = 1e7;
+
+// ------------------------------------------------------- the quick heuristic
+//
+// Still here, and still earning its keep: it orders moves so alpha-beta gets
+// its cuts early, and it is what `botChoose` falls back to when the node
+// budget is set to zero.
+
+// the Terrain never changes shape, so where the H.Q. are is worth caching
+const hqCache = new WeakMap();
+// Caribbean Sea gives blue two H.Q., and this returns whichever comes first.
+// That is fine for what it feeds — a distance term in the move ordering — but
+// it is not the right thing to build a rule on.
+function hqNode(G, seat) {
+  let cached = hqCache.get(G.terrain.nodes);
+  if (!cached) {
+    cached = [G.terrain.nodes.find((n) => n.hq === 0), G.terrain.nodes.find((n) => n.hq === 1)];
+    hqCache.set(G.terrain.nodes, cached);
+  }
+  return cached[seat];
+}
+
 function regionValue(G, seat, node) {
   let v = 0;
   for (const r of G.terrain.regions) {
@@ -884,52 +921,6 @@ function regionValue(G, seat, node) {
     v += r.medals * (mine + 1) * (mine + 1);
   }
   return v;
-}
-
-function scorePlacement(G, seat, node, key, reach, siege) {
-  const n = G.terrain.nodes[node];
-  const foe = other(seat);
-  if (n.hq === foe) return 1e6;                       // the game ends here
-  const top = topOf(G, node);
-  const already = top && top.owner === seat;
-  let s = 0;
-
-  // If they can already walk into one of our H.Q., nothing else on the board
-  // matters: knock the foothold out from under them. `siege` is the set of
-  // enemy-held bases adjacent to an H.Q. of ours that they can currently
-  // reach, and covering one of those breaks the chain.
-  if (siege.has(node)) s += 5000;
-
-  for (const r of G.terrain.regions) {
-    if (r.owner !== null || !r.around.includes(node)) continue;
-    const mine = r.around.filter((m) => occupant(G, m) === seat).length;
-    const after = already ? mine : mine + 1;
-    // closing a region is the whole point — nothing else comes close
-    if (after === r.around.length) s += 400 * r.medals;
-    else s += 3 * r.medals * after * after;
-    if (top && top.owner === foe) {
-      // and taking a corner off someone about to close one is nearly as good
-      const theirs = r.around.filter((m) => occupant(G, m) === foe).length;
-      s += 4 * r.medals * theirs * theirs;
-    }
-  }
-
-  if (already) {
-    s -= 30;                                          // re-covering yourself buys almost nothing
-  } else {
-    s += top ? 10 : 8;
-    let opened = 0;                                   // ground you can reach once you hold this
-    for (const m of G.terrain.adj[node]) if (!reach.has(m)) opened++;
-    s += opened * 6;
-  }
-
-  // spend the cheap Troops first; Kwak earns its keep on an enemy stack
-  s -= (strengthOf(key) === null ? 3 : strengthOf(key)) * 1.5;
-  if (key === 'kwak' && top && top.owner === foe) s += 14;
-
-  const hq = G.terrain.nodes.find((m) => m.hq === foe);
-  if (hq) s -= Math.hypot(n.x - hq.x, n.y - hq.y) * 1.5;
-  return s;
 }
 
 // The enemy Troops standing next to one of our H.Q. on a chain that already
@@ -949,52 +940,50 @@ function siegeBases(G, seat) {
   return out;
 }
 
-export function botChoose(G, seat) {
-  const p = bySeat(G, seat);
-  if (!p) return null;
+function scorePlacement(G, seat, node, key, reach, siege) {
+  const n = G.terrain.nodes[node];
+  const foe = other(seat);
+  if (n.hq === foe) return 1e6;                       // the game ends here
+  const top = topOf(G, node);
+  const already = top && top.owner === seat;
+  let s = siege.has(node) ? 5000 : 0;                 // break the siege first
 
-  if (G.pending && G.pending.seat === seat) {
-    const pend = G.pending;
-    if (pend.kind === 'jumbo') {
-      // clear the neighbour that is doing the most for them
-      const best = pend.options.slice().sort((a, b) =>
-        (regionValue(G, other(seat), b) * 10 + (strengthOf(topOf(G, b).key) || 0)) -
-        (regionValue(G, other(seat), a) * 10 + (strengthOf(topOf(G, a).key) || 0)))[0];
-      return { kind: 'jumbo', node: best };
+  for (const r of G.terrain.regions) {
+    if (r.owner !== null || !r.around.includes(node)) continue;
+    const mine = r.around.filter((m) => occupant(G, m) === seat).length;
+    const after = already ? mine : mine + 1;
+    if (after === r.around.length) s += 400 * r.medals;
+    else s += 3 * r.medals * after * after;
+    if (top && top.owner === foe) {
+      const theirs = r.around.filter((m) => occupant(G, m) === foe).length;
+      s += 4 * r.medals * theirs * theirs;
     }
-    if (pend.kind === 'retreat') {
-      if (rackFull(p)) return { kind: 'skip' };
-      // pull back a Troop that is not holding a region together
-      const idle = pend.options.filter((n) => regionValue(G, seat, n) === 0);
-      const pool = idle.length ? idle : pend.options;
-      const best = pool.slice().sort((a, b) => (strengthOf(topOf(G, b).key) || 0) - (strengthOf(topOf(G, a).key) || 0))[0];
-      return idle.length ? { kind: 'retreat', node: best } : { kind: 'skip' };
-    }
-    if (pend.kind === 'undead') {
-      const mine = G.discard.filter((t) => t.owner === seat);
-      const best = mine.slice().sort((a, b) => (strengthOf(b.key) ?? 8) - (strengthOf(a.key) ?? 8))[0];
-      return { kind: 'undead', tile: best.id };
-    }
-    if (pend.kind === 'eruption') {
-      let best = null;
-      for (const from of pend.options) {
-        for (const to of eruptionTargets(G, from)) {
-          // throw them out of ground we want and onto ground we do not
-          const gain = regionValue(G, other(seat), from) - regionValue(G, other(seat), to);
-          if (!best || gain > best.gain) best = { gain, from, to };
-        }
-      }
-      return best ? { kind: 'eruption', from: best.from, to: best.to } : { kind: 'skip' };
-    }
-    if (pend.kind === 'sniper') return { kind: 'sniper', index: Math.floor(Math.random() * pend.count) };
-    if (pend.kind === 'capn') return bestPlacement(G, seat) || { kind: 'skip' };
-    return { kind: 'skip' };
   }
 
+  if (already) {
+    s -= 30;
+  } else {
+    s += top ? 10 : 8;
+    let opened = 0;
+    for (const m of G.terrain.adj[node]) if (!reach.has(m)) opened++;
+    s += opened * 6;
+  }
+
+  s -= (strengthOf(key) === null ? 3 : strengthOf(key)) * 1.5;
+  if (key === 'kwak' && top && top.owner === foe) s += 14;
+
+  const hq = hqNode(G, foe);
+  if (hq) s -= Math.hypot(n.x - hq.x, n.y - hq.y) * 1.5;
+  return s;
+}
+
+function greedyChoose(G, seat) {
+  const p = bySeat(G, seat);
+  if (!p) return null;
+  if (G.pending && G.pending.seat === seat) return pendingFallback(G, seat);
   if (G.turn !== seat) return null;
   const mv = bestPlacement(G, seat);
   if (!mv) return canDraw(p) ? { kind: 'draw' } : null;
-  // a thin rack is a dead rack: you cannot take ground you have no Troops for
   if (canDraw(p) && p.rack.length < 5 && mv.score < 120) return { kind: 'draw' };
   return { kind: 'place', tile: mv.tile, node: mv.node };
 }
@@ -1002,8 +991,8 @@ export function botChoose(G, seat) {
 function bestPlacement(G, seat) {
   const p = bySeat(G, seat);
   const reach = reachable(G, seat);
-  let best = null;
   const siege = siegeBases(G, seat);
+  let best = null;
   for (const tile of playable(p)) {
     for (const node of placeOptions(G, seat, tile.key)) {
       const s = scorePlacement(G, seat, node, tile.key, reach, siege);
@@ -1011,6 +1000,395 @@ function bestPlacement(G, seat) {
     }
   }
   return best;
+}
+
+// A sane answer to any question the engine can ask, used by the shallow bot
+// and as the safety net if the search somehow returns nothing.
+function pendingFallback(G, seat) {
+  const pend = G.pending;
+  const p = bySeat(G, seat);
+  if (pend.kind === 'jumbo') {
+    const best = pend.options.slice().sort((a, b) =>
+      (regionValue(G, other(seat), b) * 10 + (strengthOf(topOf(G, b).key) || 0)) -
+      (regionValue(G, other(seat), a) * 10 + (strengthOf(topOf(G, a).key) || 0)))[0];
+    return { kind: 'jumbo', node: best };
+  }
+  if (pend.kind === 'retreat') {
+    if (rackFull(p)) return { kind: 'skip' };
+    const idle = pend.options.filter((n) => regionValue(G, seat, n) === 0);
+    if (!idle.length) return { kind: 'skip' };
+    const best = idle.slice().sort((a, b) => (strengthOf(topOf(G, b).key) || 0) - (strengthOf(topOf(G, a).key) || 0))[0];
+    return { kind: 'retreat', node: best };
+  }
+  if (pend.kind === 'undead') {
+    const mine = G.discard.filter((t) => t.owner === seat);
+    if (!mine.length) return { kind: 'skip' };
+    const best = mine.slice().sort((a, b) => (strengthOf(b.key) ?? 8) - (strengthOf(a.key) ?? 8))[0];
+    return { kind: 'undead', tile: best.id };
+  }
+  if (pend.kind === 'eruption') {
+    let best = null;
+    for (const from of pend.options) {
+      for (const to of eruptionTargets(G, from)) {
+        const gain = regionValue(G, other(seat), from) - regionValue(G, other(seat), to);
+        if (!best || gain > best.gain) best = { gain, from, to };
+      }
+    }
+    return best ? { kind: 'eruption', from: best.from, to: best.to } : { kind: 'skip' };
+  }
+  if (pend.kind === 'sniper') return { kind: 'sniper', index: Math.floor(Math.random() * pend.count) };
+  if (pend.kind === 'capn') {
+    const mv = bestPlacement(G, seat);
+    return mv ? { kind: 'place', tile: mv.tile, node: mv.node } : { kind: 'skip' };
+  }
+  return { kind: 'skip' };
+}
+
+// ------------------------------------------------------------- search plumbing
+
+// Only the parts that move. The Terrain's nodes, paths and adjacency never
+// change, so every node of the search tree shares one copy of them; its
+// regions do change hands, so those are copied. Tiles are immutable once
+// minted, so the stacks copy their arrays and share their contents.
+function cloneState(G) {
+  return {
+    phase: G.phase,
+    terrain: { ...G.terrain, regions: G.terrain.regions.map((r) => ({ ...r })) },
+    turn: G.turn,
+    board: G.board.map((st) => st.slice()),
+    discard: G.discard.slice(),
+    pending: G.pending ? { ...G.pending, options: G.pending.options ? G.pending.options.slice() : undefined } : null,
+    troopQ: G.troopQ.slice(),
+    baseQ: G.baseQ.slice(),
+    placedThisTurn: [],
+    winner: G.winner,
+    result: null,
+    endedBy: null,
+    log: [],
+    logSeq: 0,
+    fx: null,
+    fxSeq: 0,
+    players: G.players.map((p) => ({ ...p, rack: p.rack.slice(), reserve: p.reserve.slice() })),
+  };
+}
+
+// Deal a game consistent with everything `seat` is entitled to see, and with
+// nothing it is not. Each side owns three copies of all eight Troops; four of
+// them went back in the box unseen at setup. Whatever is visible in a stack
+// or lying in the discard is known to both players, so the rest is the pool
+// the hidden tiles are drawn from.
+function determinize(G, seat) {
+  const H = cloneState(G);
+  let uid = 0;
+  for (const p of H.players) {
+    const seen = new Map();
+    const bump = (k) => seen.set(k, (seen.get(k) || 0) + 1);
+    for (const st of H.board) for (const t of st) if (t.owner === p.seat) bump(t.key);
+    for (const t of H.discard) if (t.owner === p.seat) bump(t.key);
+    if (p.seat === seat) for (const t of p.rack) bump(t.key);
+    const pool = [];
+    for (const key of TROOP_ORDER) {
+      for (let i = COPIES - (seen.get(key) || 0); i > 0; i--) pool.push(key);
+    }
+    const bag = shuffle(pool);
+    const mint = (k) => ({ id: `d${p.seat}_${uid++}`, key: k, owner: p.seat });
+    if (p.seat === seat) {
+      // our own rack is real; only the order of our reserve is a guess
+      p.reserve = bag.slice(SET_ASIDE).map(mint);
+    } else {
+      const held = p.rack.length;
+      p.rack = bag.slice(0, held).map(mint);
+      p.reserve = bag.slice(held + SET_ASIDE).map(mint);
+      // a pinned Troop is still pinned; which one it is was never ours to know
+      p.frozen = p.frozen && p.rack.length ? p.rack[0].id : null;
+    }
+  }
+  return H;
+}
+
+// Fewest placements `attacker` needs before it can walk into the defender's
+// H.Q.: ground it already holds is free, empty ground costs one Troop, and
+// ground the defender holds costs two, because taking it needs a Troop
+// strictly stronger than whatever is standing there.
+function hqSteps(G, attacker) {
+  const defender = other(attacker);
+  const nodes = G.terrain.nodes;
+  const dist = new Array(nodes.length).fill(Infinity);
+  const queue = [];
+  for (const h of hqsOf(G, attacker)) { dist[h] = 0; queue.push(h); }
+  let best = Infinity;
+  while (queue.length) {
+    // small graph, small weights: a scan beats a heap
+    let at = 0;
+    for (let i = 1; i < queue.length; i++) if (dist[queue[i]] < dist[queue[at]]) at = i;
+    const n = queue.splice(at, 1)[0];
+    if (dist[n] > best) continue;
+    for (const m of G.terrain.adj[n]) {
+      const node = nodes[m];
+      if (node.hq === defender) { best = Math.min(best, dist[n] + 1); continue; }
+      if (node.hq !== null) continue;                 // never route through an H.Q.
+      const held = occupant(G, m);
+      const cost = held === attacker ? 0 : held === null ? 1 : 2;
+      if (dist[n] + cost < dist[m]) { dist[m] = dist[n] + cost; queue.push(m); }
+    }
+  }
+  return best;
+}
+
+// How much a Troop on the rack is worth to hold: the big ones are the only
+// answer to a big one already standing on a base.
+const handStrength = (p) => p.rack.reduce((a, t) => a + (strengthOf(t.key) ?? 4), 0);
+
+const W = {
+  medal: 260,
+  corner: [0, 6, 22, 70, 0],   // by corners of an unclaimed region held, × its Medals
+  hqStep: 40,
+  hqPanic: 1200,
+  base: 8,
+  reach: 2,
+  buried: 7,
+  rack: 6,
+  reserve: 1.5,
+  strength: 0.8,
+};
+
+function evaluate(G, seat) {
+  if (G.phase === 'over') return G.winner === seat ? WIN : -WIN;
+  const foe = other(seat);
+  const me = bySeat(G, seat);
+  const them = bySeat(G, foe);
+  const target = G.terrain.target;
+
+  let v = (me.medals - them.medals) * W.medal;
+  // the last Medal is the one that ends the game, so the curve steepens
+  v += (Math.pow(me.medals / target, 2) - Math.pow(them.medals / target, 2)) * 500;
+
+  for (const r of G.terrain.regions) {
+    if (r.owner !== null) continue;
+    let mine = 0, theirs = 0;
+    for (const n of r.around) {
+      const o = occupant(G, n);
+      if (o === seat) mine++;
+      else if (o === foe) theirs++;
+    }
+    v += r.medals * (W.corner[mine] - W.corner[theirs]);
+  }
+
+  let myBases = 0, theirBases = 0, myBuried = 0, theirBuried = 0;
+  for (const n of G.terrain.nodes) {
+    if (n.hq !== null) continue;
+    const st = G.board[n.id];
+    if (!st.length) continue;
+    if (st[st.length - 1].owner === seat) myBases++; else theirBases++;
+    for (let i = 0; i < st.length - 1; i++) {
+      if (st[i].owner === seat) myBuried++; else theirBuried++;
+    }
+  }
+  v += (myBases - theirBases) * W.base;
+  v -= (myBuried - theirBuried) * W.buried;
+  v += (reachable(G, seat).size - reachable(G, foe).size) * W.reach;
+
+  const mine = hqSteps(G, seat);
+  const yours = hqSteps(G, foe);
+  if (Number.isFinite(mine) || Number.isFinite(yours)) {
+    const a = Number.isFinite(mine) ? mine : 40;
+    const b = Number.isFinite(yours) ? yours : 40;
+    v += (b - a) * W.hqStep;
+  }
+  // one Troop away, and it is their turn: that is not a positional detail
+  if (yours <= 1 && G.turn === foe) v -= W.hqPanic;
+  if (mine <= 1 && G.turn === seat) v += W.hqPanic;
+
+  v += (me.rack.length - them.rack.length) * W.rack;
+  v += (me.reserve.length - them.reserve.length) * W.reserve;
+  v += (handStrength(me) - handStrength(them)) * W.strength;
+  return v;
+}
+
+// Three copies of a Troop are interchangeable, so only the first of each key
+// is generated — otherwise the branching factor triples for nothing.
+function placementMoves(G, actor, reach) {
+  const p = bySeat(G, actor);
+  const r = reach || reachable(G, actor);
+  const out = [];
+  const seen = new Set();
+  for (const t of playable(p)) {
+    if (seen.has(t.key)) continue;
+    seen.add(t.key);
+    for (const node of placeOptions(G, actor, t.key, r)) out.push({ kind: 'place', tile: t.id, node });
+  }
+  return out;
+}
+
+function movesFor(G, actor, reach) {
+  const pend = G.pending;
+  if (pend) {
+    const out = [];
+    if (pend.kind === 'capn') out.push(...placementMoves(G, actor, reach));
+    else if (pend.kind === 'jumbo') for (const n of pend.options) out.push({ kind: 'jumbo', node: n });
+    else if (pend.kind === 'retreat') for (const n of pend.options) out.push({ kind: 'retreat', node: n });
+    else if (pend.kind === 'eruption') {
+      for (const from of pend.options) for (const to of eruptionTargets(G, from)) out.push({ kind: 'eruption', from, to });
+    } else if (pend.kind === 'undead') {
+      const seen = new Set();
+      for (const t of G.discard) {
+        if (t.owner !== actor || seen.has(t.key)) continue;
+        seen.add(t.key);
+        out.push({ kind: 'undead', tile: t.id });
+      }
+    } else if (pend.kind === 'sniper') {
+      // you point without looking, so every index is the same move
+      out.push({ kind: 'sniper', index: 0 });
+    }
+    out.push({ kind: 'skip' });
+    return out;
+  }
+  const out = placementMoves(G, actor, reach);
+  if (canDraw(bySeat(G, actor))) out.push({ kind: 'draw' });
+  return out;
+}
+
+function orderMoves(G, actor, moves, reach) {
+  const siege = siegeBases(G, actor);
+  const p = bySeat(G, actor);
+  const keyOf = (id) => {
+    const t = p.rack.find((x) => x.id === id);
+    return t ? t.key : 'roxy';
+  };
+  return moves
+    .map((mv) => {
+      let s = 0;
+      if (mv.kind === 'place') s = scorePlacement(G, actor, mv.node, keyOf(mv.tile), reach, siege);
+      else if (mv.kind === 'draw') s = p.rack.length < 4 ? 60 : 20;
+      else if (mv.kind === 'skip') s = -20;
+      else s = 40;
+      return { mv, s };
+    })
+    .sort((a, b) => b.s - a.s)
+    .map((x) => x.mv);
+}
+
+function search(G, rootSeat, depth, alpha, beta, ctx, ply) {
+  if (G.phase === 'over') {
+    // a win now beats the same win three moves later, and a loss later beats
+    // a loss now — otherwise the bot dithers in won positions
+    return G.winner === rootSeat ? WIN - ply : -WIN + ply;
+  }
+  if (depth <= 0) return evaluate(G, rootSeat);
+  if (ctx.nodes >= ctx.budget) { ctx.out = true; return evaluate(G, rootSeat); }
+  // Date.now() is not free, so only look every so often
+  if ((ctx.nodes & 255) === 0 && ctx.until && Date.now() > ctx.until) { ctx.out = true; return evaluate(G, rootSeat); }
+
+  const actor = G.pending ? G.pending.seat : G.turn;
+  const maxing = actor === rootSeat;
+  const reach = reachable(G, actor);
+  const raw = movesFor(G, actor, reach);
+  if (!raw.length) return evaluate(G, rootSeat);
+  const moves = depth > 1 ? orderMoves(G, actor, raw, reach) : raw;
+
+  let best = maxing ? -Infinity : Infinity;
+  for (const mv of moves) {
+    ctx.nodes++;
+    const H = cloneState(G);
+    if (!applyMove(H, actor, mv).ok) continue;
+    const v = search(H, rootSeat, depth - 1, alpha, beta, ctx, ply + 1);
+    if (maxing) {
+      if (v > best) best = v;
+      if (best > alpha) alpha = best;
+    } else {
+      if (v < best) best = v;
+      if (best < beta) beta = best;
+    }
+    if (alpha >= beta) break;
+    if (ctx.out) break;
+  }
+  return Number.isFinite(best) ? best : evaluate(G, rootSeat);
+}
+
+// ------------------------------------------------------------------ the root
+
+// `ms` is a wall-clock ceiling on one move's thinking, so the same level
+// plays the same way on a laptop and a phone — the phone just searches less
+// deeply inside it. The search runs on the main thread, so this doubles as
+// the longest the tab can be frozen.
+export const BOT_LEVELS = {
+  quick: { label: 'Quick', blurb: 'No search at all — plays the first decent move it sees.', nodes: 0, depth: 0, samples: 1, ms: 0 },
+  steady: { label: 'Steady', blurb: 'Looks a move or two ahead. A fair game.', nodes: 900, depth: 4, samples: 1, ms: 60 },
+  sharp: { label: 'Sharp', blurb: 'Searches deeper and guards its H.Q. Will punish a loose Troop.', nodes: 2600, depth: 6, samples: 1, ms: 150 },
+  ruthless: { label: 'Ruthless', blurb: 'As deep as the search is still worth anything. Expect to lose.', nodes: 8000, depth: 9, samples: 1, ms: 400 },
+};
+export const DEFAULT_LEVEL = 'sharp';
+
+export function botChoose(G, seat, opts = {}) {
+  const p = bySeat(G, seat);
+  if (!p) return null;
+  const actor = G.pending ? G.pending.seat : G.turn;
+  if (actor !== seat) return null;
+  if (G.phase !== 'playing') return null;
+
+  const level = BOT_LEVELS[opts.level] || BOT_LEVELS[DEFAULT_LEVEL];
+  const budget = opts.nodes ?? level.nodes;
+  const maxDepth = opts.depth ?? level.depth;
+  const samples = opts.samples ?? level.samples;
+  const totalMs = opts.ms ?? level.ms ?? 0;
+  const perMs = totalMs ? Math.max(20, Math.floor(totalMs / samples)) : 0;
+  const started = Date.now();
+  if (budget <= 0 || maxDepth <= 0) return greedyChoose(G, seat);
+
+  const moves = movesFor(G, seat);
+  if (!moves.length) return G.pending ? { kind: 'skip' } : null;
+  if (moves.length === 1) return moves[0];
+  // an H.Q. in reach needs no thinking about
+  for (const mv of moves) {
+    if (mv.kind === 'place' && G.terrain.nodes[mv.node].hq === other(seat)) return mv;
+  }
+
+  const total = new Array(moves.length).fill(0);
+  const onePass = samples === 1;
+  let searched = false;
+  for (let s = 0; s < samples; s++) {
+    const D = determinize(G, seat);
+    const ctx = {
+      nodes: 0,
+      budget: Math.max(200, Math.floor(budget / samples)),
+      until: perMs ? started + perMs * (s + 1) : 0,
+      out: false,
+    };
+    let done = null;
+    // Iterative deepening: each sweep orders the next, and a sweep that runs
+    // out of budget is thrown away rather than half-believed.
+    for (let depth = 2; depth <= maxDepth; depth++) {
+      const vals = new Array(moves.length).fill(-Infinity);
+      const order = done
+        ? moves.map((_, i) => i).sort((a, b) => done[b] - done[a])
+        : orderIndices(D, seat, moves);
+      ctx.out = false;
+      let alpha = -Infinity;
+      for (const i of order) {
+        const H = cloneState(D);
+        if (!applyMove(H, seat, moves[i]).ok) continue;
+        vals[i] = search(H, seat, depth - 1, onePass ? alpha : -Infinity, Infinity, ctx, 1);
+        if (onePass && vals[i] > alpha) alpha = vals[i];
+        if (ctx.out) break;
+      }
+      if (ctx.out) break;
+      done = vals;
+      searched = true;
+      if (done.some((v) => v >= WIN - 100)) break;    // forced win found
+    }
+    if (done) for (let i = 0; i < moves.length; i++) total[i] += done[i];
+  }
+  if (!searched) return greedyChoose(G, seat);
+
+  let bestI = 0;
+  for (let i = 1; i < moves.length; i++) if (total[i] > total[bestI]) bestI = i;
+  if (!Number.isFinite(total[bestI])) return greedyChoose(G, seat);
+  return moves[bestI];
+}
+
+function orderIndices(G, seat, moves) {
+  const ranked = orderMoves(G, seat, moves, reachable(G, seat));
+  return ranked.map((mv) => moves.indexOf(mv));
 }
 
 // -------------------------------------------------------------- the seat view

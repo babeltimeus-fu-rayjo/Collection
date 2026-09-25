@@ -10,6 +10,8 @@ let fails = 0;
 const bad = (m) => { console.log('  **FAIL** ' + m); fails++; };
 
 const GAMES = 40;
+// the shallow bot is the cheap way to generate a lot of legal traffic
+const QUICK = { level: 'quick' };
 const seen = { draw: 0, place: 0, hq: 0, medals: 0, stuck: 0 };
 
 for (const terrain of TB.TERRAINS) {
@@ -27,7 +29,7 @@ for (const terrain of TB.TERRAINS) {
     let lastTurn = G.turn;
     while (G.phase !== 'over' && guard++ < 4000) {
       const actor = G.pending ? G.pending.seat : G.turn;
-      const mv = TB.botChoose(G, actor);
+      const mv = TB.botChoose(G, actor, QUICK);
       if (!mv) { bad(`${tag}: bot had no move (pending ${G.pending && G.pending.kind})`); break; }
       if (!G.pending) { if (mv.kind === 'draw') seen.draw++; else seen.place++; }
       const r = TB.applyMove(G, actor, mv);
@@ -85,5 +87,39 @@ console.log(`\nendings over ${total} games: ${seen.hq} by H.Q. capture, ${seen.m
 console.log(`actions taken: ${seen.place} placements, ${seen.draw} draws`);
 if (!seen.hq) bad('no game ever ended by capturing an H.Q. — the win condition may be unreachable');
 if (!seen.medals) bad('no game ever ended on the Medals objective — the targets may be out of reach');
+// ---- and a smaller pass driven by the searching bot, which reaches states
+// the greedy one does not: it will spend a Cap'n to stack two placements, it
+// will decline a special base, and it plays on to the very last legal Troop.
+{
+  let games = 0, moves = 0;
+  for (const terrain of TB.TERRAINS) {
+    for (let g = 0; g < 4; g++) {
+      const roster = [{ seat: 0, name: 'Blue', bot: true }, { seat: 1, name: 'Red', bot: true }];
+      const G = TB.newMatch(roster, { terrain: terrain.key });
+      let guard = 0;
+      while (G.phase !== 'over' && guard++ < 4000) {
+        const actor = G.pending ? G.pending.seat : G.turn;
+        const mv = TB.botChoose(G, actor, { level: 'steady' });
+        if (!mv) { bad(`${terrain.key}: searching bot had no move`); break; }
+        const r = TB.applyMove(G, actor, mv);
+        if (!r.ok) bad(`${terrain.key}: searching bot move rejected — ${r.error}`);
+        moves++;
+        for (const pl of G.players) {
+          if (pl.rack.length > TB.RACK_MAX) bad(`${terrain.key}: rack overflowed to ${pl.rack.length}`);
+          const onBoard = G.board.reduce((a, st) => a + st.filter((t) => t.owner === pl.seat).length, 0);
+          const inBin = G.discard.filter((t) => t.owner === pl.seat).length;
+          if (pl.rack.length + pl.reserve.length + onBoard + inBin !== 20) {
+            bad(`${terrain.key}: searching bot lost or duplicated a Troop`);
+            guard = 1e9;
+          }
+        }
+      }
+      if (G.phase !== 'over') bad(`${terrain.key}: searching bot never finished`);
+      games++;
+    }
+  }
+  console.log(`\nsearching bot: ${games} games, ${moves} moves, every move legal`);
+}
+
 console.log(fails ? `\n${fails} FAILURES` : '\nall invariants held');
 process.exit(fails ? 1 : 0);

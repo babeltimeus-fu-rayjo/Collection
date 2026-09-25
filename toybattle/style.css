@@ -960,6 +960,34 @@ a {
 
 /* ---------------------------------------------------------------- lobby: terrain */
 
+#bot-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  margin: 4px 0 2px;
+}
+
+#bot-blurb {
+  font-size: 12.5px;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--dim);
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.tb-skill {
+  font-size: 10.5px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  white-space: nowrap;
+}
+
 #terrain-picker {
   display: flex;
   flex-wrap: wrap;

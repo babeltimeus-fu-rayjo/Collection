@@ -225,7 +225,7 @@ console.log('\n— every effect actually fires in play —');
       let guard = 0;
       while (G.phase !== 'over' && guard++ < 4000) {
         const actor = G.pending ? G.pending.seat : G.turn;
-        const mv = TB.botChoose(G, actor);
+        const mv = TB.botChoose(G, actor, { level: 'quick' });
         if (!mv) break;
         const rackBefore = G.players.map((p) => p.rack.length);
         const binBefore = G.discard.length;

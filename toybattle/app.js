@@ -18,6 +18,8 @@ import {
   TROOP_ORDER,
   TERRAINS,
   POWERS,
+  BOT_LEVELS,
+  DEFAULT_LEVEL,
   terrainByKey,
   troopLabel,
   strengthOf,
@@ -321,6 +323,7 @@ class HostSession {
     this.conns = new Map();
     this.G = null;
     this.terrainKey = TERRAINS[0].key;
+    this.botLevel = DEFAULT_LEVEL;
     this.botTimer = null;
     this.chatLog = [];
     this.watchers = []; // observers: {id, name, conn, target-seat}
@@ -658,6 +661,14 @@ class HostSession {
     this.pushLobby();
   }
 
+  // Bot skill is the host's browser doing the thinking, so only the host sets
+  // it — and it can change between games without leaving the lobby.
+  setBotLevel(key) {
+    if (!BOT_LEVELS[key]) return;
+    this.botLevel = key;
+    this.pushLobby();
+  }
+
   // The turn player acts in several small steps (take, three placements,
   // maybe a card, cubes, end). Bots pause longer before a fresh turn, then
   // move briskly through the steps so the table stays readable.
@@ -675,7 +686,7 @@ class HostSession {
       if (!this.G || this.G.phase !== 'playing') return;
       const actor = this.G.pending ? this.G.pending.seat : this.G.turn;
       if (!this.seatCovered(actor)) return;
-      const move = botChoose(this.G, actor);
+      const move = botChoose(this.G, actor, { level: this.botLevel });
       // never stall the table: a pending choice is always declinable, and a
       // player who can do nothing at all is handled by the engine itself
       const res = move ? applyMove(this.G, actor, move) : { ok: false };
@@ -694,6 +705,7 @@ class HostSession {
       min: MIN_PLAYERS,
       max: MAX_PLAYERS,
       terrain: this.terrainKey,
+      botLevel: this.botLevel,
     };
   }
 
@@ -755,13 +767,13 @@ class HostSession {
     const wnames = this.watchers.map((x) => x.name);
     for (const [seat, conn] of this.conns) {
       try {
-        conn.send({ t: 'state', view: { ...viewFor(this.G, seat, this.code), watchers: wnames } });
+        conn.send({ t: 'state', view: { ...viewFor(this.G, seat, this.code), watchers: wnames, botLevel: this.botLevel } });
       } catch {}
     }
     for (const w of this.watchers) this.sendWatcher(w);
     pendingMove = false;
     showScreen('game');
-    renderGame({ ...viewFor(this.G, 0, this.code), watchers: wnames }, this);
+    renderGame({ ...viewFor(this.G, 0, this.code), watchers: wnames, botLevel: this.botLevel }, this);
     this.scheduleBots();
   }
 
@@ -1071,6 +1083,18 @@ function renderLobby(lob, sess) {
     if (sess.isHost) b.addEventListener('click', () => sess.setTerrain(t.key));
     sp.append(b);
   }
+  const bp = $('#bot-picker');
+  bp.replaceChildren();
+  for (const [key, lvl] of Object.entries(BOT_LEVELS)) {
+    const b = el('button', `side-pick${key === lob.botLevel ? ' on' : ''}`, lvl.label);
+    b.type = 'button';
+    b.title = lvl.blurb;
+    b.disabled = !sess.isHost;
+    if (sess.isHost) b.addEventListener('click', () => sess.setBotLevel(key));
+    bp.append(b);
+  }
+  $('#bot-blurb').textContent = (BOT_LEVELS[lob.botLevel] || BOT_LEVELS[DEFAULT_LEVEL]).blurb;
+
   const chosen = terrainByKey(lob.terrain);
   const blurb = $('#terrain-blurb');
   blurb.replaceChildren(
@@ -1342,6 +1366,11 @@ function renderSeats(view) {
     const head = el('div', 'tb-seat-head');
     head.append(avatarEl(p.name, p.seat, p.bot));
     head.append(el('span', 'tb-seat-name', p.name + (p.connected || p.bot ? '' : ' (away)')));
+    if (p.bot && view.botLevel && BOT_LEVELS[view.botLevel]) {
+      const chip = el('span', 'tb-skill', BOT_LEVELS[view.botLevel].label);
+      chip.title = BOT_LEVELS[view.botLevel].blurb;
+      head.append(chip);
+    }
     card.append(head);
     const bar = el('div', 'tb-seat-stats');
     bar.append(el('span', 'tb-stat medals', `★ ${p.medals}/${view.terrain.target}`));
