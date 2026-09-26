@@ -188,28 +188,29 @@ const TERRAIN_DEFS = [
     // corrected and confirmed by its owner, 2026-09-25. Half-turn symmetric:
     // a↔m b↔l c↔k d↔j e↔i f↔h R1↔B2 R2↔B1, with g in the centre. Two H.Q. a
     // side, each with a single way in, and only R1 and B2 carry a triangle.
-    // STILL PENDING: the numbers printed on the value triangles. The lists
-    // below on d, e, g, i, j, R1 and B2 are placeholders, not the board's.
+    // Every value triangle includes the joker, as the owner confirmed. STILL
+    // PENDING: the numbers on them — the lists below are a reading of the
+    // photograph and not yet checked against the board.
     key: 'pool', name: 'Tropical Pool', power: 'buoy', target: 6, source: 'board',
     tag: 'Tyres and floats across a pool. The floats only take the Troops their triangle names.',
     nodes: {
-      R1: [25, 12, 'hq1 only:6,7'],
+      R1: [25, 12, 'hq1 only:6,7,joker'],
       a: [50, 14],
       R2: [75, 12, 'hq1'],
       b: [25, 26],
       c: [50, 28],
-      d: [75, 26, 'only:1,2'],
-      e: [25, 41, 'only:3,4,5'],
+      d: [75, 26, 'only:1,2,joker'],
+      e: [25, 41, 'only:3,4,5,joker'],
       f: [75, 40],
-      g: [50, 50, 'only:6,7'],
+      g: [50, 50, 'only:6,7,joker'],
       h: [25, 60],
-      i: [75, 59, 'only:3,4,5'],
-      j: [25, 74, 'only:1,2'],
+      i: [75, 59, 'only:3,4,5,joker'],
+      j: [25, 74, 'only:1,2,joker'],
       k: [50, 72],
       l: [75, 74],
       B1: [25, 88, 'hq0'],
       m: [50, 86],
-      B2: [75, 88, 'hq0 only:6,7'],
+      B2: [75, 88, 'hq0 only:6,7,joker'],
     },
     // paths confirmed by the user against the board, 2026-09-25: every H.Q.
     // has a single way in, and the centre float is a six-way hub
