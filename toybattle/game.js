@@ -188,9 +188,10 @@ const TERRAIN_DEFS = [
     // corrected and confirmed by its owner, 2026-09-25. Half-turn symmetric:
     // a↔m b↔l c↔k d↔j e↔i f↔h R1↔B2 R2↔B1, with g in the centre. Two H.Q. a
     // side, each with a single way in, and only R1 and B2 carry a triangle.
-    // Every value triangle includes the joker, as the owner confirmed. STILL
-    // PENDING: the numbers on them — the lists below are a reading of the
-    // photograph and not yet checked against the board.
+    // The value triangles, confirmed by the owner: 1/2 on d and j, 3/4/5 on e
+    // and i, 6/7 on the centre float g and beside R1 and B2 — and every one
+    // of them also admits the joker. R2 and B1 carry no triangle and take any
+    // Troop.
     key: 'pool', name: 'Tropical Pool', power: 'buoy', target: 6, source: 'board',
     tag: 'Tyres and floats across a pool. The floats only take the Troops their triangle names.',
     nodes: {
