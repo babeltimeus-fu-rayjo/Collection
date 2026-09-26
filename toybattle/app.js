@@ -34,6 +34,7 @@ import {
   markSeatClaimed,
   markSeatResigned,
 } from './game.js';
+import { layoutTerrain, BASE, HQ, MEDAL } from './layout.js';
 import { initSettings } from '../common/settings.js';
 import '../common/feedtoggle.js';
 import '../common/version.js';
@@ -47,7 +48,9 @@ const cfg = initSettings('tb', [
   { key: 'bubbleTrunc', label: 'Bubble text cap', def: 84, min: 12, max: 400, step: 4, unit: 'ch', ms: false, section: 'Bubbles & banners' },
   { key: 'flashMs', label: 'Banner duration', def: 1700, section: 'Bubbles & banners' },
   { key: 'overlayDelay', label: 'Result screen delay', def: 3400, section: 'Overlays' },
+  { key: 'revealBots', label: "Show the bot's hand", def: false, bool: true, section: 'Testing', host: true, hint: 'Turn the bot’s rack face up under its row of the scoreboard while you play, to learn what it holds and why it plays what it does. Only the host builds views, so this shows it to everyone at the table. The 👁 beside the bot’s name flips the same switch.' },
 ]);
+const viewOpts = () => ({ revealBots: cfg.on('revealBots') });
 
 // ---------------------------------------------------------------- networking
 
@@ -139,6 +142,7 @@ function showScreen(name) {
   for (const s of document.querySelectorAll('.screen')) {
     s.classList.toggle('hidden', s.id !== `screen-${name}`);
   }
+  if (name !== 'game') hideTip();
 }
 
 function toast(text, ms = 3000) {
@@ -586,7 +590,7 @@ class HostSession {
       w.conn.send({
         t: 'state',
         view: {
-          ...viewFor(this.G, w.target, this.code),
+          ...viewFor(this.G, w.target, this.code, viewOpts()),
           observer: { name: w.name, target: w.target },
           watchers: this.watchers.map((x) => x.name),
         },
@@ -764,17 +768,26 @@ class HostSession {
         this.bannerUntil = Math.max(this.bannerUntil || 0, Date.now() + cfg('flashMs'));
       }
     }
+    pendingMove = false;
+    showScreen('game');
+    this.pushViews();
+    this.scheduleBots();
+  }
+
+  // Everyone's view of the table as it stands. A change to what views show,
+  // like turning the bot's hand face up, re-sends them without touching the
+  // game or the bot's clock.
+  pushViews() {
+    if (!this.G) return;
     const wnames = this.watchers.map((x) => x.name);
+    const opts = viewOpts();
     for (const [seat, conn] of this.conns) {
       try {
-        conn.send({ t: 'state', view: { ...viewFor(this.G, seat, this.code), watchers: wnames, botLevel: this.botLevel } });
+        conn.send({ t: 'state', view: { ...viewFor(this.G, seat, this.code, opts), watchers: wnames, botLevel: this.botLevel } });
       } catch {}
     }
     for (const w of this.watchers) this.sendWatcher(w);
-    pendingMove = false;
-    showScreen('game');
-    renderGame({ ...viewFor(this.G, 0, this.code), watchers: wnames, botLevel: this.botLevel }, this);
-    this.scheduleBots();
+    renderGame({ ...viewFor(this.G, 0, this.code, opts), watchers: wnames, botLevel: this.botLevel }, this);
   }
 
   move(seat, move) {
@@ -1155,48 +1168,26 @@ function sv(tag, cls, attrs = {}) {
 
 // ---------------------------------------------------------------- the board
 
-// Board coordinates are whatever units the Terrain was written in — Castle
-// Field is in percentages of the printed board — so the drawing scales itself
-// instead of assuming a lattice: whatever the typical path length is on this
-// board becomes STEP pixels, and the bases are sized against that.
-const STEP = 96;     // pixels a median-length path should span
-const PAD_X = 58;
-const PAD_Y = 52;
-const BASE = 62;     // side of a base square
-const HQ = 76;
+// Where everything sits comes from layout.js, which takes the printed card
+// and spaces out whatever would crowd at screen size. Both players get the
+// same layout; this part only turns it the right way up for each of them.
 
-// One cache slot keyed on the view, which arrives fresh with every broadcast.
-let scaleFor = null;
-let scaleOf = 1;
-function unit(view) {
-  if (scaleFor === view) return scaleOf;
-  const t = view.terrain;
-  const lens = t.edges
-    .map(([p, q]) => Math.hypot(t.nodes[p].x - t.nodes[q].x, t.nodes[p].y - t.nodes[q].y))
-    .sort((p, q) => p - q);
-  const median = lens.length ? lens[Math.floor(lens.length / 2)] : 1;
-  scaleFor = view;
-  scaleOf = STEP / (median || 1);
-  return scaleOf;
-}
-
-// Both players sit at a board, so both should be looking up it: your own
-// H.Q. is always at the bottom of your screen. Red simply reads the board
-// rotated a half turn, which is what sitting opposite means.
 // Which way up to draw the board. Everyone should see their own H.Q. at the
 // bottom of the screen, as they would sitting at the table, but the printed
 // boards do not agree on where that is: Castle Field puts blue's keep at the
 // bottom, Volcanic Jungle at the top, City of Clouds at the left end. So the
 // drawing is turned by quarter turns until the line from your own H.Q. to the
-// enemy's points up the screen. Cached per view, like the scale.
+// enemy's points up the screen. Cached per view, which arrives fresh with
+// every broadcast.
 let frameFor = null;
 let frameOf = null;
 function frame(view) {
   if (frameFor === view) return frameOf;
   const t = view.terrain;
+  const L = layoutTerrain(t);
   const centre = (seat) => {
-    const hs = t.nodes.filter((n) => n.hq === seat);
-    return [hs.reduce((s, n) => s + n.x, 0) / hs.length, hs.reduce((s, n) => s + n.y, 0) / hs.length];
+    const hs = t.nodes.filter((n) => n.hq === seat).map((n) => L.pos[n.id]);
+    return [hs.reduce((s, p) => s + p[0], 0) / hs.length, hs.reduce((s, p) => s + p[1], 0) / hs.length];
   };
   const [mx, my] = centre(view.you === 1 ? 1 : 0);
   const [ox, oy] = centre(view.you === 1 ? 0 : 1);
@@ -1205,24 +1196,19 @@ function frame(view) {
   // clockwise quarter turns that bring (dx, dy) round to pointing up
   const turns = Math.abs(dy) >= Math.abs(dx) ? (dy < 0 ? 0 : 2) : (dx > 0 ? 3 : 1);
   frameFor = view;
-  frameOf = { turns, w: turns % 2 ? t.h : t.w, h: turns % 2 ? t.w : t.h };
+  frameOf = { L, turns, w: turns % 2 ? L.h : L.w, h: turns % 2 ? L.w : L.h };
   return frameOf;
 }
 
+// a point of the layout, turned for this viewer
 function place(view, x, y) {
-  const t = view.terrain;
-  // board coordinates are arbitrary units with an arbitrary origin, so
-  // normalise against the Terrain's own bounding box before turning it
-  const nx = x - t.x0;
-  const ny = y - t.y0;
-  const { turns } = frame(view);
-  const [px, py] = turns === 0 ? [nx, ny]
-    : turns === 1 ? [t.h - ny, nx]
-      : turns === 2 ? [t.w - nx, t.h - ny]
-        : [ny, t.w - nx];
-  const s = unit(view);
-  return [PAD_X + px * s, PAD_Y + py * s];
+  const { L, turns } = frame(view);
+  return turns === 0 ? [x, y]
+    : turns === 1 ? [L.h - y, x]
+      : turns === 2 ? [L.w - x, L.h - y]
+        : [y, L.w - x];
 }
+const nodeAt = (view, id) => place(view, ...frame(view).L.pos[id]);
 
 // A region is the ground enclosed by the bases that ring it, so it is drawn
 // as their polygon pulled in off the bases themselves. That works for a ring
@@ -1238,6 +1224,15 @@ function regionPath(pts) {
   });
   return 'M' + inner.map((p) => p.join(' ')).join('L') + 'Z';
 }
+
+// What each Terrain's special bases look like: the retreat back to the rack,
+// the rainbow, the volcanoes, the pumpkin graves, the shield plates and the
+// sniper's sights. Tropical Pool's floats show their values instead, and
+// Caribbean Sea has none.
+const SPECIAL_MARK = { retreat: '↩', splendor: '🌈', eruption: '🌋', undead: '🎃', shield: '🛡', sniper: '🎯' };
+
+// the values a float or an H.Q. takes, the joker as a star
+const onlyText = (only) => only.map((v) => (v === 'joker' ? '★' : v)).join(' ');
 
 // Which nodes the click handler should accept right now, and why.
 function liveTargets(view) {
@@ -1283,42 +1278,42 @@ function shadow(view) {
 function renderBoard(view) {
   const t = view.terrain;
   const host = $('#board');
-  const s = unit(view);
-  const { w: fw, h: fh } = frame(view);
-  const W = PAD_X * 2 + fw * s;
-  const H = PAD_Y * 2 + fh * s;
-  const svg = sv('svg', 'board-svg', { viewBox: `0 0 ${W} ${H}`, role: 'img' });
+  const { L, w: W, h: H } = frame(view);
+  const svg = sv('svg', 'board-svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `${t.name} board` });
   const targets = liveTargets(view);
+  const mark = SPECIAL_MARK[t.power] || '★';
 
   // paths first, so everything else sits on top of them
   for (const [a, b] of t.edges) {
-    const [x1, y1] = place(view, t.nodes[a].x, t.nodes[a].y);
-    const [x2, y2] = place(view, t.nodes[b].x, t.nodes[b].y);
+    const [x1, y1] = nodeAt(view, a);
+    const [x2, y2] = nodeAt(view, b);
     svg.append(sv('line', 'tb-path', { x1, y1, x2, y2 }));
   }
 
   // regions and the Medals sitting in them
-  for (const r of t.regions) {
-    const [cx, cy] = place(view, r.x, r.y);
+  t.regions.forEach((r, i) => {
+    const spot = L.medals[i];
     const g = sv('g', `tb-region${r.owner === null ? '' : ` taken ${side(r.owner)}`}`);
-    g.append(sv('path', 'tb-region-pad', { d: regionPath((r.ring || r.around).map((n) => place(view, t.nodes[n].x, t.nodes[n].y))) }));
+    g.append(sv('path', 'tb-region-pad', { d: regionPath((r.ring || r.around).map((n) => nodeAt(view, n))) }));
     if (r.owner === null) {
-      for (let i = 0; i < r.medals; i++) {
-        const off = (i - (r.medals - 1) / 2) * 20;
-        g.append(sv('circle', 'tb-medal', { cx: cx + off, cy, r: 8.5 }));
+      for (const [x, y] of spot.dots) {
+        const [cx, cy] = place(view, x, y);
+        g.append(sv('circle', 'tb-medal', { cx, cy, r: MEDAL }));
       }
     } else {
-      const label = sv('text', 'tb-region-claim', { x: cx, y: cy + 5, 'text-anchor': 'middle' });
+      const [cx, cy] = place(view, spot.x, spot.y);
+      const label = sv('text', 'tb-region-claim', { x: cx, y: cy + 7, 'text-anchor': 'middle' });
       label.textContent = '★';
       g.append(label);
     }
     svg.append(g);
-  }
+  });
 
   // H.Q. and bases
   for (const n of t.nodes) {
-    const [cx, cy] = place(view, n.x, n.y);
-    const top = view.board[n.id][view.board[n.id].length - 1] || null;
+    const [cx, cy] = nodeAt(view, n.id);
+    const stack = view.board[n.id];
+    const top = stack[stack.length - 1] || null;
     const isHq = n.hq !== null;
     const size = isHq ? HQ : BASE;
     const cls = ['tb-node'];
@@ -1328,21 +1323,25 @@ function renderBoard(view) {
     if (n.only) cls.push('restricted');
     if (targets.has(n.id)) cls.push('legal');
     if (choice.from === n.id) cls.push('picked');
-    const g = sv('g', cls.join(' '), { 'data-node': n.id, tabindex: targets.has(n.id) ? 0 : -1 });
+    const readable = top || n.hq !== null || n.special || n.only;
+    const g = sv('g', cls.join(' '), { 'data-node': n.id, tabindex: targets.has(n.id) || readable ? 0 : -1 });
+    if (readable) {
+      g.dataset.tipNode = n.id;
+      g.dataset.tipKey = `node:${n.id}`;
+    }
     g.append(sv('rect', 'tb-slot', { x: cx - size / 2, y: cy - size / 2, width: size, height: size, rx: isHq ? 16 : 10 }));
 
-    if (isHq) {
-      const flag = sv('text', 'tb-hq-mark', { x: cx, y: cy + 9, 'text-anchor': 'middle' });
+    if (isHq && !top) {
+      const flag = sv('text', 'tb-hq-mark', { x: cx, y: cy + (n.only ? 14 : 10), 'text-anchor': 'middle' });
       flag.textContent = n.hq === view.you ? '⌂' : '⚑';
       g.append(flag);
     }
-    if (n.only) {
-      const lab = sv('text', 'tb-only', { x: cx, y: cy - size / 2 - 7, 'text-anchor': 'middle' });
-      // the board prints its list; the joker shows as a star
-      lab.textContent = n.only.map((v) => (v === 'joker' ? '★' : v)).join('/');
-      g.append(lab);
+    // an empty special base shows what it does; a held one keeps a corner badge
+    if (n.special && !n.only && !top) {
+      const m = sv('text', 'tb-special-mark', { x: cx, y: cy + 10, 'text-anchor': 'middle' });
+      m.textContent = mark;
+      g.append(m);
     }
-    if (n.special) g.append(sv('circle', 'tb-spark', { cx: cx + size / 2 - 11, cy: cy - size / 2 + 11, r: 6 }));
 
     if (top) {
       const tg = sv('g', `tb-tile ${side(top.owner)}`);
@@ -1350,29 +1349,58 @@ function renderBoard(view) {
       const glyph = sv('text', 'tb-tile-glyph', { x: cx, y: cy + 11, 'text-anchor': 'middle' });
       glyph.textContent = TROOPS[top.key].glyph;
       tg.append(glyph);
-      const num = sv('text', 'tb-tile-str', { x: cx - 19, y: cy - 15, 'text-anchor': 'middle' });
+      const num = sv('text', 'tb-tile-str', { x: cx - 18, y: cy - 12, 'text-anchor': 'middle' });
       num.textContent = strengthOf(top.key) === null ? '★' : String(strengthOf(top.key));
       tg.append(num);
-      const depth = view.board[n.id].length;
-      if (depth > 1) {
-        const d = sv('text', 'tb-tile-depth', { x: cx + 20, y: cy + 24, 'text-anchor': 'middle' });
-        d.textContent = '×' + depth;
+      if (stack.length > 1) {
+        const d = sv('text', 'tb-tile-depth', { x: cx + 18, y: cy + 23, 'text-anchor': 'middle' });
+        d.textContent = '×' + stack.length;
         tg.append(d);
       }
       g.append(tg);
+      if (n.special && !n.only) {
+        g.append(sv('circle', 'tb-badge', { cx: cx + size / 2 - 3, cy: cy - size / 2 + 3, r: 11 }));
+        const m = sv('text', 'tb-badge-mark', { x: cx + size / 2 - 3, y: cy - size / 2 + 7.5, 'text-anchor': 'middle' });
+        m.textContent = mark;
+        g.append(m);
+      }
+    }
+
+    // A float's values sit in a tab across its top edge, over any Troop on
+    // it, because they still decide who may cover that Troop.
+    if (n.only) {
+      const text = onlyText(n.only);
+      const tw = text.length * 7 + 12;
+      const ty = cy - size / 2;
+      g.append(sv('rect', 'tb-only-tab', { x: cx - tw / 2, y: ty - 9, width: tw, height: 18, rx: 9 }));
+      const lab = sv('text', 'tb-only', { x: cx, y: ty + 4.5, 'text-anchor': 'middle' });
+      lab.textContent = text;
+      g.append(lab);
     }
     svg.append(g);
   }
 
   svg.addEventListener('click', (e) => {
     const g = e.target.closest('[data-node]');
-    if (g) onNodeClick(view, Number(g.dataset.node));
+    if (g) onNodeClick(view, Number(g.dataset.node), g);
+  });
+  svg.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const g = e.target.closest('[data-node]');
+    if (!g) return;
+    e.preventDefault();
+    onNodeClick(view, Number(g.dataset.node), g);
   });
   host.replaceChildren(svg);
 }
 
-function onNodeClick(view, node) {
-  if (!liveTargets(view).has(node)) return;
+function onNodeClick(view, node, g) {
+  // not a move: then it is a question — what is standing there?
+  if (!liveTargets(view).has(node)) {
+    if (g && g.dataset.tipNode !== undefined) pinTip(g);
+    return;
+  }
+  hideTip();
   const p = view.pending;
   if (p && p.seat === view.you) {
     if (p.kind === 'jumbo') return sendMove({ kind: 'jumbo', node });
@@ -1399,7 +1427,10 @@ function rackTileEl(view, t, opts = {}) {
   b.append(el('span', 'tb-troop-str', str === null ? '★' : String(str)));
   b.append(el('span', 'tb-troop-glyph', TROOPS[t.key].glyph));
   b.append(el('span', 'tb-troop-name', TROOPS[t.key].name));
-  b.title = `${troopLabel(t.key)} — ${TROOPS[t.key].text}`;
+  b.dataset.tipTroop = t.key;
+  b.dataset.tipOwner = view.you;
+  b.dataset.tipKey = `troop:${t.id}`;
+  b.setAttribute('aria-label', `${troopLabel(t.key)}: ${TROOPS[t.key].text}`);
   return b;
 }
 
@@ -1415,47 +1446,304 @@ function renderRack(view) {
     const opts = placeOptions(shadow(view), view.you, t.key);
     const dead = !myTurn || pinned || opts.length === 0;
     const b = rackTileEl(view, t, { sel: choice.tile === t.id, dead });
-    if (pinned) b.title = 'A sniper has this Troop pinned — it comes back at the end of your turn.';
-    else if (dead && myTurn) b.title += ' — nowhere legal to place it right now';
-    if (!dead) {
-      b.addEventListener('click', () => {
-        choice.tile = choice.tile === t.id ? null : t.id;
-        renderGame(view, session);
-      });
-    } else {
-      b.disabled = true;
-    }
+    if (pinned) b.dataset.tipWhy = 'A sniper has it pinned — it comes back at the end of your turn.';
+    else if (dead && myTurn) b.dataset.tipWhy = 'Nowhere legal to place it right now.';
+    if (dead) b.setAttribute('aria-disabled', 'true');
+    b.addEventListener('click', () => {
+      // a Troop you cannot play still answers a tap, with what it does
+      if (dead) return pinTip(b);
+      hideTip();
+      choice.tile = choice.tile === t.id ? null : t.id;
+      renderGame(view, session);
+    });
     host.append(b);
   }
   if (!mine.length) host.append(el('div', 'tb-rack-empty', 'Your rack is empty — draw.'));
 }
 
+// ---------------------------------------------------------------- tips
+
+// What a Troop does, what a base does, what a number means. The browser's
+// own title tooltip waits a second or more and never appears on a phone, so
+// the game draws its own: a mouse gets one after a short pause, and a tap on
+// anything that is not a move pins one until the next tap. Elements opt in
+// with data-tip (plain words), data-tip-troop (a Troop, with data-tip-owner
+// for its side and data-tip-why for why it cannot move) or data-tip-node (a
+// base on the board). data-tip-key finds the element again after a redraw.
+const TIP_DELAY = 110;
+const TIP_SEL = '[data-tip], [data-tip-troop], [data-tip-node]';
+let tipEl = null;
+let tipFor = null;
+let tipKey = null;
+let tipPinned = false;
+let tipTimer = null;
+let tipDropped = null;
+
+function troopCard(key, owner, why) {
+  const t = TROOPS[key];
+  const card = el('div', 'tb-card');
+  const head = el('div', `tb-card-head${owner === null || owner === undefined ? '' : ' ' + side(owner)}`);
+  head.append(el('span', 'tb-card-glyph', t.glyph));
+  head.append(el('b', 'tb-card-name', t.name));
+  head.append(el('span', 'tb-card-str', t.str === null ? '★ joker' : `strength ${t.str}`));
+  card.append(head);
+  card.append(el('i', 'tb-card-cry', t.cry));
+  card.append(el('span', 'tb-card-text', t.text));
+  if (t.note) card.append(el('span', 'tb-card-note', 'Note: ' + t.note));
+  if (why) card.append(el('span', 'tb-card-why', why));
+  return card;
+}
+
+// what a restricted base or H.Q. admits, as a sentence
+function onlyWords(only) {
+  const nums = only.filter((v) => v !== 'joker');
+  if (!nums.length) return 'Only Kwak, the joker, may be placed on it.';
+  const list = nums.length > 1 ? `${nums.slice(0, -1).join(', ')} or ${nums[nums.length - 1]}` : String(nums[0]);
+  return `Only a Troop of strength ${list}${only.includes('joker') ? ' — or Kwak, the joker —' : ''} may be placed on it.`;
+}
+
+function baseWords(view, n) {
+  const t = view.terrain;
+  if (n.hq !== null) {
+    const mine = n.hq === view.you;
+    const who = mine ? 'Your H.Q.' : `${seatName(view, n.hq)}’s H.Q.`;
+    const what = mine
+      ? 'Guard it: an enemy Troop placed here wins them the game.'
+      : 'Place a Troop here, along a chain of your own, and you win.';
+    return `${who} ${what}${n.only ? ` ${onlyWords(n.only)}` : ''}`;
+  }
+  if (n.only) return `A float. ${onlyWords(n.only)}`;
+  // the aid prints each power beside the base it fires on; said here as what
+  // landing on this base does — except the shield, which is what it prevents
+  if (n.special) {
+    return t.power === 'shield'
+      ? `Special base: ${POWERS.shield.text}`
+      : `Special base. Place a Troop here, then: ${POWERS[t.power].text}`;
+  }
+  return null;
+}
+
+function nodeCard(view, id) {
+  const n = view.terrain.nodes[id];
+  const stack = view.board[id] || [];
+  const card = el('div', 'tb-card');
+  if (stack.length) {
+    const top = stack[stack.length - 1];
+    const inner = troopCard(top.key, top.owner);
+    card.append(...inner.childNodes);
+    if (stack.length > 1) {
+      const under = stack.slice(0, -1).reverse().map((x) => `${troopLabel(x.key)}, ${side(x.owner)}`);
+      card.append(el('span', 'tb-card-note', `Underneath: ${under.join(' · ')}`));
+    }
+  }
+  const words = baseWords(view, n);
+  if (words) card.append(el('span', 'tb-card-base', words));
+  return card.childNodes.length ? card : null;
+}
+
+function tipBody(a) {
+  const d = a.dataset;
+  if (d.tipTroop) return troopCard(d.tipTroop, d.tipOwner === undefined ? null : Number(d.tipOwner), d.tipWhy);
+  if (d.tipNode !== undefined) return lastView ? nodeCard(lastView, Number(d.tipNode)) : null;
+  if (d.tip) return el('div', 'tb-card', d.tip);
+  return null;
+}
+
+function showTip(a, pinned = false) {
+  clearTimeout(tipTimer);
+  // the Troop you are holding already has its card up by the prompt
+  if (!pinned && a.classList.contains('sel')) return hideTip();
+  const body = tipBody(a);
+  if (!body) return hideTip();
+  if (!tipEl) {
+    tipEl = el('div', 'tb-tip hidden');
+    tipEl.id = 'tb-tip';
+    tipEl.setAttribute('role', 'tooltip');
+    document.body.append(tipEl);
+  }
+  if (tipFor && tipFor !== a) tipFor.classList.remove('tip-on');
+  tipEl.replaceChildren(body);
+  tipFor = a;
+  tipKey = a.dataset.tipKey || null;
+  tipPinned = pinned;
+  a.classList.toggle('tip-on', pinned);
+  // measure it where it stands, then put it above the thing it explains —
+  // or below, when there is no room above
+  tipEl.style.left = '0px';
+  tipEl.style.top = '0px';
+  tipEl.classList.remove('hidden');
+  const r = a.getBoundingClientRect();
+  const vw = document.documentElement.clientWidth;
+  const vh = document.documentElement.clientHeight;
+  const w = tipEl.offsetWidth;
+  const h = tipEl.offsetHeight;
+  const x = Math.max(8, Math.min(vw - w - 8, r.left + r.width / 2 - w / 2));
+  let y = r.top - h - 8;
+  if (y < 8) y = r.bottom + 8;
+  if (y + h > vh - 8) y = Math.max(8, vh - h - 8);
+  tipEl.style.left = `${Math.round(x)}px`;
+  tipEl.style.top = `${Math.round(y)}px`;
+}
+
+function hideTip() {
+  clearTimeout(tipTimer);
+  if (tipFor) tipFor.classList.remove('tip-on');
+  tipFor = null;
+  tipKey = null;
+  tipPinned = false;
+  if (tipEl) tipEl.classList.add('hidden');
+}
+
+// A tap that is a question rather than a move. Tapping the same thing again
+// puts the answer away.
+function pinTip(a) {
+  const key = a.dataset.tipKey || null;
+  if (tipDropped && key && tipDropped.key === key && Date.now() - tipDropped.at < 600) {
+    tipDropped = null;
+    return;
+  }
+  showTip(a, true);
+}
+
+// A redraw replaces every element, so a tip that is up follows its thing to
+// the new copy, or goes if the thing has gone.
+function retip() {
+  if (!tipFor) return;
+  if (document.contains(tipFor)) return;
+  const a = tipKey ? document.querySelector(`[data-tip-key="${CSS.escape(tipKey)}"]`) : null;
+  if (a) showTip(a, tipPinned);
+  else hideTip();
+}
+
+function initTips() {
+  document.addEventListener('pointerover', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    const a = e.target.closest && e.target.closest(TIP_SEL);
+    if (!a || a === tipFor) return;
+    if (tipPinned) return;
+    clearTimeout(tipTimer);
+    // sliding from one tip to the next should not wait again
+    tipTimer = setTimeout(() => showTip(a), tipFor ? 0 : TIP_DELAY);
+  });
+  document.addEventListener('pointerout', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    const a = e.target.closest && e.target.closest(TIP_SEL);
+    if (!a || (e.relatedTarget && a.contains(e.relatedTarget))) return;
+    clearTimeout(tipTimer);
+    if (!tipPinned && tipFor) tipTimer = setTimeout(hideTip, 60);
+  });
+  // any tap puts a pinned tip away; if it lands on the same thing, the click
+  // that follows knows not to bring it straight back
+  document.addEventListener('pointerdown', (e) => {
+    if (!tipPinned) return;
+    const a = e.target.closest && e.target.closest(TIP_SEL);
+    tipDropped = a && a === tipFor && tipKey ? { key: tipKey, at: Date.now() } : null;
+    hideTip();
+  }, true);
+  // plain words on a chip or a count have no move behind them, so a tap reads them
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest && e.target.closest('[data-tip]');
+    if (a && !a.closest('button')) pinTip(a);
+  });
+  document.addEventListener('focusin', (e) => {
+    const a = e.target.closest && e.target.closest(TIP_SEL);
+    if (a && e.target.matches(':focus-visible')) showTip(a);
+  });
+  document.addEventListener('focusout', () => {
+    if (!tipPinned) hideTip();
+  });
+  // the page scrolling moves what a tip points at; the log scrolling itself
+  // as lines arrive does not, so this listens to the page alone
+  window.addEventListener('scroll', () => hideTip(), { passive: true });
+  window.addEventListener('resize', () => hideTip());
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hideTip();
+  });
+}
+
 // ---------------------------------------------------------------- seats
 
+// One scoreboard for the two seats, a row each — theirs on top, as the board
+// has their H.Q. at the top — under column heads that say what every number
+// is: Medals, Hand, Reserve. The row whose turn it is lights up.
 function renderSeats(view) {
   const host = $('#seats');
   host.replaceChildren();
-  // your own side on the right, mirroring the board's bottom-is-you
-  const order = [foeOf(view), me(view)].filter(Boolean);
-  for (const p of order) {
-    const card = el('div', `tb-seat ${side(p.seat)}${p.seat === view.turn && view.phase === 'playing' ? ' on' : ''}${p.seat === view.you ? ' you' : ''}`);
-    const head = el('div', 'tb-seat-head');
-    head.append(avatarEl(p.name, p.seat, p.bot));
-    head.append(el('span', 'tb-seat-name', p.name + (p.connected || p.bot ? '' : ' (away)')));
+  const rows = [foeOf(view), me(view)].filter(Boolean);
+  if (!rows.length) return;
+  const board = el('div', 'tb-score');
+  const top = el('div', 'tb-score-row tb-score-top');
+  top.append(el('span', ''), el('span', '', 'Medals'), el('span', '', 'Hand'), el('span', '', 'Reserve'));
+  board.append(top);
+  const whoHas = (p) => (p.seat === view.you ? 'You have' : `${p.name} has`);
+
+  for (const p of rows) {
+    const on = view.phase === 'playing' && p.seat === view.turn;
+    const row = el('div', `tb-score-row ${side(p.seat)}${on ? ' on' : ''}${p.seat === view.you ? ' you' : ''}`);
+    const who = el('div', 'tb-score-who');
+    who.append(avatarEl(p.name, p.seat, p.bot));
+    who.append(el('b', 'tb-score-name', p.name + (p.connected || p.bot ? '' : ' (away)')));
     if (p.bot && view.botLevel && BOT_LEVELS[view.botLevel]) {
       const chip = el('span', 'tb-skill', BOT_LEVELS[view.botLevel].label);
-      chip.title = BOT_LEVELS[view.botLevel].blurb;
-      head.append(chip);
+      chip.dataset.tip = BOT_LEVELS[view.botLevel].blurb;
+      who.append(chip);
     }
-    card.append(head);
-    const bar = el('div', 'tb-seat-stats');
-    bar.append(el('span', 'tb-stat medals', `★ ${p.medals}/${view.terrain.target}`));
-    bar.append(el('span', 'tb-stat', `🂠 ${p.rackCount}`));
-    bar.append(el('span', 'tb-stat dim', `${p.reserveCount} in reserve`));
-    if (p.frozen) bar.append(el('span', 'tb-stat pin', '📌 pinned'));
-    card.append(bar);
-    host.append(card);
+    if (p.bot && p.seat !== view.you && session && session.isHost && !session.observer) {
+      const shown = cfg.on('revealBots');
+      const eye = el('button', `tb-eye${shown ? ' on' : ''}`, shown ? '🙈' : '👁');
+      eye.type = 'button';
+      eye.setAttribute('aria-pressed', String(shown));
+      eye.setAttribute('aria-label', shown ? `Hide ${p.name}’s hand` : `Show ${p.name}’s hand`);
+      eye.dataset.tip = shown ? `Hide ${p.name}’s hand again.` : `Show ${p.name}’s hand — for practice, to see what the bot holds and why it plays what it does.`;
+      eye.addEventListener('click', () => {
+        hideTip();
+        cfg.set('revealBots', !cfg.on('revealBots'));
+        session.pushViews();
+      });
+      who.append(eye);
+    }
+    row.append(who);
+    const num = (key, text, tip) => {
+      const n = el('div', `tb-score-num ${key}`, text);
+      n.dataset.tip = tip;
+      n.dataset.tipKey = `count:${p.seat}:${key}`;
+      return n;
+    };
+    row.append(num('medals', `★ ${p.medals}/${view.terrain.target}`,
+      `${whoHas(p)} ${p.medals} of the ${view.terrain.target} Medals it takes to win.`));
+    const hand = num('hand', String(p.rackCount),
+      `${whoHas(p)} ${p.rackCount} Troop${p.rackCount === 1 ? '' : 's'} in hand, on the rack and ready to place. A rack holds ${RACK_MAX} at most.`);
+    if (p.rackCount >= RACK_MAX) hand.classList.add('full');
+    row.append(hand);
+    row.append(num('reserve', String(p.reserveCount),
+      `${whoHas(p)} ${p.reserveCount} face-down Troop${p.reserveCount === 1 ? '' : 's'} left in reserve to draw from.`));
+    board.append(row);
+
+    if (p.frozen) {
+      board.append(el('div', 'tb-score-note', p.seat === view.you
+        ? '📌 A sniper has one of your Troops pinned until the end of your turn.'
+        : `📌 A sniper has one of ${p.name}’s Troops pinned until the end of their turn.`));
+    }
+
+    // For practice, the host can turn a bot's hand face up; it shows under
+    // the bot's row, and the eye beside its name flips it
+    if (p.peek) {
+      const line = el('div', 'tb-peek');
+      for (const t of p.peek) {
+        const chip = el('span', `tb-peek-chip ${side(p.seat)}${t.pinned ? ' pinned' : ''}`);
+        chip.append(el('b', '', strengthOf(t.key) === null ? '★' : String(strengthOf(t.key))), el('span', '', TROOPS[t.key].glyph));
+        chip.dataset.tipTroop = t.key;
+        chip.dataset.tipOwner = p.seat;
+        chip.dataset.tipKey = `peek:${t.id}`;
+        if (t.pinned) chip.dataset.tipWhy = 'Pinned by your sniper until the end of their turn.';
+        chip.tabIndex = 0;
+        line.append(chip);
+      }
+      if (!p.peek.length) line.append(el('span', 'tb-peek-empty', 'Nothing in hand.'));
+      board.append(line);
+    }
   }
+  host.append(board);
 }
 
 // ---------------------------------------------------------------- action bar
@@ -1481,7 +1769,11 @@ function renderActionBar(view) {
   if (p) {
     const power = POWERS[view.terrain.power];
     if (p.kind === 'capn') {
-      host.append(el('div', 'tb-prompt', 'Cap’n: place one extra Troop, or wave them off.'));
+      const held = choice.tile && view.rack.find((t) => t.id === choice.tile);
+      if (held) host.append(heldCard(held));
+      host.append(el('div', 'tb-prompt', held
+        ? `Cap’n’s extra Troop: pick a lit base for ${TROOPS[held.key].name}, or tap it again to put it back.`
+        : 'Cap’n: place one extra Troop, or wave them off.'));
       host.append(actBtn('No extra Troop', 'ghost', () => sendMove({ kind: 'skip' })));
     } else if (p.kind === 'jumbo') {
       host.append(el('div', 'tb-prompt', 'Jumbo: pick a neighbouring enemy Troop to shove into the discard.'));
@@ -1527,15 +1819,28 @@ function renderActionBar(view) {
     return;
   }
 
-  host.append(el('div', 'tb-prompt', choice.tile
-    ? `${troopLabel(view.rack.find((t) => t.id === choice.tile).key)} — pick a lit slot, or tap the Troop again to put it down.`
+  const held = choice.tile && view.rack.find((t) => t.id === choice.tile);
+  if (held) host.append(heldCard(held));
+  host.append(el('div', 'tb-prompt', held
+    ? `Pick a lit base for ${TROOPS[held.key].name}, or tap it again to put it back.`
     : 'Your move: draw two Troops, or place one from your rack.'));
   const draw = actBtn('Draw 2 Troops', 'primary', () => sendMove({ kind: 'draw' }));
   draw.disabled = !view.canDraw;
-  if (!view.canDraw) {
-    draw.title = me(view).reserveCount === 0 ? 'Your reserve is empty.' : `Your rack is full at ${RACK_MAX}.`;
-  }
   host.append(draw);
+  // a disabled button cannot explain itself on a phone, so the reason is written out
+  if (!view.canDraw) {
+    host.append(el('div', 'tb-prompt dim', me(view).reserveCount === 0
+      ? 'Your reserve is empty — all you can do is place.'
+      : `Your hand is full at ${RACK_MAX} — all you can do is place.`));
+  }
+}
+
+// The Troop in your hand, with what it will do, where a phone can read it —
+// there is no hovering on glass.
+function heldCard(t) {
+  const card = troopCard(t.key, lastView ? lastView.you : null);
+  card.classList.add('tb-held');
+  return card;
 }
 
 // ---------------------------------------------------------------- troop card reference
@@ -1730,8 +2035,12 @@ function renderGame(view, sess) {
   $('#room-chip').textContent = view.code || '·····';
   const tc = $('#terrain-chip');
   tc.textContent = view.terrain.name;
-  tc.title = `${POWERS[view.terrain.power].cry} ${POWERS[view.terrain.power].text}`;
-  $('#goal-chip').textContent = `★ ${view.terrain.target} to win`;
+  tc.dataset.tip = `${POWERS[view.terrain.power].cry} ${POWERS[view.terrain.power].text}`;
+  tc.dataset.tipKey = 'chip:terrain';
+  const gc = $('#goal-chip');
+  gc.textContent = `★ ${view.terrain.target} to win`;
+  gc.dataset.tip = `First to ${view.terrain.target} Medals wins — or march one Troop into the enemy H.Q. along a chain of your own.`;
+  gc.dataset.tipKey = 'chip:goal';
 
   renderSeats(view);
   renderBoard(view);
@@ -1739,6 +2048,7 @@ function renderGame(view, sess) {
   renderActionBar(view);
   renderLog(view);
   paintChatBubbles();
+  retip();
 
   if (view.fx && view.fx.seq !== lastFxSeq) {
     lastFxSeq = view.fx.seq;
@@ -1972,6 +2282,7 @@ function leave() {
 
 function init() {
   $('#name-input').value = localStorage.getItem('tb-name') || '';
+  initTips();
 
   const room = parseCode(new URLSearchParams(location.search).get('room') || '');
   if (room) {

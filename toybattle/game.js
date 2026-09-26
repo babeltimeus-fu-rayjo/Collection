@@ -33,8 +33,9 @@
 //              'only:4,5,6,7,joker' admits just those Troops — on a base or
 //              on an H.Q., since Tropical Pool prints its value triangles
 //              beside individual H.Q. and not across the whole board
-//            x and y are in whatever units suit the board; only their
-//            relative positions matter, and the renderer scales to fit.
+//            x and y are in whatever frame the board was copied in, which
+//            `frame: [w, h]` names; `card` says which way up the card lies.
+//            The parser turns them into millimetres on the real card.
 //   paths    'a-b b-c ...', one pair per path segment, in either order
 //   regions  [medals, 'a b c d'] — the bases that ring it, in any order
 //
@@ -143,6 +144,7 @@ const TERRAIN_DEFS = [
     // board, origin top-left. Its Medals objective is printed in the corner.
     key: 'castle', name: 'Castle Field', power: 'retreat', target: 7, source: 'board',
     tag: 'Stone keeps on a green field, a moat at each end and a river across the middle.',
+    frame: [100, 100], card: 'portrait',
     nodes: {
       R: [50, 4, 'hq1'],
       a: [16, 12],
@@ -194,6 +196,7 @@ const TERRAIN_DEFS = [
     // Troop.
     key: 'pool', name: 'Tropical Pool', power: 'buoy', target: 6, source: 'board',
     tag: 'Tyres and floats across a pool. The floats only take the Troops their triangle names.',
+    frame: [100, 100], card: 'portrait',
     nodes: {
       R1: [25, 12, 'hq1 only:6,7,joker'],
       a: [50, 14],
@@ -234,13 +237,14 @@ const TERRAIN_DEFS = [
     // Medals marked on it by the board's owner, 2026-09-25. A landscape board:
     // blue's H.Q. at the left end of the rainbow, red's at the right, and the
     // renderer turns it so each player still sees their own at the bottom.
-    // Laid out in a 150 x 100 frame to keep the board's proportions. Half-turn
-    // symmetric: a↔n b↔m c↔l d↔k e↔j f↔i g↔h B↔R. f, g, h and i are the four
-    // special bases on the rainbow, each with the draw icon. Nothing runs
-    // along the rainbow itself. The objective, 8, is read from the corner
-    // badge; the owner marked every Medal but l-m-h, which the pattern gives.
+    // Copied in a 150 x 100 frame. Half-turn symmetric: a↔n b↔m c↔l d↔k e↔j
+    // f↔i g↔h B↔R. f, g, h and i are the four special bases on the rainbow,
+    // each with the draw icon. Nothing runs along the rainbow itself. The
+    // objective, 8, is read from the corner badge; the owner marked every
+    // Medal but l-m-h, which the pattern gives.
     key: 'clouds', name: 'City of Clouds', power: 'splendor', target: 8, source: 'board',
     tag: 'Cloud-bridges looping over a rainbow. Every base on the rainbow hands you a Troop.',
+    frame: [150, 100], card: 'landscape',
     nodes: {
       a: [15, 10], b: [45, 10], c: [75, 10], d: [105, 10], e: [135, 10],
       B: [5, 50, 'hq0'],
@@ -259,13 +263,14 @@ const TERRAIN_DEFS = [
   {
     // Transcribed from a photograph of the printed board with its paths and
     // Medals marked by the board's owner, 2026-09-25. Blue's H.Q. is top-right
-    // and red's bottom-left — the reverse of Castle Field. Laid out in a
-    // 100 x 132 frame to keep the board's proportions. Half-turn symmetric
+    // and red's bottom-left — the reverse of Castle Field. Copied in a
+    // 100 x 132 frame. Half-turn symmetric
     // about the centre base g: a↔m b↔l c↔k d↔j e↔i f↔h B↔R. c and k are the
     // volcano platforms. The two triangles beside the H.Q. (b-B-e, i-l-R)
     // hold no Medals and are not listed.
     key: 'jungle', name: 'Volcanic Jungle', power: 'eruption', target: 7, source: 'board',
     tag: 'Two volcanoes and the jungle between them. Stand too close and you get thrown.',
+    frame: [100, 132], card: 'portrait',
     nodes: {
       a: [20, 10], b: [50, 10], B: [80, 10, 'hq0'],
       c: [16, 38, 'special'], d: [50, 38], e: [80, 38],
@@ -287,11 +292,12 @@ const TERRAIN_DEFS = [
     // Transcribed from a photograph of the printed board with its paths and
     // Medals marked by the board's owner, 2026-09-25. A landscape board: red's
     // H.Q. top-left, blue's bottom-right, the four pumpkins (the graves) near
-    // the corners. Laid out in a 150 x 100 frame. Half-turn symmetric about the
+    // the corners. Copied in a 150 x 100 frame. Half-turn symmetric about the
     // centre base h: a↔o b↔n c↔m d↔l e↔k f↔j g↔i R↔B. The two triangles beside
     // the H.Q. (R-g-j, f-i-B) hold no Medals and are not listed.
     key: 'cemetery', name: 'Cursed Cemetery', power: 'undead', target: 7, source: 'board',
     tag: 'Nothing here stays buried. Four pumpkin graves hand your losses back.',
+    frame: [150, 100], card: 'landscape',
     nodes: {
       R: [13, 17, 'hq1'], a: [39, 16, 'special'], b: [81, 16], c: [120, 18, 'special'],
       d: [60, 33], e: [101, 34], f: [138, 34],
@@ -312,9 +318,12 @@ const TERRAIN_DEFS = [
     // by the board's owner, 2026-09-25. Asymmetric by design, as the player
     // aid says: two blue H.Q. (the docks, top) and one red (the ship, bottom),
     // no special bases — but both badges print the same objective, 5, which
-    // the owner confirmed. b-k is the long bridge.
+    // the owner confirmed. b-k is the long bridge. Copied 100 wide; the frame
+    // runs to 142 because the ship sits as far off the bottom edge as the
+    // docks sit off the top — an inference, the photo's margins are cropped.
     key: 'caribbean', name: 'Caribbean Sea', power: 'quarter', target: 5, source: 'board',
     tag: 'Two blue docks against one red ship. The red ship has fewer ways in.',
+    frame: [100, 142], card: 'portrait',
     nodes: {
       B1: [19, 12, 'hq0'], a: [50, 12], B2: [78, 12, 'hq0'],
       b: [36, 33], c: [58, 42], d: [79, 42],
@@ -338,13 +347,14 @@ const TERRAIN_DEFS = [
   {
     // Transcribed from a photograph of the printed board with its paths marked
     // by the board's owner, 2026-09-25. Landscape: blue's H.Q. top-left, red's
-    // bottom-right, three shield plates (d, g, j) on the energy beam. Laid out
+    // bottom-right, three shield plates (d, g, j) on the energy beam. Copied
     // in a 150 x 100 frame. Half-turn symmetric: a↔m b↔l c↔k d↔j e↔i f↔h B↔R.
     // h-i was missed off the markings at first; its mirror e-f, the printed
     // track and the Medal spaces all said it was there, and the owner
     // confirmed it.
     key: 'metalx', name: 'Station Metal-X', power: 'shield', target: 7, source: 'board',
     tag: 'Shielded plates down the energy beam. Land on one and your Troop does nothing.',
+    frame: [150, 100], card: 'landscape',
     nodes: {
       B: [10, 12, 'hq0'], a: [45, 12], b: [105, 16], c: [140, 18],
       d: [75, 30, 'special'],
@@ -363,10 +373,11 @@ const TERRAIN_DEFS = [
     // Transcribed from a photograph of the printed board with its paths marked
     // by the board's owner, 2026-09-25. Landscape: blue's fortress at the left
     // end, red's at the right, the four tanks (c, g, h, l) as sniper nests.
-    // Laid out in a 150 x 100 frame. Half-turn symmetric: a↔n b↔m c↔l d↔k e↔j
+    // Copied in a 150 x 100 frame. Half-turn symmetric: a↔n b↔m c↔l d↔k e↔j
     // f↔i g↔h B↔R. Each fortress walls a five-base region worth three.
     key: 'battlefield', name: 'Battlefield', power: 'sniper', target: 8, source: 'board',
     tag: 'Two fortresses across the sand, and a tank on every crossing worth watching.',
+    frame: [150, 100], card: 'landscape',
     nodes: {
       a: [15, 22], b: [45, 24], c: [75, 16, 'special'], d: [105, 24], e: [135, 26],
       f: [75, 38],
@@ -419,12 +430,26 @@ function ringOrder(members, adj) {
   return attempt(true) || attempt(false);
 }
 
+// Every board is the same card, 40 x 24 cm, but each was copied off its
+// photograph in whatever frame suited it — Castle Field and Tropical Pool as
+// percentages of the card, the landscape boards in a 150 x 100 frame. None of
+// those frames has the card's proportions (percentages squash a portrait card
+// to three fifths of its height), so the parser puts every board into
+// millimetres on the real card before anything measures a distance on it.
+const CARD = { portrait: [240, 400], landscape: [400, 240] };
+
 function parseTerrain(def) {
   const nodes = [];
   const idOf = new Map();
+  const card = CARD[def.card];
+  const [fw, fh] = Array.isArray(def.frame) ? def.frame : [];
+  if (!card || !(fw > 0) || !(fh > 0)) throw new Error(`${def.key}: name the frame the board was copied in, and which way up the card lies`);
   for (const [label, spec] of Object.entries(def.nodes)) {
-    const [x, y, tagText = ''] = spec;
+    const [fx, fy, tagText = ''] = spec;
     if (idOf.has(label)) throw new Error(`${def.key}: two nodes called ${label}`);
+    if (!(fx >= 0 && fx <= fw && fy >= 0 && fy <= fh)) throw new Error(`${def.key}: node ${label} is off the card`);
+    const x = Math.round((fx * card[0]) / fw * 10) / 10;
+    const y = Math.round((fy * card[1]) / fh * 10) / 10;
     idOf.set(label, nodes.length);
     const tags = tagText.split(/\s+/).filter(Boolean);
     for (const t of tags) {
@@ -515,8 +540,8 @@ function parseTerrain(def) {
     source: def.source,
     nodes, regions, adj,
     x0: Math.min(...xs), y0: Math.min(...ys),
-    w: Math.max(...xs) - Math.min(...xs),
-    h: Math.max(...ys) - Math.min(...ys),
+    w: Math.round((Math.max(...xs) - Math.min(...xs)) * 10) / 10,
+    h: Math.round((Math.max(...ys) - Math.min(...ys)) * 10) / 10,
     edges: [...edges].map((e) => e.split('|').map(Number)),
   };
 }
@@ -1051,11 +1076,10 @@ const WIN = 1e7;
 // budget is set to zero.
 
 // Distances only mean something relative to how far apart neighbouring bases
-// are. The transcribed boards are written in percentages of the printed board
-// and the invented ones in lattice cells, so a raw distance term was twenty
-// times stronger on one than the other. Measure in path-lengths instead: the
-// median distance between joined nodes on that board. The Terrain never
-// changes shape, so the step is cached per board.
+// are, and that differs from board to board — City of Clouds spreads fourteen
+// bases over the card that Cursed Cemetery packs seventeen onto. Measure in
+// path-lengths instead: the median distance between joined nodes on that
+// board. The Terrain never changes shape, so the step is cached per board.
 const stepCache = new WeakMap();
 function boardStep(G) {
   let step = stepCache.get(G.terrain.nodes);
@@ -1564,7 +1588,7 @@ function orderIndices(G, seat, moves) {
 // The opponent's rack is theirs: a viewer learns how many Troops are on it and
 // nothing else. Stacks are public in the real game — "You may look at the tile
 // stacks on the Terrain" — so they go out whole.
-export function viewFor(G, seat, code) {
+export function viewFor(G, seat, code, opts = {}) {
   const me = bySeat(G, seat);
   return {
     code,
@@ -1593,6 +1617,13 @@ export function viewFor(G, seat, code) {
       reserveCount: p.reserve.length,
       frozen: p.seat === seat ? p.frozen : !!p.frozen,
       lastAction: p.lastAction,
+      // For practice, the host may turn a bot's rack face up. Only the host
+      // builds views, so it is the host's call for the whole table and off
+      // unless they ask. It is only ever a real bot's rack: a player who
+      // dropped out and has a bot covering for them keeps theirs hidden.
+      peek: opts.revealBots && p.bot && p.seat !== seat
+        ? p.rack.map((t) => ({ id: t.id, key: t.key, pinned: t.id === p.frozen }))
+        : null,
     })),
     rack: me ? me.rack.map((t) => ({ id: t.id, key: t.key })) : [],
     canDraw: me ? canDraw(me) : false,
