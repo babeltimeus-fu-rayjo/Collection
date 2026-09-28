@@ -92,6 +92,13 @@
     .art.skull { background: linear-gradient(150deg, #1b2a47, #0d1526); }
     .art.harmonies { background: linear-gradient(150deg, #1b3a2a, #0c1d14); }
     .art.mahjong { background: linear-gradient(150deg, #0d3320, #061a10); }
+    .art.chg { background: linear-gradient(150deg, #173a5e, #081424); }
+    .art.chg .cards { display: flex; gap: 6px; align-items: flex-end; position: relative; margin-top: 18px; }
+    .art.chg .cards i { display: block; width: 34px; height: 48px; border-radius: 5px; background: #fbf7ea; border: 3px solid; box-shadow: 0 3px 8px rgba(0, 0, 0, .4); }
+    .art.chg .cards i:nth-child(1) { border-color: #3b82c4; transform: rotate(-9deg); }
+    .art.chg .cards i:nth-child(2) { border-color: #f2b52c; height: 56px; }
+    .art.chg .cards i:nth-child(3) { border-color: #19a3a3; transform: rotate(9deg); }
+    .art.chg .cards::after { content: '⚑'; position: absolute; top: -30px; left: 50%; transform: translateX(-50%); color: #ffc233; font-size: 30px; text-shadow: 0 2px 6px rgba(0, 0, 0, .5); }
     .art.toy { background: linear-gradient(150deg, #2a3a1c, #121a09); }
     .art.toy .field { display: grid; grid-template-columns: repeat(3, 34px); grid-template-rows: repeat(3, 34px); gap: 12px; position: relative; }
     .art.toy .field i { display: block; border-radius: 6px; background: #cdc3a5; }
@@ -381,6 +388,21 @@
   <p class="sub">Games that run entirely in your browser. Share a room code to play with friends peer-to-peer — most games can fill empty seats with bots. No accounts, no downloads, no server.</p>
 
   <main class="shelf">
+    <a class="game" href="./challengers/">
+      <div class="art chg">
+        <span class="cards"><i></i><i></i><i></i></span>
+      </div>
+      <div class="body">
+        <div class="title-row">
+          <span class="name">Challengers!</span>
+          <span class="players">2–8 players</span>
+        </div>
+        <p class="blurb">Draft a team of misfits — a Knight, a Rubber Duck, a Yeti — then let your deck fight for the flag all by itself. Seven rounds, someone new each time, and a final. Beach Cup included.</p>
+        <div class="tags"><span class="tag">deck building</span><span class="tag">tournament</span><span class="tag">bots</span><span class="tag">~45 min</span></div>
+        <span class="play">Play Challengers! →</span>
+      </div>
+    </a>
+
     <a class="game" href="./toybattle/">
       <div class="art toy">
         <span class="field"><i class="b"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="r"></i></span>

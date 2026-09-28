@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Challengers! — a capture-the-flag tournament</title>
+  <meta name="description" content="Play Challengers! and Challengers! Beach Cup online: draft a team of unlikely characters, then send them into auto-battles for the flag, seven rounds and a final. Up to eight players, peer-to-peer, with bots.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='6' y='6' width='88' height='88' rx='20' fill='%23173a5e'/%3E%3Crect x='28' y='18' width='7' height='66' rx='3' fill='%23f7f1dc'/%3E%3Cpath d='M35 20 L78 32 L35 46 Z' fill='%23ffc233'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body>
+
+  <!-- HOME -->
+  <section id="screen-home" class="screen">
+    <a class="back-home" href="../">← Collection</a>
+    <h1 class="logo">CHALLENGERS<span class="bang">!</span></h1>
+    <p class="tagline">A tournament of the world's strangest capture-the-flag teams. Each round you draft new members — a Knight, a Rubber Duck, a Necromancer, a Yeti — and then your deck plays a match against someone new all by itself: cards turn over until one of them takes the flag, and whoever runs out of cards or bench seats first loses. Seven rounds, the two teams with the most fans play the final. Up to eight players, peer-to-peer: no accounts, no server, just a room code. Bots fill any empty seat.</p>
+    <input id="name-input" class="field" maxlength="16" placeholder="Your name" autocomplete="nickname">
+    <button id="btn-create" class="btn primary">Create a room</button>
+    <div class="divider">or join one</div>
+    <div class="join-row">
+      <input id="code-input" class="field" maxlength="40" placeholder="CODE" autocapitalize="characters" autocomplete="off" spellcheck="false">
+      <button id="btn-join" class="btn secondary">Join</button>
+    </div>
+    <div id="home-status" role="status"></div>
+    <button class="btn ghost btn-rules" type="button">How to play</button>
+    <p class="small-print">An unofficial fan implementation of <b>Challengers!</b> and <b>Challengers! Beach Cup</b> by Johannes Krenner and Markus Slawitscheck (© 1 More Time Games, Z-Man Games, Pretzel Games). The rules follow the publishers' rulebooks, and <b>every character is read off pictures of the printed cards</b>. Multiplayer runs over WebRTC: browsers find each other with Google STUN servers and a free signaling broker, then talk directly. The tournament lives in the host's tab — keep it open!</p>
+  </section>
+
+  <!-- LOBBY -->
+  <section id="screen-lobby" class="screen hidden">
+    <div class="lobby-panel">
+      <div class="lobby-label">Room code</div>
+      <div id="lobby-code">·····</div>
+      <div class="copy-row">
+        <button id="btn-copy-code" class="btn ghost" type="button">Copy code</button>
+        <button id="btn-copy-link" class="btn ghost" type="button">Copy invite link</button>
+      </div>
+      <ul id="lobby-players"></ul>
+      <div class="lobby-label">Box</div>
+      <div id="box-picker" class="pick-row"></div>
+      <div class="lobby-label">Sets <span id="set-count" class="dim"></span></div>
+      <div id="set-picker"></div>
+      <div id="set-blurb"></div>
+      <div class="lobby-label">Bot skill</div>
+      <div id="bot-picker" class="pick-row"></div>
+      <div id="bot-blurb"></div>
+      <div id="lobby-hint"></div>
+      <button id="btn-add-bot" class="btn secondary hidden" type="button">🤖 Add a bot</button>
+      <button id="btn-start" class="btn primary hidden" type="button">Start the tournament</button>
+      <div class="copy-row">
+        <button class="btn ghost btn-rules" type="button">How to play</button>
+        <button class="btn ghost btn-leave" type="button">Leave</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- GAME -->
+  <section id="screen-game" class="screen hidden">
+    <div class="topbar">
+      <span id="room-chip">·····</span>
+      <span id="round-chip"></span>
+      <span id="phase-chip"></span>
+      <span class="spacer"></span>
+      <button id="btn-cards" class="btn ghost" type="button">🃏 Cards</button>
+      <button class="btn ghost btn-rules" type="button">Rules</button>
+      <button class="btn ghost btn-leave" type="button">Leave</button>
+    </div>
+    <div id="table">
+      <div id="stage"></div>
+      <aside id="side">
+        <div id="standings"></div>
+        <div id="others"></div>
+        <div id="feed"></div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- RULES -->
+  <div id="modal-rules" class="modal hidden">
+    <div class="panel wide">
+      <h2>How to play Challengers!</h2>
+      <ol class="rules">
+        <li><b>Seven rounds.</b> Each round has a <b>Deck Phase</b>, which everyone plays at their own pace, and then a <b>Match Phase</b>, where you play one match against the opponent the tournament gives you. After round seven the two players with the most fans play the <b>final</b>; whoever wins it wins Challengers!</li>
+        <li><b>Deck Phase.</b> Draw 5 cards from the Level pile the round offers (A, B or C — some rounds let you choose), keep as many as the round says, and put the rest back. Once per Deck Phase you may throw back what you drew and draw that many again — before or after your first pick. Then cut any cards you like from your deck: there is no size limit either way.</li>
+        <li><b>A match plays itself.</b> Both decks are shuffled and neither may be looked at. One player turns over their top card: it takes the flag. The other attacks — turning over cards one at a time until the total power of the cards turned over <i>equals or beats</i> the power of the card with the flag. Their last card takes the flag, the others slide underneath it, and the card that lost the flag goes to its owner's <b>bench</b> with everything under it. Now the other player attacks.</li>
+        <li><b>The bench has six seats.</b> Cards with the same name share a seat. You lose the match if you must put a card on your bench and there is no seat for it — or if you are attacking and have no cards left. The winner takes the round's Trophy, whose fans are hidden on its back and grow round by round.</li>
+        <li><b>Effects.</b> A card without a keyword acts the moment it is turned over, and a power bonus it gets that way stays with it. <b>During the attack</b> lasts only for the attack that turned it over. <b>From the bench</b> works while it sits on your bench. <b>In flag possession</b> works while the flag sits on it. <b>Flag loss</b> happens as the flag is taken from it, before anything the winning card does. <b>When picked</b> happens once, as you draft it. Some cards take fans, which count at the end with your Trophies.</li>
+        <li><b>Beach Cup</b> adds the <b>Rainbow</b> set, whose cards carry every set icon; <b>No flag win</b>, which happens when turning a card over does not take the flag; <b>Special</b> cards that bend a rule as they say; three picks in round one; and two rounds where taking the smaller option pays 2 fans. Either box's sets can be mixed: pick a basic set and any five of the twelve.</li>
+        <li><b>Two players</b> play no final: the most fans after seven rounds wins, and a lead of <b>11 fans</b> at the end of any match wins at once. Trophies are face up at two.</li>
+        <li><b>To read a card</b>, point at it or tap it. The <b>🃏 Cards</b> button lists every card in play, set by set, with its exact wording.</li>
+      </ol>
+      <p class="credit"><b>Challengers!</b> (2022) and <b>Challengers! Beach Cup</b> (2023) are by Johannes Krenner and Markus Slawitscheck, published by 1 More Time Games with Z-Man Games and Pretzel Games. This is an unofficial fan implementation. The rules follow the publishers' rulebooks. <b>Every character is read off pictures of the printed cards</b> — name, set, level, power, text and copy count — and each additional set adds up to the 40 cards the rulebook says it holds. The draft each round is read off the printed Tournament Plans, and the Trophy fans are Board Game Arena's. Not in yet: the Robot that fills an odd table, and Beach Cup's Trainers. The City set's split of Talents, Dogs and Champions and the Beach Cup starter decks are provisional until checked against the cards.</p>
+      <button id="btn-rules-close" class="btn secondary" type="button">Got it</button>
+    </div>
+  </div>
+
+  <!-- GAME OVER -->
+  <div id="gameover" class="modal hidden">
+    <div class="panel">
+      <h2 id="go-title">Tournament over</h2>
+      <div id="go-sub"></div>
+      <ol id="go-rank"></ol>
+      <div class="btn-row">
+        <button id="btn-again" class="btn primary hidden" type="button">Another tournament</button>
+        <button id="btn-golobby" class="btn secondary hidden" type="button">Back to lobby</button>
+      </div>
+      <div id="go-wait">Waiting for the host…</div>
+      <div class="btn-row">
+        <button class="btn ghost btn-leave" type="button">Leave game</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CARD REFERENCE -->
+  <div id="modal-cards" class="modal hidden">
+    <div class="panel wide">
+      <h2>The cards in play</h2>
+      <div id="card-ref"></div>
+      <button id="btn-cards-close" class="btn secondary" type="button">Back to the tournament</button>
+    </div>
+  </div>
+
+  <!-- CHAT -->
+  <div id="chat" class="hidden">
+    <div id="chat-panel" class="hidden">
+      <div class="chat-head">Locker room</div>
+      <div id="chat-msgs"></div>
+      <form id="chat-form">
+        <input id="chat-input" maxlength="200" placeholder="Say something…" autocomplete="off">
+        <button type="submit" class="chat-send" aria-label="Send">➤</button>
+      </form>
+    </div>
+    <button id="chat-peek" type="button" class="hidden"></button>
+    <button id="chat-toggle" type="button" aria-label="Toggle chat">💬<span id="chat-unread" class="hidden"></span></button>
+  </div>
+
+  <div id="toasts" aria-live="polite"></div>
+  <div id="banner" class="flash hidden"></div>
+  <div id="confetti"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
