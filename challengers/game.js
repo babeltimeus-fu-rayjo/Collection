@@ -81,12 +81,13 @@ export function checkOpts(opts) {
   return null;
 }
 
-// The Robot, who stands in for the missing player at an odd table, is not in
-// the game yet — so the table has to be even.
+// Every round pairs the whole table off. The Robot, who stands in for the
+// missing player at an odd table, is not in the game yet — so the table has
+// to be even, and a bot, who plays and scores like anyone, evens it.
 export function canStart(n, opts) {
   if (n < MIN_PLAYERS) return `Needs at least ${MIN_PLAYERS} players.`;
   if (n > MAX_PLAYERS) return `At most ${MAX_PLAYERS} players.`;
-  if (n % 2) return 'Needs an even number of players — add a bot. (The Robot that fills an odd table is not in yet.)';
+  if (n % 2) return 'Every round pairs the table off, so it needs an even number of players: add one more bot.';
   return checkOpts(opts);
 }
 

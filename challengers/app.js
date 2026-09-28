@@ -1195,8 +1195,9 @@ function renderLobby(lob, sess) {
     $('#btn-start').disabled = !!why;
     $('#btn-add-bot').disabled = n >= lob.max;
   }
+  const bots = lob.players.filter((p) => p.bot).length;
   $('#lobby-hint').textContent = sess.isHost
-    ? why || `${n} players, ${ROUNDS} rounds${n > 2 ? ' and a final' : ''}. Ready when you are.`
+    ? why || `${n} players${bots ? `, ${bots} of them bot${bots === 1 ? '' : 's'}` : ''}, ${ROUNDS} rounds${n > 2 ? ' and a final' : ''}. Ready when you are.`
     : 'Waiting for the host to start…';
   paintChatBubbles();
 }

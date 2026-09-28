@@ -1059,6 +1059,7 @@ a {
   justify-content: center;
 }
 
+#bot-note,
 #bot-blurb,
 #set-blurb {
   font-size: 12.5px;
