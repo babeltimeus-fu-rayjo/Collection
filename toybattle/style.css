@@ -39,13 +39,25 @@ body {
 body {
   font-family: 'Avenir Next', Avenir, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   color: var(--ink);
+  background: var(--bg-2);
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The backdrop is pinned to the screen. Painted on the body it would be one
+   screen tall and start over below that, and the lobby and the table on a
+   phone are longer than a screen. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   background:
     radial-gradient(1100px 700px at 50% -10%, rgba(224, 182, 74, 0.09), transparent 60%),
     radial-gradient(900px 600px at 12% 108%, rgba(63, 116, 192, 0.09), transparent 55%),
     radial-gradient(900px 600px at 88% 108%, rgba(194, 69, 47, 0.09), transparent 55%),
     linear-gradient(180deg, var(--bg-1), var(--bg-2));
-  min-height: 100dvh;
-  -webkit-font-smoothing: antialiased;
 }
 
 button {
