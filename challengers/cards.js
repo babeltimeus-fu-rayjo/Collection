@@ -27,6 +27,11 @@
 //                  the fans an option pays.
 //   trophies       Board Game Arena's rules page for the game, which lists the
 //                  fans on the back of the four Trophies of each round.
+//   the Robot      its start cards, the whole deck at difficulty level 1, read
+//                  off two review photographs of the cards: GeekDad's
+//                  ("Challengers-robot.jpg", the English edition, all nineteen
+//                  Robot cards) and Teilzeithelden's ("Das Deck des Bot-Teams",
+//                  the German edition, the start cards' text boxes in full).
 //
 // NOT sourced yet, and marked where it is used:
 //   - the City set's split of its 20 cards. Reporter, Mascot and Fan-Bus print
@@ -36,7 +41,11 @@
 //   - the Beach Cup starter decks. The Beach Cup rulebook shows a City-blue
 //     Newcomer of power 1 and a Dog that looks at the top card of your deck;
 //     the rest of the deck is assumed to follow the first box (PROVISIONAL).
-//   - the Robot's cards and the sixteen Trainers — not in the game yet.
+//   - Alpha's text box, covered in both photographs. Beta, Good Bot and
+//     C.H.A.M.P. print none, and Alpha is taken to print none either.
+//   - the Robot's eight R cards (difficulty levels 2-5) and three SOLO cards,
+//     only partly legible in the photograph, and the sixteen Trainers — not in
+//     the game yet.
 //
 // Card text keeps the printed wording. {city} and friends stand for the set
 // icons the cards print inline; the page draws them.
@@ -50,6 +59,8 @@ export const SETS = {
   haunted:    { name: 'Haunted House',   box: 'base',  color: '#ec8a2f', ink: '#fff',    icon: '🦇' },
   space:      { name: 'Outer Space',     box: 'base',  color: '#df3f3a', ink: '#fff',    icon: '🪐' },
   shipwreck:  { name: 'Shipwreck',       box: 'base',  color: '#8c3b95', ink: '#fff',    icon: '⚓' },
+  // the Robot's own set: its deck at an odd table and in the solo game, never drafted
+  robot:      { name: 'Robot',           box: 'base',  robot: true, color: '#8f949b', ink: '#fff', icon: '🤖' },
   // Challengers! Beach Cup (2023)
   rainbow:    { name: 'Rainbow',         box: 'beach', basic: true, color: 'rainbow', ink: '#fff', icon: '🌈', allIcons: true },
   secret:     { name: 'Secret Base',     box: 'beach', color: '#e5489a', ink: '#fff',    icon: '🔐' },
@@ -85,6 +96,15 @@ export const CARDS = [
   // Beach Cup's starter Dog, a City card like the rest of the starter deck
   // (the box also carries eight of them to swap into the first box's decks)
   K('dog-look', 'Dog', 'city', 'S', 3, 0, 'now', 'Look at the top card of your deck. Put it on top of or under your deck.'),
+
+  // ---------------------------------------------------------------- the Robot's start cards (S)
+  // Robot versions of the four starter characters, and four Cyborgs whose
+  // power is the round being played ("?" in both corners).
+  { ...K('alpha', 'Alpha', 'robot', 'S', 1, 0, null, ''), note: 'Its text box is covered in both photographs of the card; like Beta, Good Bot and C.H.A.M.P. it is taken to print none.' },
+  K('beta', 'Beta', 'robot', 'S', 2, 0, null, ''),
+  K('good-bot', 'Good Bot', 'robot', 'S', 3, 0, null, ''),
+  K('champ', 'C.H.A.M.P.', 'robot', 'S', 4, 0, null, ''),
+  { ...K('cyborg', 'Cyborg', 'robot', 'S', 0, 0, null, 'This card’s base power is equal to the current round.'), roundPower: true },
 
   // ---------------------------------------------------------------- City (basic set, first box)
   K('reporter', 'Reporter', 'city', 'A', 2, 4, 'now', 'Look at the top two cards of your deck. Put one under your deck and the other on top.'),
@@ -267,6 +287,9 @@ export const STARTER = {
   base: ['newcomer', 'newcomer', 'newcomer', 'talent-s', 'dog-s', 'champion-s'],
   beach: ['newcomer', 'newcomer', 'newcomer', 'talent-s', 'dog-look', 'champion-s'],
 };
+
+// "For Level 1 the Robot's Deck only consists of the Robot start cards (S)."
+export const ROBOT_DECK = ['alpha', 'beta', 'good-bot', 'champ', 'cyborg', 'cyborg', 'cyborg', 'cyborg'];
 
 // What each round of the Deck Phase offers, top line of the Tournament Plan to
 // the bottom. Each option is a Level pile, how many of the five cards drawn

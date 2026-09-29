@@ -21,6 +21,8 @@ import {
   BOXES,
   CARD,
   CARDS,
+  ROBOT,
+  ROBOT_DECK,
   BOT_LEVELS,
   DEFAULT_LEVEL,
   defaultOpts,
@@ -1133,6 +1135,11 @@ function renderLobby(lob, sess) {
         kick.addEventListener('click', () => sess.removeBot(p.seat));
         row.append(kick);
       }
+    } else if (i === lob.players.length && lob.players.length % 2) {
+      // an odd table, or one player alone: the Robot takes the spare seat
+      row.className = 'seat-row robot';
+      row.append(avatarEl(ROBOT, i, true), el('span', 'seat-name', ROBOT), el('span', 'chip bot', 'level 1'));
+      row.dataset.tip = lob.players.length === 1 ? ROBOT_SOLO_TIP : ROBOT_TIP;
     } else {
       row.append(el('div', 'av empty', '·'), el('span', 'seat-name dim', 'Empty seat'));
     }
@@ -1196,9 +1203,10 @@ function renderLobby(lob, sess) {
     $('#btn-add-bot').disabled = n >= lob.max;
   }
   const bots = lob.players.filter((p) => p.bot).length;
-  $('#lobby-hint').textContent = sess.isHost
-    ? why || `${n} players${bots ? `, ${bots} of them bot${bots === 1 ? '' : 's'}` : ''}, ${ROUNDS} rounds${n > 2 ? ' and a final' : ''}. Ready when you are.`
-    : 'Waiting for the host to start…';
+  const ready = n === 1
+    ? `Just you: a solo game against the Robot, ${ROUNDS} rounds by the two-player rules. Or add bots, or share the code.`
+    : `${n} players${bots ? ` (${bots} bot${bots === 1 ? '' : 's'})` : ''}${n % 2 ? ' and the Robot' : ''}, ${ROUNDS} rounds${n > 2 ? ' and a final' : ''}. Ready when you are.`;
+  $('#lobby-hint').textContent = sess.isHost ? why || ready : 'Waiting for the host to start…';
   paintChatBubbles();
 }
 
@@ -1238,7 +1246,14 @@ function cardText(c) {
   return box;
 }
 
-const copiesWord = (c) => (c.level === 'S' ? 'starter card' : c.copies < 4 ? `Rare ${c.copies}×` : c.copies > 4 ? `Common ${c.copies}×` : '4 copies');
+const copiesWord = (c) => (c.level === 'S' ? (c.set === 'robot' ? 'start card' : 'starter card') : c.copies < 4 ? `Rare ${c.copies}×` : c.copies > 4 ? `Common ${c.copies}×` : '4 copies');
+
+// The Robot, as the table explains it. Alone you play it by the two-player
+// rules and it counts; at an odd table it only stands in.
+const soloView = (view) => view.players.length === 2 && view.players.some((p) => p.robot);
+const ROBOT_TIP = 'The Robot takes the spare seat at an odd table. It does nothing in the Deck Phase and plays its own eight cards — Alpha, Beta, Good Bot, C.H.A.M.P. and four Cyborgs, whose base power is the round. When it wins, the round’s Trophy goes back in the box; it is never ranked or in the final.';
+const ROBOT_SOLO_TIP = 'The Robot: its own eight cards — Alpha, Beta, Good Bot, C.H.A.M.P. and four Cyborgs, whose base power is the round. Alone against it you play by the two-player rules, and it keeps the Trophies it wins: it can win, too.';
+const robotTip = (view) => (soloView(view) ? ROBOT_SOLO_TIP : ROBOT_TIP);
 
 // A card as the table shows it. `power` is its power where it stands now,
 // when that differs from what it prints.
@@ -1247,9 +1262,9 @@ function cardEl(key, o = {}) {
   const set = SETS[c.set];
   const n = el(o.button ? 'button' : 'div', `ch-card set-${c.set}${o.size ? ' ' + o.size : ''}${o.cls ? ' ' + o.cls : ''}`);
   if (o.button) n.type = 'button';
-  const pow = o.power ?? c.power;
+  const pow = o.power ?? (c.roundPower ? '?' : c.power);
   const top = el('div', 'ch-card-top');
-  const pw = el('span', `ch-pow${pow > c.power ? ' up' : pow < c.power ? ' down' : ''}`, String(pow));
+  const pw = el('span', `ch-pow${c.roundPower ? '' : pow > c.power ? ' up' : pow < c.power ? ' down' : ''}`, String(pow));
   top.append(pw, el('span', `ch-name${/\S{11}/.test(c.name) ? ' long' : ''}`, c.name), el('span', 'ch-ic', set.icon));
   n.append(top);
   if (o.size === 'big' && (c.text || c.kw)) n.append(cardText(c));
@@ -1258,7 +1273,8 @@ function cardEl(key, o = {}) {
   n.append(el('span', 'ch-lvl', c.level));
   n.dataset.tipCard = key;
   if (o.id !== undefined) n.dataset.tipKey = `card:${o.id}`;
-  if (o.power !== undefined && o.power !== c.power) n.dataset.tipWhy = `Power ${o.power} here: ${c.power} printed, ${o.power > c.power ? '+' : ''}${o.power - c.power} from effects.`;
+  if (o.power !== undefined && c.roundPower) n.dataset.tipWhy = `Power ${o.power} here: a Cyborg’s base power is the round being played.`;
+  else if (o.power !== undefined && o.power !== c.power) n.dataset.tipWhy = `Power ${o.power} here: ${c.power} printed, ${o.power > c.power ? '+' : ''}${o.power - c.power} from effects.`;
   return n;
 }
 
@@ -1487,6 +1503,7 @@ function sideEl(view, M, seat, pos) {
   const head = el('div', 'ch-side-head');
   const p = view.players.find((q) => q.seat === seat);
   head.append(avatarEl(p.name, p.seat, p.bot), el('b', 'ch-side-name', p.name + (seat === view.you ? ' (you)' : '')));
+  if (p.robot) head.dataset.tip = robotTip(view);
   const deck = el('span', 'ch-chip', `🂠 ${S.deck}`);
   deck.dataset.tip = `${S.deck} card${S.deck === 1 ? '' : 's'} left to turn over. An attacker who runs out loses.`;
   const ex = el('span', 'ch-chip', `♻ ${S.exhaust.length}`);
@@ -1605,15 +1622,18 @@ function renderStandings(view) {
   const host = $('#standings');
   host.replaceChildren();
   const two = view.players.length === 2;
-  const rows = view.players.slice().sort((a, b) => (b.total ?? b.fans) - (a.total ?? a.fans) || b.trophies.length - a.trophies.length);
+  const solo = soloView(view);
+  const standsIn = (p) => p.robot && !solo;
+  const rows = view.players.slice().sort((a, b) => standsIn(a) - standsIn(b) || (b.total ?? b.fans) - (a.total ?? a.fans) || b.trophies.length - a.trophies.length);
   const list = el('ol', 'ch-standings');
   for (const p of rows) {
-    const row = el('li', `ch-st${p.seat === view.you ? ' you' : ''}`);
+    const row = el('li', `ch-st${p.seat === view.you ? ' you' : ''}${standsIn(p) ? ' robot' : ''}`);
+    if (p.robot) row.dataset.tip = robotTip(view);
     row.append(avatarEl(p.name, p.seat, p.bot));
     const name = el('div', 'ch-st-name');
     name.append(el('b', '', p.name + (p.connected || p.bot ? '' : ' (away)')));
     let status = '';
-    if (view.phase === 'deck' || view.phase === 'final-deck') status = p.ready ? 'ready' : 'drafting…';
+    if (view.phase === 'deck' || view.phase === 'final-deck') status = p.robot ? 'does not draft' : p.ready ? 'ready' : 'drafting…';
     else if (view.phase === 'match') {
       const M = view.matches.find((x) => x.seats.includes(p.seat));
       if (M) status = M.over ? (M.winner === p.seat ? 'won' : 'lost') : M.pending && M.pending.seat === p.seat ? 'deciding…' : `vs ${seatName(view, M.seats.find((s) => s !== p.seat))}`;
@@ -1629,10 +1649,12 @@ function renderStandings(view) {
     tro.dataset.tip = p.trophies.length ? `Trophies from round${p.trophies.length > 1 ? 's' : ''} ${p.trophies.map((t) => t.round).join(', ')}${p.trophies[0].fans !== undefined ? ` — worth ${p.trophies.map((t) => t.fans).join(', ')}` : ''}.` : 'No Trophies yet.';
     const deck = el('span', 'ch-st-deck', `🂠 ${p.deckSize}`);
     deck.dataset.tip = `${p.deckSize} cards in ${p.seat === view.you ? 'your' : 'their'} deck.`;
-    row.append(fans, tro, deck);
+    if (standsIn(p)) row.append(el('span', 'ch-st-nr', 'not ranked'), deck);
+    else row.append(fans, tro, deck);
     list.append(row);
   }
-  host.append(el('div', 'ch-side-title', two ? 'Two players: first to a lead of 11 fans, or the most after round 7' : 'Standings — the top two after round 7 play the final'));
+  host.append(el('div', 'ch-side-title', solo ? 'Solo against the Robot: first to a lead of 11 fans, or the most after round 7'
+    : two ? 'Two players: first to a lead of 11 fans, or the most after round 7' : 'Standings — the top two after round 7 play the final'));
   host.append(list);
   if (view.revealBots) {
     for (const b of view.revealBots) {
@@ -1686,9 +1708,18 @@ function renderCardRef(view) {
   starter.append(el('h3', '', `${SETS.city.icon} Starter decks — six cards each`));
   if (opts.box === 'beach') starter.append(el('p', 'dim', 'Beach Cup’s starter deck is read off its rulebook as far as the Newcomer and the new Dog; the Talent and Champion are assumed from the first box until checked.'));
   const sgrid = el('div', 'ch-ref-grid');
-  for (const k of [...new Set(CARDS.filter((c) => c.level === 'S' && (opts.box === 'beach' ? c.key !== 'dog-s' : c.key !== 'dog-look')).map((c) => c.key))]) sgrid.append(refRow(CARD[k]));
+  for (const k of [...new Set(CARDS.filter((c) => c.level === 'S' && c.set !== 'robot' && (opts.box === 'beach' ? c.key !== 'dog-s' : c.key !== 'dog-look')).map((c) => c.key))]) sgrid.append(refRow(CARD[k]));
   starter.append(sgrid);
   host.append(starter);
+  if (view && view.players.some((p) => p.robot)) {
+    const robot = el('section', 'ch-ref-set');
+    robot.append(el('h3', '', `${SETS.robot.icon} The Robot — its deck at level 1, eight cards`));
+    robot.append(el('p', 'dim', 'Read off two review photographs of the cards. Its harder levels swap in R cards, and the solo challenge SOLO cards; those are not in yet.'));
+    const rgrid = el('div', 'ch-ref-grid');
+    for (const k of [...new Set(ROBOT_DECK)]) rgrid.append(refRow(CARD[k], ROBOT_DECK.filter((x) => x === k).length));
+    robot.append(rgrid);
+    host.append(robot);
+  }
   for (const set of sets) {
     const cards = CARDS.filter((c) => c.set === set && c.level !== 'S');
     if (!cards.length) continue;
@@ -1701,12 +1732,13 @@ function renderCardRef(view) {
   }
 }
 
-function refRow(c) {
+function refRow(c, count = 0) {
   const row = el('div', 'ch-ref-row');
   row.append(cardEl(c.key, { size: 'mid' }));
   const body = el('div', 'ch-ref-body');
-  body.append(el('b', '', c.name), el('span', 'dim', ` · Level ${c.level} · power ${c.power} · ${copiesWord(c)}${c.unconfirmed ? ' (count not yet checked against the cards)' : ''}`));
+  body.append(el('b', '', c.name), el('span', 'dim', ` · Level ${c.level} · power ${c.roundPower ? '? (the round)' : c.power} · ${copiesWord(c)}${count ? ` ×${count}` : ''}${c.unconfirmed ? ' (count not yet checked against the cards)' : ''}`));
   if (c.text) { const t = el('div', ''); t.append(cardText(c)); body.append(t); }
+  if (c.note) body.append(el('div', 'dim ch-ref-note', c.note));
   row.append(body);
   return row;
 }
@@ -1734,7 +1766,8 @@ function cardTip(key, why) {
   const set = SETS[c.set];
   const card = el('div', 'tb-card');
   const head = el('div', `tb-card-head set-${c.set}`);
-  head.append(el('span', 'tb-card-glyph', set.icon), el('b', 'tb-card-name', c.name), el('span', 'tb-card-str', `${c.level === 'S' ? 'starter' : `Level ${c.level}`} · power ${c.power}`));
+  const kind = c.set === 'robot' ? 'Robot' : c.level === 'S' ? 'starter' : `Level ${c.level}`;
+  head.append(el('span', 'tb-card-glyph', set.icon), el('b', 'tb-card-name', c.name), el('span', 'tb-card-str', `${kind} · power ${c.roundPower ? '= the round' : c.power}`));
   card.append(head);
   if (c.text || c.kw) { const t = el('span', 'tb-card-text'); t.append(cardText(c)); card.append(t); }
   else card.append(el('span', 'tb-card-note', 'No effect — just its power.'));

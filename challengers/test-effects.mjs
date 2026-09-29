@@ -338,5 +338,47 @@ console.log('— the Deck Phase —');
   eq(p.fans, 1, 'Clones: +1 fan when picked');
 }
 
+console.log('— the Robot —');
+{
+  const table = (n) => Array.from({ length: n }, (_, i) => ({ seat: i, name: 'P' + i, bot: true }));
+  ok(!CH.canStart(1, OPTS) && !CH.canStart(3, OPTS) && !CH.canStart(7, OPTS), 'one player, or an odd table, can start');
+  const G = CH.newMatch(table(3), OPTS);
+  const R = G.players.find((p) => p.robot);
+  ok(R && R.seat === 3 && G.players.length === 4, 'an odd table seats the Robot in the spare seat');
+  eq(R.deck.map((id) => G.cards[id].key).sort(), CH.ROBOT_DECK.slice().sort(), 'the Robot plays its eight start cards');
+  ok(R.ready && !R.draft && !CH.waitingOn(G).includes(R.seat), '"The Robot does nothing in the Deck Phase"');
+  eq(CH.newMatch(table(4), OPTS).players.some((p) => p.robot), false, 'an even table has no Robot');
+
+  // "If the Robot wins the match, place the Trophy of the current round back into the box"
+  const M = CH.makeMatch(G, 0, R.seat, { id: 0, park: 0 });
+  Object.assign(M, { over: true, winner: R.seat, loser: 0, why: 'P0 has nothing left to attack with' });
+  CH.finishMatch(G, M);
+  eq([R.trophies.length, G.players[0].trophies.length], [0, 0], 'a Robot win puts the Trophy back in the box');
+  const M2 = CH.makeMatch(G, 1, R.seat, { id: 1, park: 1 });
+  Object.assign(M2, { over: true, winner: 1, loser: R.seat, why: 'the Robot has nothing left to attack with' });
+  CH.finishMatch(G, M2);
+  eq(G.players[1].trophies.length, 1, 'beating the Robot takes the Trophy');
+  eq(CH.standings(G).some((p) => p.robot), false, 'at a table of three the Robot is not ranked');
+
+  // the solo game: two-player rules, and there the Robot keeps what it wins
+  const S = CH.newMatch(table(1), OPTS);
+  const SR = S.players.find((p) => p.robot);
+  ok(CH.isSolo(S) && S.players.length === 2, 'a player alone plays the Robot');
+  const M3 = CH.makeMatch(S, 0, SR.seat, { id: 0, park: 0 });
+  Object.assign(M3, { over: true, winner: SR.seat, loser: 0, why: 'P0 has no seat for the Dog' });
+  CH.finishMatch(S, M3);
+  eq(SR.trophies.length, 1, 'alone, "the Robot collects the Trophies it has won"');
+  ok(CH.standings(S).some((p) => p.robot), 'alone, the Robot is ranked and can win');
+}
+{
+  // "This card's base power is equal to the current round."
+  for (const round of [1, 4, 7]) {
+    const { G, M } = rig({ a: ['newcomer'], b: ['cyborg'], first: 1 });
+    M.round = round;
+    until(G, M, () => M.holder === 1);
+    eq(CH.flagPower(G, M), round, `a Cyborg holds the flag at power ${round} in round ${round}`);
+  }
+}
+
 console.log(`\n${checks} checks` + (fails ? `, ${fails} FAILURES` : ', all pass'));
 process.exit(fails ? 1 : 0);

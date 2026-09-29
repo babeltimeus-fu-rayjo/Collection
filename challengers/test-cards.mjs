@@ -1,7 +1,7 @@
 // The card data, checked by arithmetic rather than by eye: the rulebooks say
 // every additional set holds 40 cards and each basic set 20, and a mistyped
 // count or a card filed under the wrong set breaks that.
-import { SETS, BOXES, CARDS, CARD, STARTER, DRAFT, TROPHIES } from './cards.js';
+import { SETS, BOXES, CARDS, CARD, STARTER, ROBOT_DECK, DRAFT, TROPHIES } from './cards.js';
 
 let fails = 0;
 const bad = (m) => { console.log('  **FAIL** ' + m); fails++; };
@@ -26,6 +26,16 @@ for (const c of CARDS) {
   if (c.power > LIMIT[box][c.level]) bad(`${c.name} (${c.level}) has power ${c.power}, above the ${LIMIT[box][c.level]} its box allows`);
   if (!(c.copies >= 1)) bad(`${c.name} has no copies`);
 }
+// the Robot's level-1 deck, as the two photographs of it show: its eight start
+// cards, and nothing of its own set in any Level pile
+const robot = ROBOT_DECK.map((k) => CARD[k]);
+if (robot.some((c) => !c || c.set !== 'robot' || c.level !== 'S')) bad('the Robot deck holds a card that is not a Robot start card');
+const reads = robot.map((c) => `${c.name} ${c.roundPower ? '?' : c.power}`).join(', ');
+if (reads !== 'Alpha 1, Beta 2, Good Bot 3, C.H.A.M.P. 4, Cyborg ?, Cyborg ?, Cyborg ?, Cyborg ?') bad(`the Robot deck reads ${reads}`);
+if (CARDS.some((c) => c.set === 'robot' && c.level !== 'S')) bad('a Robot card sits in a Level pile');
+for (const box of Object.values(BOXES)) if (box.sets.includes('robot') || box.basic === 'robot') bad(`${box.name} offers the Robot's set for drafting`);
+console.log(`  the Robot: ${reads}`);
+
 const keys = new Set();
 for (const c of CARDS) { if (keys.has(c.key)) bad(`two cards share the key ${c.key}`); keys.add(c.key); }
 

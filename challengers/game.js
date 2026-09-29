@@ -7,7 +7,8 @@
 // or three, cut whatever they like — and then plays one match against the
 // opponent the schedule gives them. After the seventh round the two players
 // with the most fans play the final. (Two players play no final: most fans
-// after seven rounds, or a lead of eleven at the end of any match.)
+// after seven rounds, or a lead of eleven at the end of any match.) At an odd
+// table the Robot takes the spare seat, and a player alone plays the Robot.
 //
 // A match plays itself. Shuffle, and one player turns over their top card,
 // which takes the flag. The other attacks: they turn over cards one at a time
@@ -21,15 +22,16 @@
 // stops whenever one of them needs somebody to choose.
 
 import {
-  SETS, BOXES, CARDS, CARD, STARTER, DRAFT, TROPHIES,
+  SETS, BOXES, CARDS, CARD, STARTER, ROBOT_DECK, DRAFT, TROPHIES,
   ROUNDS, BENCH_SEATS, DRAW, LEAD_WIN,
 } from './cards.js';
 
-export { SETS, BOXES, CARDS, CARD, ROUNDS, BENCH_SEATS } from './cards.js';
+export { SETS, BOXES, CARDS, CARD, ROBOT_DECK, ROUNDS, BENCH_SEATS } from './cards.js';
 
 export const PROTO = 1;
-export const MIN_PLAYERS = 2;
+export const MIN_PLAYERS = 1;
 export const MAX_PLAYERS = 8;
+export const ROBOT = 'Robot';
 
 // ---------------------------------------------------------------- small helpers
 
@@ -76,20 +78,26 @@ export function checkOpts(opts) {
   if (!opts || !BOXES[opts.box]) return 'Pick which box to play.';
   if (!SETS[opts.basic] || !SETS[opts.basic].basic) return 'Pick a basic set.';
   if (!Array.isArray(opts.sets) || opts.sets.length !== 5) return 'Pick five additional sets.';
-  for (const s of opts.sets) if (!SETS[s] || SETS[s].basic) return `${s} is not an additional set.`;
+  for (const s of opts.sets) if (!SETS[s] || SETS[s].basic || SETS[s].robot) return `${s} is not an additional set.`;
   if (new Set(opts.sets).size !== 5) return 'Pick five different sets.';
   return null;
 }
 
-// Every round pairs the whole table off. The Robot, who stands in for the
-// missing player at an odd table, is not in the game yet — so the table has
-// to be even, and a bot, who plays and scores like anyone, evens it.
+// Every round pairs the whole table off, so an odd table needs a spare
+// player: "If you play with an odd number of players, the Robot substitutes
+// for a missing player." A player alone plays the Robot — the solo game.
 export function canStart(n, opts) {
-  if (n < MIN_PLAYERS) return `Needs at least ${MIN_PLAYERS} players.`;
+  if (n < MIN_PLAYERS) return 'Needs at least one player.';
   if (n > MAX_PLAYERS) return `At most ${MAX_PLAYERS} players.`;
-  if (n % 2) return 'Every round pairs the table off, so it needs an even number of players: add one more bot.';
   return checkOpts(opts);
 }
+
+// A player alone against the Robot plays by the two-player rules, and there
+// the Robot counts: "the Robot collects the Trophies it has won and can also
+// win the game". At a table of three or more it only stands in: it keeps no
+// Trophy, is never ranked, and never plays the final.
+export const isSolo = (G) => G.players.length === 2 && G.players.some((p) => p.robot);
+export const ranked = (G) => (isSolo(G) ? G.players.slice() : G.players.filter((p) => !p.robot));
 
 // ---------------------------------------------------------------- setup
 
@@ -142,7 +150,6 @@ export function newMatch(roster, opts = defaultOpts()) {
   }
   for (const L of 'ABC') shuffle(G.piles[L]);
 
-  const seats = roster.map((r) => r.seat);
   for (const r of roster) {
     G.players.push({
       seat: r.seat,
@@ -157,6 +164,17 @@ export function newMatch(roster, opts = defaultOpts()) {
       ready: false,
     });
   }
+  // an odd table, or a player alone: the Robot takes the spare seat, with its
+  // own deck and no part in any Deck Phase
+  if (roster.length % 2) {
+    let seat = 0;
+    while (roster.some((r) => r.seat === seat)) seat++;
+    G.players.push({
+      seat, name: ROBOT, bot: true, robot: true, connected: true,
+      deck: ROBOT_DECK.map(make), fans: 0, trophies: [], lostLast: false, draft: null, ready: true,
+    });
+  }
+  const seats = G.players.map((p) => p.seat);
 
   // one park per match, each with a face-down Trophy for every round
   const parks = seats.length / 2;
@@ -164,7 +182,9 @@ export function newMatch(roster, opts = defaultOpts()) {
   for (let k = 0; k < parks; k++) G.parks.push(piles.map((r) => r[k]));
   G.schedule = schedule(shuffle(seats.slice()));
 
-  note(G, `The tournament begins: ${G.players.length} players, ${[opts.basic, ...opts.sets].map((s) => SETS[s].name).join(', ')}.`);
+  const who = roster.length === 1 ? `${roster[0].name} against the Robot`
+    : `${roster.length} players${roster.length % 2 ? ' and the Robot' : ''}`;
+  note(G, `The tournament begins: ${who}, ${[opts.basic, ...opts.sets].map((s) => SETS[s].name).join(', ')}.`);
   startDeckPhase(G);
   return G;
 }
@@ -197,6 +217,8 @@ function startDeckPhase(G) {
   G.matches = [];
   const plan = DRAFT[G.opts.box][G.round - 1];
   for (const p of G.players) {
+    // "The Robot does nothing in the Deck Phase."
+    if (p.robot) { p.ready = true; p.draft = null; continue; }
     p.ready = false;
     p.draft = {
       options: plan.map((o) => ({ ...o })),
@@ -423,7 +445,8 @@ function startMatches(G) {
 const other = (M, seat) => (M.seats[0] === seat ? M.seats[1] : M.seats[0]);
 const mlog = (M, text) => { M.log.push(text); if (M.log.length > 60) M.log.shift(); };
 
-const basePower = (G, M, id) => cardOf(G, id).power;
+// printed power — except a Cyborg's, which "is equal to the current round"
+const basePower = (G, M, id) => { const c = cardOf(G, id); return c.roundPower ? M.round : c.power; };
 
 const benchIds = (S) => S.bench.flatMap((s) => s.ids);
 const seatsUsed = (S) => S.bench.reduce((n, s) => n + (s.wide ? 2 : 1), 0);
@@ -1070,21 +1093,25 @@ export function finishMatch(G, M) {
     p.lostLast = seat === M.loser;
   }
   const w = playerBySeat(G, M.winner);
-  if (!M.final) {
+  // "If the Robot wins the match, place the Trophy of the current round back
+  // into the box" — unless it is the solo game, where it keeps them
+  const boxed = w.robot && !isSolo(G);
+  if (!M.final && !boxed) {
     const fans = G.parks[M.park][G.round - 1];
     w.trophies.push({ round: G.round, fans });
   }
   G.history.push({ round: G.round, final: M.final, seats: M.seats.slice(), winner: M.winner, why: M.why });
-  note(G, `${w.name} beats ${playerBySeat(G, M.loser).name}${M.final ? ' in the final' : ''} — ${M.why}.`);
+  note(G, `${w.name} beats ${playerBySeat(G, M.loser).name}${M.final ? ' in the final' : ''} — ${M.why}${boxed ? '; the Trophy goes back in the box' : ''}.`);
 }
 
 export function totalFans(p) {
   return p.fans + p.trophies.reduce((s, t) => s + t.fans, 0);
 }
 
-// most fans, then most Trophies, then the Trophy from the latest round
+// most fans, then most Trophies, then the Trophy from the latest round —
+// among the players who are ranked, which leaves out a Robot standing in
 export function standings(G) {
-  return G.players.slice().sort((a, b) =>
+  return ranked(G).sort((a, b) =>
     totalFans(b) - totalFans(a)
     || b.trophies.length - a.trophies.length
     || Math.max(0, ...b.trophies.map((t) => t.round)) - Math.max(0, ...a.trophies.map((t) => t.round)));
@@ -1259,7 +1286,7 @@ export function viewFor(G, seat, code, opts = {}) {
       // and always at a table of two, where the totals are the whole game
       const open = two || p.seat === seat || G.phase === 'over' || G.phase === 'final-deck' || !!G.final;
       return {
-        seat: p.seat, name: p.name, bot: p.bot, connected: p.connected, botFor: !!p.botFor, resigned: !!p.resigned,
+        seat: p.seat, name: p.name, bot: p.bot, robot: !!p.robot, connected: p.connected, botFor: !!p.botFor, resigned: !!p.resigned,
         fans: p.fans,
         trophies: p.trophies.map((t) => (open ? { ...t } : { round: t.round })),
         total: open || !p.trophies.length ? totalFans(p) : null,
@@ -1342,7 +1369,7 @@ export const BOT_LEVELS = {
 };
 export const DEFAULT_LEVEL = 'steady';
 
-const pw = (G, id) => cardOf(G, id).power;
+const pw = (G, id) => { const c = cardOf(G, id); return c.roundPower ? G.round : c.power; };
 
 // what a bench card is worth leaving where it is: the cards that lend power
 const AURA = new Set(['blacksmith', 'bard', 'make-up-artist', 'director', 'vendor', 'ai', 'band', 'cook', 'animateur', 'ice-cream-truck', 'vet', 'ice-bob', 'coffee-machine', 'gingerbread-man']);
