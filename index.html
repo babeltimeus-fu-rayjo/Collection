@@ -92,6 +92,10 @@
     .art.skull { background: linear-gradient(150deg, #1b2a47, #0d1526); }
     .art.harmonies { background: linear-gradient(150deg, #1b3a2a, #0c1d14); }
     .art.mahjong { background: linear-gradient(150deg, #0d3320, #061a10); }
+    .art.bng { background: radial-gradient(120% 90% at 50% 0%, #6e3c1c, #1d0f07 72%); grid-auto-flow: column; justify-content: center; gap: 16px; }
+    .art.bng .star { filter: drop-shadow(0 4px 8px rgba(0, 0, 0, .5)); }
+    .art.bng .star i { display: block; width: 58px; height: 58px; background: linear-gradient(180deg, #ffe08a, #c98f24); clip-path: polygon(50% 0%, 64% 25.8%, 93.3% 25%, 78% 50%, 93.3% 75%, 64% 74.2%, 50% 100%, 36% 74.2%, 6.7% 75%, 22% 50%, 6.7% 25%, 36% 25.8%); }
+    .art.bng .word { font-family: 'Rockwell', 'Rockwell Nova', 'American Typewriter', 'Roboto Slab', serif; font-weight: 900; font-size: 34px; letter-spacing: .04em; color: #ffd77a; transform: rotate(-8deg); text-shadow: 3px 3px 0 #6e1d12, 0 6px 14px rgba(0, 0, 0, .5); }
     .art.avl { background: radial-gradient(120% 90% at 50% 0%, #26355f, #0b1124 70%); }
     .art.avl .quests { display: flex; gap: 7px; }
     .art.avl .quests i { width: 30px; height: 30px; border-radius: 50%; border: 2px solid rgba(227, 196, 106, .6); background: #18234a; box-shadow: 0 3px 8px rgba(0, 0, 0, .45); }
@@ -393,6 +397,22 @@
   <p class="sub">Games that run entirely in your browser. Share a room code to play with friends peer-to-peer — most games can fill empty seats with bots. No accounts, no downloads, no server.</p>
 
   <main class="shelf">
+    <a class="game" href="./bang/">
+      <div class="art bng">
+        <span class="star"><i></i></span>
+        <span class="word">BANG!</span>
+      </div>
+      <div class="body">
+        <div class="title-row">
+          <span class="name">BANG!</span>
+          <span class="players">4–7 players</span>
+        </div>
+        <p class="blurb">The Wild West card game. The Sheriff wears the star; the Deputies, the Outlaws and the Renegade hide their roles. Draw, shoot whoever your gun can reach, dodge with a Missed! — and work out who is on whose side.</p>
+        <div class="tags"><span class="tag">hidden roles</span><span class="tag">cards</span><span class="tag">bots</span><span class="tag">~40 min</span></div>
+        <span class="play">Play BANG! →</span>
+      </div>
+    </a>
+
     <a class="game" href="./avalon/">
       <div class="art avl">
         <span class="quests"><i class="g"></i><i class="e"></i><i class="g"></i><i></i><i></i></span>
