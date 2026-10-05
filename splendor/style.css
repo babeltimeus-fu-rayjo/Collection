@@ -1253,7 +1253,6 @@ button.noble:focus-visible { outline: 3px solid var(--accent); outline-offset: 3
 .nobles { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; min-height: 40px; align-items: center; }
 .nobles-gone { font-size: 13px; }
 .mid { display: flex; gap: 18px; align-items: center; justify-content: center; }
-.market { display: flex; flex-direction: column; gap: 9px; }
 .mrow { display: flex; gap: 9px; }
 .mrow .deck { margin-right: 6px; }
 .bank {
@@ -1393,6 +1392,7 @@ button.noble:focus-visible { outline: 3px solid var(--accent); outline-offset: 3
 .act-head .card.inline { margin-right: 6px; }
 .act-sub { color: var(--dim); font-size: 13.5px; line-height: 1.45; }
 .act-note { color: var(--warn); font-size: 12.5px; }
+.act-warn { color: var(--warn); font-size: 13.5px; line-height: 1.45; }
 .act-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; margin-top: 2px; }
 #action .btn { padding: 10px 16px; font-size: 15px; }
 #action .btn.primary { width: auto; min-width: 150px; }
@@ -1441,6 +1441,231 @@ button.noble:focus-visible { outline: 3px solid var(--accent); outline-offset: 3
 .cast-tokens { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; padding: 2px 6px 6px; }
 .cast-note { color: var(--dim); font-size: 12.5px; max-width: 36ch; line-height: 1.5; }
 
+/* ---------------------------------------------------------------- the expansions */
+
+.top-row { display: flex; flex-wrap: wrap; gap: 10px 22px; justify-content: center; align-items: center; }
+
+/* the market: the base cards, then the Orient beside them (below, narrow) */
+.market { display: flex; flex-direction: row; gap: 18px; align-items: flex-start; }
+.market .card { --cw: var(--mcw, 92px); }
+/* the supply below the cards, when beside them would leave the cards too small */
+.mid.below { flex-direction: column; gap: 12px; }
+.mid.below .bank { flex-direction: row; gap: 10px; padding: 8px 12px; }
+.mid.below .bank .tok { --ts: 42px; }
+.mblock { display: flex; flex-direction: column; gap: 9px; }
+.mblock-label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #cdb4f2; text-align: center; }
+
+/* Orient cards: a violet frame, and their powers in violet — the colour the
+   rulebook gives the icons of an effect that acts once, when bought */
+.card.orient::after { content: ''; position: absolute; inset: 0; border: 2px solid #9d74e6; border-radius: inherit; pointer-events: none; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35); }
+.card.b-gold { --art: linear-gradient(160deg, #fff1c2, #e3b23c 62%, #a87818); }
+.card.b-copy,
+.card.b-copytake { --art: linear-gradient(160deg, #f1f1f4, #b8b3c9 40%, #8f86ab 70%, #6c6290); }
+.cd-gems { display: flex; align-items: center; gap: calc(var(--cw) * 0.02); }
+.cd-x2,
+.cd-copy {
+  font: 800 calc(var(--cw) * 0.15) / 1 'Avenir Next', Avenir, 'Segoe UI', Roboto, Arial, sans-serif;
+  color: #5b2ca8;
+}
+.cd-copy { font-size: calc(var(--cw) * 0.22); }
+.cd-copy.small { font-size: calc(var(--cw) * 0.15); }
+.cd-power {
+  position: absolute;
+  right: calc(var(--cw) * 0.06);
+  top: 33%;
+  padding: calc(var(--cw) * 0.02) calc(var(--cw) * 0.05);
+  border-radius: 999px;
+  background: #6b3fc0;
+  color: #fff;
+  font: 800 calc(var(--cw) * 0.12) / 1.1 'Avenir Next', Avenir, 'Segoe UI', Roboto, Arial, sans-serif;
+  letter-spacing: 0.02em;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+/* a sacrifice card's price: two cards of a colour, crossed out */
+.cs {
+  width: calc(var(--cw) * 0.21);
+  height: calc(var(--cw) * 0.27);
+  border-radius: calc(var(--cw) * 0.03);
+  display: grid;
+  place-items: center;
+  font: 800 calc(var(--cw) * 0.14) / 1 'Avenir Next', Avenir, 'Segoe UI', Roboto, Arial, sans-serif;
+  color: var(--chip-ink);
+  background: var(--chip);
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+.card.back.orient.lv1 { background: radial-gradient(circle at 50% 40%, #6fb27f, #4d2a7e 80%); }
+.card.back.orient.lv2 { background: radial-gradient(circle at 50% 40%, #d9b04f, #4d2a7e 80%); }
+.card.back.orient.lv3 { background: radial-gradient(circle at 50% 40%, #6b95dc, #4d2a7e 80%); }
+.bk-mark { position: absolute; top: 9%; left: 0; right: 0; text-align: center; color: rgba(255, 255, 255, 0.85); font-size: calc(var(--cw) * 0.16); line-height: 1; }
+
+/* the Strongholds on a card, in their owners' colours */
+.holds {
+  position: absolute;
+  left: 30%;
+  right: 4%;
+  top: 44%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  justify-content: center;
+  cursor: help;
+}
+.hold {
+  font-style: normal;
+  font-size: calc(var(--cw) * 0.2);
+  line-height: 1;
+  padding: calc(var(--cw) * 0.03);
+  border-radius: 50%;
+  background: rgba(8, 20, 21, 0.78);
+  box-shadow: 0 0 0 1.5px currentColor, 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+.hold.s0, .pl-holds.s0 { color: #8fd6a8; }
+.hold.s1, .pl-holds.s1 { color: #58b7ff; }
+.hold.s2, .pl-holds.s2 { color: #ffd166; }
+.hold.s3, .pl-holds.s3 { color: #ff5d8f; }
+.hold.s4, .pl-holds.s4 { color: #b98aff; }
+.hold.s5, .pl-holds.s5 { color: #63e0dc; }
+.hold.s6, .pl-holds.s6 { color: #ff9c5e; }
+.hold.s7, .pl-holds.s7 { color: #d3e15c; }
+.card.held-by-rival { filter: saturate(0.55) brightness(0.85); }
+/* what a tap on the table does now: place a Stronghold, knock one off,
+   move one from here, take a card for free */
+.card.do-place { box-shadow: 0 0 0 3px var(--accent), 0 0 12px rgba(232, 194, 90, 0.45); }
+.card.do-knock { box-shadow: 0 0 0 3px var(--warn), 0 0 12px rgba(255, 155, 138, 0.5); }
+.card.do-from { transform: translateY(-5px); box-shadow: 0 0 0 2px #fff, 0 0 0 5px var(--accent); }
+.card.do-pickfrom { box-shadow: 0 0 0 3px #fff, 0 0 12px rgba(255, 255, 255, 0.45); }
+.card.do-take { box-shadow: 0 0 0 3px #b48cff, 0 0 14px rgba(180, 140, 255, 0.55); }
+.card.picked { box-shadow: 0 0 0 3px var(--warn); transform: translateY(-3px); }
+.pl-holds {
+  display: inline-flex;
+  gap: 1px;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: help;
+  text-shadow: 0 0 2px #000;
+}
+.pl-holds i { font-style: normal; }
+.pl-holds i.out { opacity: 0.25; }
+
+/* a City tile: its Prestige points and name, the cards it asks for, and who
+   meets it now */
+.city {
+  --ct: 158px;
+  position: relative;
+  flex: none;
+  width: var(--ct);
+  min-height: calc(var(--ct) * 0.56);
+  padding: 7px 9px 8px;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+  background: linear-gradient(160deg, #d9c49a, #a88a55 60%, #7a6136);
+  border: 2px solid #f0dca6;
+  box-shadow: inset 0 0 0 3px rgba(0, 0, 0, 0.16), 0 3px 8px rgba(0, 0, 0, 0.45);
+  color: #2b2010;
+  cursor: help;
+}
+.city.met { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(232, 194, 90, 0.5), 0 3px 8px rgba(0, 0, 0, 0.45); }
+.ct-head { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.ct-pts { font: italic 700 26px/1 var(--serif); color: #fff; -webkit-text-stroke: 1.2px #3b2a12; paint-order: stroke fill; }
+.ct-name { font: 700 13px/1.15 var(--serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.req-row { display: flex; flex-wrap: wrap; gap: 3px; }
+.cr,
+.pr {
+  min-width: 19px;
+  height: 22px;
+  padding: 0 3px;
+  border-radius: 3px;
+  display: grid;
+  place-items: center;
+  font: italic 800 13.5px/1 var(--serif);
+  color: var(--chip-ink);
+  background: var(--chip);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+/* that many cards of one colour, whichever: grey, with =, as printed */
+.cr.any { color: #fff; background: #9ea3aa; text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5); }
+.ct-none { font-size: 12px; font-style: italic; }
+.ct-met { position: absolute; right: 6px; top: 6px; display: flex; gap: 2px; }
+.ct-met .av,
+.po-owners .av { width: 18px; height: 18px; font-size: 9.5px; border-width: 1px; }
+
+/* a Trading Post: the cards it asks for, its power, and who has opened it */
+.post {
+  position: relative;
+  flex: none;
+  width: 92px;
+  min-height: 62px;
+  padding: 5px 6px 6px;
+  border-radius: 9px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  background: linear-gradient(160deg, #3d5e7a, #1d3550);
+  border: 1.5px solid #a9c4dc;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45);
+  color: #eef4fa;
+  text-align: left;
+  cursor: help;
+}
+.post .req-row { flex-direction: column; flex-wrap: nowrap; }
+.post .pr { min-width: 16px; height: 16px; font-size: 11px; }
+.po-power { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.po-power b { font-size: 12.5px; line-height: 1.1; }
+.po-power small { font-size: 10px; line-height: 1.15; color: #bcd0e2; }
+.po-owners { position: absolute; right: -6px; top: -8px; display: flex; gap: 1px; }
+.post.mini { width: auto; min-height: 0; padding: 3px 7px; border-radius: 6px; }
+.po-mini { font-size: 11px; font-weight: 800; white-space: nowrap; }
+button.post { cursor: pointer; font: inherit; }
+button.post:hover { transform: translateY(-3px); box-shadow: 0 0 0 3px var(--accent), 0 6px 14px rgba(0, 0, 0, 0.5); }
+button.post:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.posts { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; padding-top: 6px; }
+.pl-posts { display: flex; gap: 4px; flex-wrap: wrap; }
+.pg-bonus.goldcards { --chip: #e7b22c; --chip-ink: #3a2a00; --chip-ring: #946d10; }
+.gem-choice { display: inline-flex; align-items: center; gap: 6px; }
+.gem-choice svg.gem { font-size: 20px; }
+
+/* the modules, in the lobby and the top bar */
+#module-picker { width: 100%; display: flex; flex-direction: column; gap: 9px; }
+.mod-group { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: center; }
+.mod-box { width: 100%; text-align: center; font: italic 600 13px/1.2 var(--serif); color: var(--dim); }
+.mod-pick {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--dim);
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.mod-pick.on { background: var(--accent-dim); border-color: rgba(232, 194, 90, 0.6); color: var(--accent); }
+.mod-pick.on::before { content: '✓ '; }
+.mod-pick:disabled { cursor: default; }
+.mod-pick:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+#screen-game .topbar #mods-chip {
+  font-size: 12px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(180, 140, 255, 0.45);
+  color: #cdb4f2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  max-width: 44ch;
+  cursor: help;
+}
+.rules-h { margin: 8px 0 0; font: 700 18px/1.2 var(--serif); color: var(--accent); }
+.rules-intro { margin: 0; color: var(--dim); font-size: 14px; }
+
 /* ---------------------------------------------------------------- game over */
 
 #go-title { color: var(--accent); }
@@ -1462,7 +1687,16 @@ button.noble:focus-visible { outline: 3px solid var(--accent); outline-offset: 3
 @media (max-width: 640px) {
   .card { --cw: min(76px, calc((100vw - 64px) / 5)); }
   .mrow { gap: 6px; }
-  .market { gap: 7px; }
+  .mblock { gap: 7px; }
+  .market { flex-direction: column; align-items: center; gap: 12px; }
+  .city { --ct: min(150px, calc((100vw - 44px) / 3)); padding: 6px 7px 7px; }
+  .ct-pts { font-size: 22px; }
+  .ct-name { font-size: 11.5px; }
+  .cr { min-width: 16px; height: 19px; font-size: 12px; }
+  .post { width: calc((100vw - 52px) / 5); min-width: 62px; padding: 4px; gap: 4px; flex-direction: column; align-items: flex-start; }
+  .post .req-row { flex-direction: row; }
+  .posts { gap: 6px; }
+  #screen-game .topbar #mods-chip { display: none; }
   .mrow .deck { margin-right: 0; }
   .mid { flex-direction: column; gap: 12px; }
   .bank { flex-direction: row; gap: 10px; padding: 8px 12px; }

@@ -22,6 +22,11 @@ import {
   WIN_POINTS,
   TOKEN_LIMIT,
   RESERVE_LIMIT,
+  MODULES,
+  CITIES,
+  TRADING_POSTS,
+  STRONGHOLDS,
+  defaultOpts,
   tokenWords,
   canStart,
   newGame,
@@ -331,6 +336,7 @@ class HostSession {
     this.G = null;
     this.tickTimer = null;
     this.chatLog = [];
+    this.opts = defaultOpts();
     this.watchers = []; // observers: {id, name, conn, target-seat}
     this.wid = 0;
     peer.on('connection', (conn) => this.accept(conn));
@@ -656,6 +662,16 @@ class HostSession {
     this.pushLobby();
   }
 
+  // The lobby's modules from the two expansion boxes, each on or off; the
+  // boxes' two Nobles cannot come with the Cities, which replace the Nobles.
+  toggleModule(key) {
+    if (this.G || !MODULES.some((m) => m.key === key)) return;
+    this.opts = { ...this.opts, [key]: !this.opts[key] };
+    if (key === 'cities' && this.opts.cities) this.opts.nobles = false;
+    if (key === 'nobles' && this.opts.nobles) this.opts.cities = false;
+    this.pushLobby();
+  }
+
   removeBot(seat) {
     if (this.G) return;
     if (!this.roster.some((r) => r.seat === seat && r.bot)) return;
@@ -701,6 +717,7 @@ class HostSession {
       players: this.roster.map((p) => ({ seat: p.seat, name: p.name, bot: !!p.bot })),
       min: MIN_PLAYERS,
       max: MAX_PLAYERS,
+      opts: this.opts,
     };
   }
 
@@ -727,7 +744,7 @@ class HostSession {
   start() {
     const why = canStart(this.roster.length);
     if (why) { toast(why); return; }
-    this.G = newGame(this.roster);
+    this.G = newGame(this.roster, this.opts);
     this.broadcast();
   }
 
@@ -739,7 +756,7 @@ class HostSession {
       toast('Not enough players — back to the lobby');
       return;
     }
-    this.G = newGame(this.roster);
+    this.G = newGame(this.roster, this.opts);
     hideOverlays();
     this.broadcast();
   }
@@ -1045,6 +1062,7 @@ const SVGNS = 'http://www.w3.org/2000/svg';
 const gemName = (g) => GEM[g].name;
 const sumOf = (o) => Object.values(o).reduce((a, b) => a + (b || 0), 0);
 const LEVEL_DOTS = { 1: '●', 2: '●●', 3: '●●●' };
+const isCopy = (c) => c.kind === 'copy' || c.kind === 'copytake';
 
 function listWords(a) {
   return a.length <= 1 ? a.join('') : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`;
@@ -1072,74 +1090,167 @@ function tokenEl(g, count, cls = '', tag = 'span') {
   return n;
 }
 
-// the cost circles, in the order the cards print them
-function costEl(cost, cls) {
-  const box = el('span', cls);
-  for (const g of GEMS) if (cost[g]) box.append(el('span', `cc t-${g}`, String(cost[g])));
+// the cost circles, in the order the cards print them — or, for a card
+// bought by sacrifice, the two cards of its colour to discard
+function costEl(c) {
+  const box = el('span', 'cd-cost');
+  if (c.kind === 'sacrifice') {
+    for (let i = 0; i < 2; i++) box.append(el('span', `cs t-${c.discard}`, '✕'));
+    return box;
+  }
+  for (const g of GEMS) if (c.cost[g]) box.append(el('span', `cc t-${g}`, String(c.cost[g])));
   return box;
 }
 
-// what this player would pay for a card — their own gems first, Gold for the
-// rest — or null if they cannot
-function payFor(p, c) {
-  const pay = { gold: 0 };
-  for (const g of GEMS) {
-    const need = Math.max(0, (c.cost[g] || 0) - p.bonuses[g]);
-    pay[g] = Math.min(need, p.tokens[g]);
-    pay.gold += need - pay[g];
-  }
-  return pay.gold <= p.tokens.gold ? pay : null;
+// what an Orient card does, in words
+const POWER_WORDS = {
+  gold: 'No colour and no bonus. When you buy a card, you may discard it to pay 2 Gold for that purchase alone; it goes back to the box.',
+  copy: 'When you buy it, it takes the colour and bonus of a card of yours that has one — you must own one to buy it.',
+  copytake: 'When you buy it, it takes the colour and bonus of a card of yours; then take a face-up level-1 card for free, its effects too.',
+  double: 'Two bonuses of its colour to pay with — but one card of that colour for every Noble, Trading Post and City.',
+  take: 'When you buy it, take a face-up level-2 card for free, its effects too.',
+  sacrifice: 'Paid not in gems but by discarding two cards of the colour shown — copy cards of that colour first. They go back to the box.',
+};
+
+function cardTitle(c) {
+  const kind = c.kind === 'gold' ? 'Gold card' : isCopy(c) && !c.bonus ? 'copy card' : `${gemName(c.bonus)} ${c.kind === 'double' ? 'double-bonus card' : 'card'}`;
+  return `Level ${c.level}${c.orient ? ' Orient' : ''} ${kind}`;
 }
-function missingFor(p, c) {
-  const miss = {};
-  for (const g of GEMS) {
-    const m = Math.max(0, (c.cost[g] || 0) - p.bonuses[g] - p.tokens[g]);
-    if (m) miss[g] = m;
-  }
-  return miss;
+
+function cardTipText(c, view) {
+  const parts = [`${cardTitle(c)}${c.points ? `, ${c.points} Prestige point${c.points === 1 ? '' : 's'}` : ''}: ${c.kind === 'sacrifice' ? `costs two ${gemName(c.discard)} cards, discarded` : `costs ${tokenWords(c.cost) || 'nothing'}`}.`];
+  if (c.orient) parts.push(POWER_WORDS[c.kind]);
+  else parts.push(`Bought, it is a ${gemName(c.bonus)} bonus for good — one ${gemName(c.bonus)} off every later card.`);
+  const buy = view && view.buys && view.buys[c.id];
+  if (buy) parts.push(buyWords(buy));
+  return parts.join(' ');
 }
-function affordWords(p, c, you = true) {
-  const pay = payFor(p, c);
-  if (pay) return sumOf(pay) ? `${you ? 'You could' : `${p.name} could`} buy it for ${tokenWords(pay)}.` : `${you ? 'You could' : `${p.name} could`} buy it with bonuses alone.`;
-  const miss = missingFor(p, c);
-  return `${you ? 'You are' : `${p.name} is`} short ${tokenWords(miss)}${p.tokens.gold ? `, less ${p.tokens.gold} Gold` : ''}.`;
+
+function buyWords(buy) {
+  if (buy.sacrifice) return `You could buy it by discarding two ${gemName(buy.sacrifice.colour)} cards.`;
+  return buy.plans[0] ? `You could buy it ${payLabel(buy.plans[0])}.` : '';
 }
 
 // A Development card as printed: Prestige points and the bonus gem across the
-// top, the cost down the left, the level's dots at the foot.
+// top, the cost down the left, the level's dots at the foot. An Orient card
+// shows its power where the base cards have nothing.
 function cardEl(c, view, cls = '', tag = 'div') {
-  const n = el(tag, `card b-${c.bonus} lv${c.level}${cls ? ` ${cls}` : ''}`);
+  const n = el(tag, `card ${c.bonus ? `b-${c.bonus}` : `b-${c.kind}`} lv${c.level}${c.orient ? ' orient' : ''}${cls ? ` ${cls}` : ''}`);
   if (tag === 'button') n.type = 'button';
   const top = el('span', 'cd-top');
-  top.append(el('span', 'cd-pts', c.points ? String(c.points) : ''), gemSvg(c.bonus, 'cd-gem'));
-  n.append(top, costEl(c.cost, 'cd-cost'), el('span', 'cd-lv', LEVEL_DOTS[c.level]));
-  const my = view && me(view);
-  n.dataset.tip = [
-    `Level ${c.level} ${gemName(c.bonus)} card${c.points ? `, ${c.points} Prestige point${c.points === 1 ? '' : 's'}` : ''}: costs ${tokenWords(c.cost)}.`,
-    `Bought, it is a ${gemName(c.bonus)} bonus for good — one ${gemName(c.bonus)} off every later card.`,
-    my && !isObserver(view) ? affordWords(my, c) : '',
-  ].filter(Boolean).join(' ');
+  top.append(el('span', 'cd-pts', c.points ? String(c.points) : ''));
+  const gems = el('span', 'cd-gems');
+  if (c.kind === 'gold') gems.append(gemSvg('gold', 'cd-gem'), el('b', 'cd-x2', '×2'));
+  else if (isCopy(c) && !c.bonus) gems.append(el('span', 'cd-copy', '⧉'));
+  else {
+    gems.append(gemSvg(c.bonus, 'cd-gem'));
+    if (c.kind === 'double') gems.append(gemSvg(c.bonus, 'cd-gem'));
+    if (isCopy(c)) gems.append(el('span', 'cd-copy small', '⧉'));
+  }
+  top.append(gems);
+  n.append(top, costEl(c));
+  if (c.take) n.append(el('span', 'cd-power', `+${LEVEL_DOTS[c.take]}`));
+  n.append(el('span', 'cd-lv', LEVEL_DOTS[c.level]));
+  if (view && c.id != null && view.holds && view.holds[c.id]) n.append(holdMarks(view, view.holds[c.id]));
+  n.dataset.tip = cardTipText(c, view);
   if (c.id != null) n.dataset.tipKey = `card-${c.id}`;
   return n;
 }
 
-function cardBack(level, count, cls = '', tag = 'div') {
-  const n = el(tag, `card back lv${level}${cls ? ` ${cls}` : ''}`);
+// the Strongholds on a card, in their owners' colours
+function holdMarks(view, seats) {
+  const box = el('span', 'holds');
+  for (const s of seats) box.append(el('i', `hold s${s % 8}`, '♜'));
+  const owner = seatName(view, seats[0]);
+  box.dataset.tip = `${seats.length} of ${owner === seatName(view, view.you) && !isObserver(view) ? 'your' : `${owner}’s`} Strongholds: only ${owner === seatName(view, view.you) && !isObserver(view) ? 'you' : owner} may buy or reserve this card.${seats.length === STRONGHOLDS ? ' All three: it can be conquered — bought at the end of an action.' : ''}`;
+  return box;
+}
+
+function cardBack(level, count, cls = '', tag = 'div', orient = false) {
+  const n = el(tag, `card back lv${level}${orient ? ' orient' : ''}${cls ? ` ${cls}` : ''}`);
   if (tag === 'button') n.type = 'button';
   n.append(el('span', 'bk-lv', LEVEL_DOTS[level]));
+  if (orient) n.append(el('span', 'bk-mark', '✿'));
   if (count != null) n.append(el('span', 'bk-n', String(count)));
-  n.dataset.tip = count != null ? `The level-${level} deck: ${count} card${count === 1 ? '' : 's'}. You may reserve its top card unseen.` : `A level-${level} card, reserved unseen from the top of the deck.`;
+  n.dataset.tip = count != null ? `The level-${level}${orient ? ' Orient' : ''} deck: ${count} card${count === 1 ? '' : 's'}. You may reserve its top card unseen.` : `A level-${level}${orient ? ' Orient' : ''} card, reserved unseen from the top of the deck.`;
   return n;
 }
+
+const reqEl = (req, cls = 'nr') => {
+  const box = el('span', cls === 'nr' ? 'nb-req' : 'req-row');
+  for (const g of GEMS) if (req[g]) box.append(el('span', `${cls} t-${g}`, String(req[g])));
+  return box;
+};
 
 function nobleEl(nb, cls = '', tag = 'div') {
   const n = el(tag, `noble${cls ? ` ${cls}` : ''}`);
   if (tag === 'button') n.type = 'button';
-  const req = el('span', 'nb-req');
-  for (const g of GEMS) if (nb.req[g]) req.append(el('span', `nr t-${g}`, String(nb.req[g])));
-  n.append(el('span', 'nb-pts', String(nb.points)), req, el('span', 'nb-crest', '♛'));
-  n.dataset.tip = `A Noble, worth ${nb.points} Prestige points. At the end of a turn, visits a player with ${listWords(GEMS.filter((g) => nb.req[g]).map((g) => `${nb.req[g]} ${gemName(g)}`))} bonuses — cards bought, not tokens.`;
+  n.append(el('span', 'nb-pts', String(nb.points)), reqEl(nb.req), el('span', 'nb-crest', '♛'));
+  n.dataset.tip = `${nb.name}${nb.box ? `, from ${nb.box}` : ''} — a Noble, worth ${nb.points} Prestige points. At the end of a turn, visits a player with ${listWords(GEMS.filter((g) => nb.req[g]).map((g) => `${nb.req[g]} ${gemName(g)}`))} cards.`;
   n.dataset.tipKey = `noble-${nb.id}`;
+  return n;
+}
+
+// A City tile: the Prestige points and the cards it asks for; a grey square
+// with = is that many cards of one colour the tile names nowhere else.
+function cityEl(view, c) {
+  const n = el('div', `city${c.met.length ? ' met' : ''}`);
+  const head = el('div', 'ct-head');
+  head.append(el('span', 'ct-pts', String(c.points)), el('span', 'ct-name', c.place));
+  n.append(head);
+  const reqs = reqEl(c.req, 'cr');
+  if (c.any) reqs.append(el('span', 'cr any', `${c.any}=`));
+  if (!Object.keys(c.req).length && !c.any) reqs.append(el('span', 'ct-none', 'points alone'));
+  n.append(reqs);
+  if (c.met.length) {
+    const who = el('div', 'ct-met');
+    for (const s of c.met) {
+      const p = view.players.find((q) => q.seat === s);
+      if (p) who.append(avatarEl(p.name, p.seat, p.bot));
+    }
+    n.append(who);
+  }
+  const wants = [`${c.points} Prestige points`];
+  for (const g of GEMS) if (c.req[g]) wants.push(`${c.req[g]} ${gemName(g)} card${c.req[g] === 1 ? '' : 's'}`);
+  if (c.any) wants.push(`${c.any} cards of ${Object.keys(c.req).length ? 'another colour' : 'one colour'}`);
+  n.dataset.tip = `${c.place} — ${c.ruler}. Asks for ${listWords(wants)}. Meet it at the end of your turn and the round is played out; then whoever meets a City wins, the most Prestige among them.${c.met.length ? ` Met now by ${listWords(c.met.map((s) => seatName(view, s)))}.` : ''}`;
+  n.dataset.tipKey = `city-${c.tile}`;
+  return n;
+}
+
+// what each Trading Post does, in a few words: on the tile, and on the
+// smaller copy in its owner's place
+const POST_LABEL = {
+  gem: ['+1 gem', 'after you buy'],
+  third: ['+1 gem', 'after 2 alike'],
+  gold: ['Gold ×2', 'when you buy'],
+  draw2: ['Draw 2', 'keep 1'],
+  points: ['+1 point', 'per Post'],
+};
+const POST_MINI = { gem: '+1 buy', third: '2 → +1', gold: 'Gold ×2', draw2: 'Draw 2', points: '+1 each' };
+
+function postEl(view, tp, cls = '', tag = 'div') {
+  const mini = cls.split(' ').includes('mini');
+  const n = el(tag, `post p-${tp.power}${cls ? ` ${cls}` : ''}`);
+  if (tag === 'button') n.type = 'button';
+  if (mini) n.append(el('span', 'po-mini', POST_MINI[tp.power]));
+  else {
+    n.append(reqEl(tp.req, 'pr'));
+    const label = el('span', 'po-power');
+    label.append(el('b', '', POST_LABEL[tp.power][0]), el('small', '', POST_LABEL[tp.power][1]));
+    n.append(label);
+    if (tp.owners && tp.owners.length) {
+      const who = el('span', 'po-owners');
+      for (const s of tp.owners) {
+        const p = view.players.find((q) => q.seat === s);
+        if (p) who.append(avatarEl(p.name, p.seat, p.bot));
+      }
+      n.append(who);
+    }
+  }
+  const wants = listWords(GEMS.filter((g) => tp.req[g]).map((g) => `${tp.req[g]} ${gemName(g)} card${tp.req[g] === 1 ? '' : 's'}`));
+  n.dataset.tip = `Trading Post — opened at the end of a turn with ${wants}, one a turn: ${tp.text}${tp.owners && tp.owners.length ? ` Opened by ${listWords(tp.owners.map((s) => seatName(view, s)))}.` : ''}`;
+  n.dataset.tipKey = `post-${tp.i}${mini ? '-mini' : ''}`;
   return n;
 }
 
@@ -1183,6 +1294,27 @@ function renderLobby(lob, sess) {
     list.append(row);
   }
 
+  // the expansions: each module on or off, the host's to choose
+  const opts = lob.opts || defaultOpts();
+  const mp = $('#module-picker');
+  mp.replaceChildren();
+  for (const box of ['The Silk Road', 'The Sun Never Sets', 'both boxes']) {
+    const group = el('div', 'mod-group');
+    if (box !== 'both boxes') group.append(el('div', 'mod-box', box));
+    for (const m of MODULES.filter((x) => x.box === box)) {
+      const on = !!opts[m.key];
+      const b = el('button', `mod-pick${on ? ' on' : ''}`, m.name);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(on));
+      b.disabled = !sess.isHost;
+      b.dataset.tip = `${m.name} (${m.box}). ${m.text}`;
+      b.dataset.tipKey = `mod-${m.key}`;
+      if (sess.isHost) b.addEventListener('click', () => sess.toggleModule(m.key));
+      group.append(b);
+    }
+    mp.append(group);
+  }
+
   // the supply the table will play with, at its size now (or two)
   const tn = Math.min(MAX_PLAYERS, Math.max(MIN_PLAYERS, n));
   const sum = $('#cast-summary');
@@ -1192,7 +1324,12 @@ function renderLobby(lob, sess) {
   for (const g of GEMS) line.append(tokenEl(g, GEMS_FOR[tn], 'small'));
   line.append(tokenEl(GOLD, 5, 'small'));
   sum.append(line);
-  sum.append(el('div', 'cast-note', `${GEMS_FOR[tn]} tokens of each gem, 5 Gold, ${tn + 1} Nobles. First to ${WIN_POINTS} Prestige points ends the round.`));
+  const parts = [`${GEMS_FOR[tn]} tokens of each gem, 5 Gold`];
+  parts.push(opts.cities ? '3 Cities in place of the Nobles' : `${tn + 1} Nobles${opts.nobles ? ' from 12' : ''}`);
+  if (opts.orient) parts.push('2 Orient cards a row');
+  if (opts.trading) parts.push('5 Trading Posts');
+  if (opts.strongholds) parts.push('3 Strongholds each');
+  sum.append(el('div', 'cast-note', `${listWords(parts)}. ${opts.cities ? 'Meeting a City ends the round.' : `First to ${WIN_POINTS} Prestige points ends the round.`}`));
 
   $('#btn-start').classList.toggle('hidden', !sess.isHost);
   $('#btn-add-bot').classList.toggle('hidden', !sess.isHost);
@@ -1213,8 +1350,11 @@ function renderLobby(lob, sess) {
 let viewMid = null;
 let askKey = null;
 let picks = [];      // gems picked from the supply, for a take
-let sel = null;      // { card } or { level }: what is chosen to buy or reserve
+let sel = null;      // { card } or { level, orient }: what is chosen to buy or reserve
 let back = {};       // tokens marked to go back, past ten
+let discards = null; // the two cards a sacrifice card takes, as chosen
+let moveFrom = null; // the card a Stronghold is to be moved from
+let holdMove = false; // moving a Stronghold, with some still in hand
 let wasMine = false; // whether the last view already waited on you
 
 const me = (view) => view.players.find((p) => p.seat === view.you);
@@ -1225,11 +1365,17 @@ const seatName = (view, seat) => {
 const isObserver = (view) => !!view.observer;
 const canAct = (view) => !!view.ask && view.ask.seat === view.you && !isObserver(view) && !!me(view) && view.phase !== 'over';
 const held = (p) => sumOf(p.tokens);
+const tableCards = (view) => [1, 2, 3].flatMap((l) => [...view.market[l], ...view.omarket[l]]).filter(Boolean);
+const findCard = (view, id) => tableCards(view).find((c) => c.id === id) || (me(view) && me(view).reserved.find((c) => c.id === id)) || (me(view) && me(view).cards.find((c) => c.id === id)) || (view.look || []).find((c) => c.id === id);
+const blockedFor = (view, id) => (view.holds[id] || []).some((s) => s !== view.you);
 
 function clearSel() {
   picks = [];
   sel = null;
   back = {};
+  discards = null;
+  moveFrom = null;
+  holdMove = false;
 }
 
 function rerender() {
@@ -1257,8 +1403,7 @@ function takeMove(view) {
   if (!picks.length) return { why: 'Pick gems from the supply.' };
   if (picks.length === 2 && picks[0] === picks[1]) return { move: { kind: 'take2', gem: picks[0] } };
   const avail = availableGems(view).length;
-  if (picks.length === 3 || (avail < 3 && picks.length === avail)) return { move: { kind: 'take', gems: picks.slice() } };
-  if (avail < 3) return { move: { kind: 'take', gems: picks.slice() } };
+  if (picks.length === 3 || avail < 3) return { move: { kind: 'take', gems: picks.slice() } };
   return { why: `${3 - picks.length} more of a different colour — or tap the same gem again for two of a kind.` };
 }
 
@@ -1282,13 +1427,14 @@ function pickGem(view, g) {
 
 function pickCard(id) {
   picks = [];
+  discards = null;
   sel = sel && sel.card === id ? null : { card: id };
   rerender();
 }
 
-function pickDeck(level) {
+function pickDeck(level, orient) {
   picks = [];
-  sel = sel && sel.level === level ? null : { level };
+  sel = sel && sel.level === level && !!sel.orient === !!orient ? null : { level, orient };
   rerender();
 }
 
@@ -1301,37 +1447,124 @@ function pickBack(view, g) {
   rerender();
 }
 
+// a tap on a card on the table, whatever is being asked
+function tapTable(view, id) {
+  const a = view.ask;
+  if (a.kind === 'take') return send({ card: id });
+  if (a.kind === 'hold') {
+    const o = view.holdOptions;
+    if (moveFrom == null && o.remove.includes(id)) return send({ remove: id });
+    if (!moving(view)) return o.to.includes(id) ? send({ to: id }) : undefined;
+    if (moveFrom == null) {
+      if (o.mine.includes(id)) moveFrom = id;
+      return rerender();
+    }
+    if (id === moveFrom) {
+      moveFrom = null;
+      return rerender();
+    }
+    if (o.to.includes(id)) send({ to: id, from: moveFrom });
+    return;
+  }
+  pickCard(id);
+}
+
 // ---------------------------------------------------------------- the table
+
+// what a card on the table does when tapped now, if anything
+function tableAction(view, c) {
+  if (!canAct(view)) return null;
+  const a = view.ask;
+  if (a.kind === 'turn') return 'pick';
+  if (a.kind === 'take') return a.options.includes(c.id) ? 'take' : null;
+  if (a.kind === 'hold') {
+    const o = view.holdOptions;
+    if (moveFrom == null && o.remove.includes(c.id)) return 'knock';
+    if (!moving(view)) return o.canPlace && o.to.includes(c.id) ? 'place' : null;
+    if (moveFrom == null) return o.mine.includes(c.id) ? 'pickfrom' : null;
+    if (c.id === moveFrom) return 'from';
+    return o.to.includes(c.id) ? 'place' : null;
+  }
+  return null;
+}
+
+// a Stronghold is to be moved, not placed: all three are out, or the player
+// chose to move one
+const moving = (view) => me(view).holds === 0 || holdMove;
+
+function tableCardEl(view, c) {
+  const act = tableAction(view, c);
+  const afford = view.ask && view.ask.kind === 'turn' && canAct(view) && view.affordable.includes(c.id);
+  const cls = [afford ? 'afford' : '', sel && sel.card === c.id ? 'selected' : '', act ? `can do-${act}` : '', blockedFor(view, c.id) ? 'held-by-rival' : ''].filter(Boolean).join(' ');
+  const n = cardEl(c, view, cls, act ? 'button' : 'div');
+  if (act) n.addEventListener('click', () => tapTable(view, c.id));
+  return n;
+}
 
 function renderBoard(view) {
   const board = $('#board');
+  // measured before anything is replaced
+  const W = board.clientWidth || document.documentElement.clientWidth - 20;
+  const phone = window.matchMedia('(max-width: 640px)').matches;
   const my = me(view);
   const act = canAct(view) && view.ask.kind === 'turn';
+  const orient = view.opts.orient;
   const wrap = el('div', 'board');
-  const nobles = el('div', 'nobles');
-  for (const nb of view.nobles) nobles.append(nobleEl(nb));
-  if (!view.nobles.length) nobles.append(el('span', 'dim nobles-gone', 'Every Noble has been won.'));
-  wrap.append(nobles);
-  // the cards, level 3 at the top as the decks are laid out
-  const rows = el('div', 'market');
-  for (const l of [3, 2, 1]) {
-    const row = el('div', `mrow lv${l}`);
-    const deckOk = act && view.decks[l] > 0 && my.reserved.length < RESERVE_LIMIT;
-    const deck = cardBack(l, view.decks[l], `deck${sel && sel.level === l ? ' selected' : ''}${deckOk ? ' can' : ''}${view.decks[l] ? '' : ' gone'}`, deckOk ? 'button' : 'div');
-    if (deckOk) deck.addEventListener('click', () => pickDeck(l));
-    row.append(deck);
-    for (const c of view.market[l]) {
-      if (!c) {
-        row.append(el('div', 'card empty'));
-        continue;
-      }
-      const afford = act && view.affordable.includes(c.id);
-      const n = cardEl(c, view, `${afford ? 'afford' : ''}${sel && sel.card === c.id ? ' selected' : ''}${act ? ' can' : ''}`, act ? 'button' : 'div');
-      if (act) n.addEventListener('click', () => pickCard(c.id));
-      row.append(n);
-    }
-    rows.append(row);
+  // the Nobles, or the Cities in their place; the Trading Posts beside them
+  const top = el('div', 'top-row');
+  const tiles = el('div', 'nobles');
+  if (view.opts.cities) for (const c of view.cities) tiles.append(cityEl(view, c));
+  else {
+    for (const nb of view.nobles) tiles.append(nobleEl(nb));
+    if (!view.nobles.length) tiles.append(el('span', 'dim nobles-gone', 'Every Noble has been won.'));
   }
+  top.append(tiles);
+  if (view.opts.trading) {
+    const posts = el('div', 'posts');
+    for (const tp of view.posts) posts.append(postEl(view, tp));
+    top.append(posts);
+  }
+  wrap.append(top);
+
+  // The cards, level 3 at the top as the decks are laid out, each deck at
+  // the head of its row. The Orient cards sit to the right of the others —
+  // below them on a phone — and the cards are as wide as the room allows:
+  // eight across with the Orient, five without, the supply beside them, or
+  // below when that leaves the cards too small.
+  const market = el('div', `market${orient ? ' with-orient' : ''}`);
+  const fit = (room, cols) => Math.floor(room / cols);
+  let below = phone;
+  let cw;
+  if (phone) cw = fit(W - 24, 5);
+  else if (!orient) cw = fit(W - 90 - 42, 5);
+  else {
+    cw = fit(W - 90 - 84, 8);
+    if (cw < 72) {
+      below = true;
+      cw = fit(W - 84, 8);
+    }
+  }
+  cw = Math.max(48, Math.min(phone ? 78 : 92, cw));
+  market.style.setProperty('--mcw', `${cw}px`);
+  const block = (isOrient) => {
+    const b = el('div', `mblock${isOrient ? ' orient' : ' base'}`);
+    if (isOrient && phone) b.append(el('div', 'mblock-label', 'The Orient'));
+    for (const l of [3, 2, 1]) {
+      const row = el('div', `mrow lv${l}`);
+      const count = isOrient ? view.odecks[l] : view.decks[l];
+      const ok = act && count > 0 && my.reserved.length < RESERVE_LIMIT;
+      const on = sel && sel.level === l && !!sel.orient === isOrient;
+      const deck = cardBack(l, count, `deck${on ? ' selected' : ''}${ok ? ' can' : ''}${count ? '' : ' gone'}`, ok ? 'button' : 'div', isOrient);
+      if (ok) deck.addEventListener('click', () => pickDeck(l, isOrient));
+      row.append(deck);
+      for (const c of (isOrient ? view.omarket : view.market)[l]) row.append(c ? tableCardEl(view, c) : el('div', 'card empty'));
+      b.append(row);
+    }
+    return b;
+  };
+  market.append(block(false));
+  if (orient) market.append(block(true));
+
   // the supply
   const bank = el('div', 'bank');
   for (const t of TOKENS) {
@@ -1346,14 +1579,15 @@ function renderBoard(view) {
     if (can) n.addEventListener('click', () => pickGem(view, t));
     bank.append(n);
   }
-  const mid = el('div', 'mid');
-  mid.append(rows, bank);
+  const mid = el('div', `mid${below ? ' below' : ''}`);
+  mid.append(market, bank);
   wrap.append(mid);
   board.replaceChildren(wrap);
 }
 
 // A player's place at the table: Prestige points; bonuses and tokens gem by
-// gem — the cards bought above, the tokens held below; reserved cards; Nobles.
+// gem — the bonuses from cards bought above, the tokens held below; reserved
+// cards; Nobles; Trading Posts; Strongholds in hand.
 function playerEl(view, p, mine) {
   const discard = mine && canAct(view) && view.ask.kind === 'discard';
   const turnNow = view.turn === p.seat && view.phase !== 'over';
@@ -1364,23 +1598,31 @@ function playerEl(view, p, mine) {
   if (p.seat === view.you && !isObserver(view)) head.append(el('span', 'you-tag', 'you'));
   if (p.seat === view.first) {
     const f = el('span', 'first-tag', 'first');
-    f.dataset.tip = 'The First Player. Once someone reaches 15 Prestige points, the round ends with the player before them, so everyone plays as many turns.';
+    f.dataset.tip = view.opts.cities ? 'The First Player. Once someone meets a City, the round ends with the player before them, so everyone plays as many turns.' : 'The First Player. Once someone reaches 15 Prestige points, the round ends with the player before them, so everyone plays as many turns.';
     head.append(f);
   }
   if (turnNow) head.append(el('span', 'turn-tag', view.ask && view.ask.kind !== 'turn' ? '…' : 'turn'));
   const fromCards = p.cards.reduce((a, c) => a + c.points, 0);
   const pts = el('span', 'pl-pts', String(p.points));
-  pts.dataset.tip = `${p.points} Prestige point${p.points === 1 ? '' : 's'}${p.nobles.length ? `: ${fromCards} from cards, ${p.points - fromCards} from Noble${p.nobles.length === 1 ? '' : 's'}` : ''}. ${p.cards.length} card${p.cards.length === 1 ? '' : 's'} bought — fewer wins a tie.`;
+  const extra = [];
+  if (p.nobles.length) extra.push(`${p.nobles.length * 3} from Noble${p.nobles.length === 1 ? '' : 's'}`);
+  if (p.points - fromCards - p.nobles.length * 3 > 0) extra.push(`${p.points - fromCards - p.nobles.length * 3} from Trading Posts`);
+  pts.dataset.tip = `${p.points} Prestige point${p.points === 1 ? '' : 's'}${extra.length ? `: ${fromCards} from cards, ${listWords(extra)}` : ''}. ${p.cards.length} card${p.cards.length === 1 ? '' : 's'} bought — fewer wins a tie.`;
   head.append(pts);
   box.append(head);
 
   const gems = el('div', 'pl-gems');
   for (const t of TOKENS) {
     const col = el('div', `pg t-${t}`);
-    if (t === GOLD) col.append(el('span', 'pg-bonus blank', ''));
-    else {
+    if (t === GOLD) {
+      const gc = p.cards.filter((c) => c.kind === 'gold').length;
+      const b = el('span', `pg-bonus${gc ? ' goldcards' : ' blank'}`, gc ? `${gc}` : '');
+      if (gc) b.dataset.tip = `${gc} Gold card${gc === 1 ? '' : 's'}: each, discarded when buying, pays 2 Gold for that purchase.`;
+      col.append(b);
+    } else {
       const b = el('span', `pg-bonus${p.bonuses[t] ? '' : ' none'}`, String(p.bonuses[t]));
-      b.dataset.tip = `${p.bonuses[t]} ${gemName(t)} card${p.bonuses[t] === 1 ? '' : 's'} bought: ${p.bonuses[t]} ${gemName(t)} off every card.`;
+      const cards = p.counts[t];
+      b.dataset.tip = `${p.bonuses[t]} ${gemName(t)} bonus${p.bonuses[t] === 1 ? '' : 'es'}: ${p.bonuses[t]} ${gemName(t)} off every card.${cards !== p.bonuses[t] ? ` ${cards} ${gemName(t)} card${cards === 1 ? '' : 's'} for Nobles, Trading Posts and Cities.` : ''}`;
       b.dataset.tipKey = `bonus-${p.seat}-${t}`;
       col.append(b);
     }
@@ -1400,23 +1642,37 @@ function playerEl(view, p, mine) {
   const total = el('span', `pl-held${held(p) >= TOKEN_LIMIT - 1 ? ' full' : ''}`, `${held(p)}/${TOKEN_LIMIT}`);
   total.dataset.tip = `${held(p)} tokens in hand. At the end of a turn no one may hold more than ${TOKEN_LIMIT}.`;
   foot.append(total);
+  if (view.opts.strongholds) {
+    const h = el('span', `pl-holds s${p.seat % 8}`);
+    for (let i = 0; i < STRONGHOLDS; i++) h.append(el('i', i < p.holds ? 'in' : 'out', '♜'));
+    h.dataset.tip = `Strongholds: ${p.holds} of ${STRONGHOLDS} in hand${p.holds < STRONGHOLDS ? `, ${STRONGHOLDS - p.holds} on the table’s cards` : ''}.`;
+    foot.append(h);
+  }
   const res = el('div', 'pl-res');
-  const act = mine && canAct(view) && view.ask.kind === 'turn';
+  const act = mine && canAct(view) && (view.ask.kind === 'turn');
   for (const r of p.reserved) {
     if (r.hidden) {
-      res.append(cardBack(r.level, null, 'mini'));
+      res.append(cardBack(r.level, null, 'mini', 'div', r.orient));
       continue;
     }
     const afford = act && view.affordable.includes(r.id);
     const n = cardEl(r, view, `${mine ? 'held' : 'mini'}${afford ? ' afford' : ''}${sel && sel.card === r.id ? ' selected' : ''}${act ? ' can' : ''}${r.blind ? ' blind' : ''}`, act ? 'button' : 'div');
-    if (r.blind && p.seat === view.you) n.dataset.tip += ' Reserved unseen from the deck: the others see only its back.';
     if (act) n.addEventListener('click', () => pickCard(r.id));
+    if (r.blind && p.seat === view.you) n.dataset.tip += ' Reserved unseen from the deck: the others see only its back.';
     res.append(n);
   }
   if (p.reserved.length) {
     res.dataset.tip = `${p.reserved.length} reserved card${p.reserved.length === 1 ? '' : 's'} of ${RESERVE_LIMIT}. Only their holder can buy them.`;
     foot.append(res);
   } else if (mine) foot.append(el('span', 'dim pl-none', 'No reserved cards'));
+  if (p.posts.length) {
+    const ps = el('div', 'pl-posts');
+    for (const i of p.posts) {
+      const tp = view.posts.find((x) => x.i === i) || { i, ...TRADING_POSTS[i], owners: [] };
+      ps.append(postEl(view, { ...tp, owners: [] }, 'mini'));
+    }
+    foot.append(ps);
+  }
   if (p.nobles.length) {
     const nb = el('div', 'pl-nobles');
     for (const x of p.nobles) nb.append(nobleEl(x, 'mini'));
@@ -1465,32 +1721,147 @@ function renderAction(view) {
   const who = seatName(view, a.seat);
   const my = me(view);
   if (!mine) {
-    add('act-head', a.kind === 'turn' ? `${who}’s turn.` : a.kind === 'discard' ? `${who} gives back ${a.n} token${a.n === 1 ? '' : 's'} to keep ten.` : `${who} chooses which Noble visits.`);
+    const doing = {
+      turn: `${who}’s turn.`,
+      discard: `${who} gives back ${a.n} token${a.n === 1 ? '' : 's'} to keep ten.`,
+      noble: `${who} chooses which Noble visits.`,
+      post: `${who} chooses which Trading Post to open.`,
+      copy: `${who} chooses the colour of a copy card.`,
+      take: `${who} chooses a free level-${a.level} card.`,
+      gem: `${who}’s Trading Post brings them a gem.`,
+      third: `${who}’s Trading Post brings them a third gem.`,
+      draw2: `${who} looks at the top two cards of a deck.`,
+      hold: `${who} places a Stronghold.`,
+      conquest: `${who} may conquer the card their three Strongholds hold.`,
+    }[a.kind] || `${who} is choosing.`;
+    add('act-head', doing);
     if (a.kind === 'turn') add('act-sub', 'Take gems, reserve a card, or buy one.');
     return;
   }
 
-  if (a.kind === 'discard') {
-    const marked = sumOf(back);
-    add('act-head', `You hold ${held(my)} tokens: give ${a.n} back.`);
-    add('act-sub', marked ? `Going back: ${tokenWords(back)}${marked < a.n ? ` — ${a.n - marked} more` : ''}.` : 'Tap your tokens below to choose which go back to the supply.');
-    const r = row();
-    r.append(btn(marked === a.n ? `Give back ${tokenWords(back)}` : `Give back ${a.n}`, 'primary', () => send({ tokens: { ...back } }), marked !== a.n));
-    if (marked) r.append(btn('Clear', 'ghost', () => { back = {}; rerender(); }));
-    return;
-  }
-
-  if (a.kind === 'noble') {
-    add('act-head', 'More than one Noble would visit — choose one.');
-    add('act-sub', 'Only one comes each turn; the other may still visit at the end of a later turn.');
-    const r = el('div', 'card-row');
-    for (const nb of view.nobles.filter((x) => a.options.includes(x.id))) {
-      const n = nobleEl(nb, 'can', 'button');
-      n.addEventListener('click', () => send({ noble: nb.id }));
-      r.append(n);
+  switch (a.kind) {
+    case 'discard': {
+      const marked = sumOf(back);
+      add('act-head', `You hold ${held(my)} tokens: give ${a.n} back.`);
+      add('act-sub', marked ? `Going back: ${tokenWords(back)}${marked < a.n ? ` — ${a.n - marked} more` : ''}.` : 'Tap your tokens below to choose which go back to the supply.');
+      const r = row();
+      r.append(btn(marked === a.n ? `Give back ${tokenWords(back)}` : `Give back ${a.n}`, 'primary', () => send({ tokens: { ...back } }), marked !== a.n));
+      if (marked) r.append(btn('Clear', 'ghost', () => { back = {}; rerender(); }));
+      return;
     }
-    box.append(r);
-    return;
+    case 'noble': {
+      add('act-head', 'More than one Noble would visit — choose one.');
+      add('act-sub', `Only one comes each turn; the other${a.options.length > 2 ? 's' : ''} may still visit at the end of a later turn.`);
+      const r = el('div', 'card-row');
+      for (const nb of view.nobles.filter((x) => a.options.includes(x.id))) {
+        const n = nobleEl(nb, 'can', 'button');
+        n.addEventListener('click', () => send({ noble: nb.id }));
+        r.append(n);
+      }
+      box.append(r);
+      return;
+    }
+    case 'post': {
+      add('act-head', 'You can open more than one Trading Post — choose one.');
+      add('act-sub', `Only one a turn; the other${a.options.length > 2 ? 's' : ''} can be opened at the end of a later turn.`);
+      const r = el('div', 'card-row');
+      for (const i of a.options) {
+        const n = postEl(view, view.posts.find((x) => x.i === i), 'can', 'button');
+        n.addEventListener('click', () => send({ post: i }));
+        r.append(n);
+      }
+      box.append(r);
+      return;
+    }
+    case 'copy': {
+      add('act-head', 'Your copy card: which colour does it take?');
+      add('act-sub', 'It takes the colour and bonus of a card of yours, for the rest of the game.');
+      const r = row();
+      const byColour = new Map();
+      for (const id of a.options) {
+        const f = view.copyFaces && view.copyFaces[id];
+        if (f && f.bonus && !byColour.has(f.bonus)) byColour.set(f.bonus, id);
+      }
+      for (const [g, id] of byColour) {
+        const b = btn('', 'secondary gem-choice', () => send({ target: id }));
+        b.append(gemSvg(g), document.createTextNode(` ${gemName(g)} (${my.counts[g]} card${my.counts[g] === 1 ? '' : 's'})`));
+        r.append(b);
+      }
+      return;
+    }
+    case 'take': {
+      add('act-head', `Take a face-up level-${a.level} card for free — tap it on the table.`);
+      add('act-sub', 'You pay nothing, but its effects apply. It is not a purchase.');
+      const r = el('div', 'card-row');
+      for (const id of a.options) {
+        const c = findCard(view, id);
+        if (!c) continue;
+        const n = cardEl(c, view, 'can', 'button');
+        n.addEventListener('click', () => send({ card: id }));
+        r.append(n);
+      }
+      box.append(r);
+      return;
+    }
+    case 'gem':
+    case 'third': {
+      add('act-head', a.kind === 'gem' ? 'Your Trading Post: take a gem of any colour.' : `Your Trading Post: take a gem of another colour than ${gemName(a.not)}.`);
+      const r = el('div', 'pick-row');
+      for (const g of a.options) {
+        const t = tokenEl(g, null, 'can', 'button');
+        t.setAttribute('aria-label', `Take ${ONE_WORD[g]}`);
+        t.addEventListener('click', () => send({ gem: g }));
+        r.append(t);
+      }
+      box.append(r);
+      return;
+    }
+    case 'draw2': {
+      add('act-head', 'Your Trading Post: keep one of the top two cards; the other goes to the bottom of the deck.');
+      add('act-sub', 'The one you keep is reserved, unseen by the others.');
+      const r = el('div', 'card-row');
+      for (const c of view.look || []) {
+        const n = cardEl(c, view, 'can', 'button');
+        n.addEventListener('click', () => send({ keep: c.id }));
+        r.append(n);
+      }
+      box.append(r);
+      return;
+    }
+    case 'hold': {
+      const o = view.holdOptions;
+      add('act-head', 'Your purchase places a Stronghold — tap a card on the table.');
+      const ways = [];
+      if (!o.canPlace) ways.push('Knock a lone rival Stronghold off its card');
+      else {
+        if (!moving(view)) ways.push('Place one of yours on any card no rival holds');
+        else if (moveFrom == null) ways.push(`${my.holds === 0 ? 'All three of yours are out: tap' : 'Tap'} a card with one of yours on it, to move it from there`);
+        else ways.push('Now tap the card to move it to');
+        if (o.remove.length && moveFrom == null) ways.push('or knock a lone rival Stronghold off its card');
+      }
+      add('act-sub', `${ways.join(' — ')}. Only you may buy or reserve a card you hold; with all three on one card, you may buy it at the end of your action.`);
+      const r = row();
+      if (o.canPlace && my.holds > 0 && o.mine.length && !holdMove) r.append(btn('Move one of yours instead', 'ghost', () => { holdMove = true; rerender(); }));
+      if (holdMove) r.append(btn('Place one instead', 'ghost', () => { holdMove = false; moveFrom = null; rerender(); }));
+      else if (moveFrom != null) r.append(btn('Choose another card to move from', 'ghost', () => { moveFrom = null; rerender(); }));
+      return;
+    }
+    case 'conquest': {
+      const c = findCard(view, a.card);
+      const buy = view.buys[a.card];
+      add('act-head', 'All three of your Strongholds hold a card: conquer it now?');
+      if (c) {
+        const r = el('div', 'card-row');
+        r.append(cardEl(c, view));
+        box.append(r);
+      }
+      const r = row();
+      if (buy && buy.sacrifice) r.append(btn(`Buy it by discarding two ${gemName(buy.sacrifice.colour)} cards`, 'primary', () => send({ buy: true, discard: buy.plan.discard })));
+      else if (buy) for (const plan of buy.plans) r.append(btn(`Buy it ${payLabel(plan)}`, plan === buy.plans[0] ? 'primary' : 'secondary', () => send({ buy: true, goldCards: plan.goldCards })));
+      r.append(btn('Not now', 'ghost', () => send({ buy: false })));
+      return;
+    }
+    default:
   }
 
   // your turn
@@ -1519,33 +1890,91 @@ function renderAction(view) {
   }
   if (sel && sel.card != null) {
     const fromHand = my.reserved.find((c) => c.id === sel.card);
-    const c = fromHand || [1, 2, 3].flatMap((l) => view.market[l]).find((x) => x && x.id === sel.card);
+    const c = fromHand || tableCards(view).find((x) => x.id === sel.card);
     if (!c) { sel = null; return renderAction(view); }
     const head = add('act-head', '');
-    head.append(cardEl(c, view, 'inline'), document.createTextNode(` A level-${c.level} ${gemName(c.bonus)} card${c.points ? `, ${c.points} Prestige point${c.points === 1 ? '' : 's'}` : ''}.`));
-    const pay = payFor(my, c);
-    add('act-sub', affordWords(my, c));
-    const r = row();
-    r.append(btn(pay ? (sumOf(pay) ? `Buy it for ${tokenWords(pay)}` : 'Buy it with bonuses alone') : 'Buy it', 'primary', () => send({ kind: 'buy', card: c.id }), !pay));
-    if (!fromHand) {
-      const full = my.reserved.length >= RESERVE_LIMIT;
-      r.append(btn(full ? `Reserve it (${RESERVE_LIMIT} held already)` : `Reserve it${view.bank.gold ? ' and take a Gold' : ''}`, 'secondary', () => send({ kind: 'reserve', card: c.id }), full));
+    head.append(cardEl(c, view, 'inline'), document.createTextNode(` ${cardTitle(c)}${c.points ? `, ${c.points} Prestige point${c.points === 1 ? '' : 's'}` : ''}.`));
+    if (c.orient) add('act-sub', POWER_WORDS[c.kind]);
+    const buy = view.buys[c.id];
+    const blocked = blockedFor(view, c.id);
+    const buttons = [];
+    if (blocked) add('act-warn', 'A rival’s Stronghold is on it: only they may buy or reserve it.');
+    else if (buy && buy.sacrifice) {
+      // the copy cards of that colour go first: with two or fewer, they are
+      // fixed and the rest is chosen from the others; with more, two of them
+      const s = buy.sacrifice;
+      const fixed = s.copies.length <= 2 ? s.copies : [];
+      const choosable = s.copies.length <= 2 ? s.pool.filter((id) => !s.copies.includes(id)) : s.copies;
+      const free = 2 - fixed.length;
+      if (!discards) discards = buy.plan.discard.filter((id) => choosable.includes(id)).slice(0, free);
+      add('act-sub', `It costs two of your ${gemName(s.colour)} cards${s.must ? ` — your ${gemName(s.colour)} copy card${s.must === 2 ? 's' : ''} first` : ''}.${free > 0 && choosable.length > free ? ` Tap to choose ${free === 2 ? 'the two' : fixed.length ? 'the other' : 'the one'} to discard:` : ''}`);
+      const pick = el('div', 'card-row');
+      for (const id of s.pool) {
+        const f = my.cards.find((x) => x.id === id);
+        if (!f) continue;
+        const isFixed = fixed.includes(id);
+        const can = !isFixed && choosable.includes(id) && choosable.length > free;
+        const on = isFixed || discards.includes(id);
+        const n = cardEl(f, view, `mini${on ? ' picked' : ''}${can ? ' can' : ''}`, can ? 'button' : 'div');
+        if (can) n.addEventListener('click', () => {
+          discards = discards.includes(id) ? discards.filter((x) => x !== id) : [...discards, id].slice(-free);
+          rerender();
+        });
+        pick.append(n);
+      }
+      box.append(pick);
+      const chosen = [...fixed, ...discards];
+      buttons.push(btn('Buy it, discarding those two', 'primary', () => send({ kind: 'buy', card: c.id, discard: chosen }), chosen.length !== 2));
+    } else if (buy) {
+      for (const plan of buy.plans) buttons.push(btn(`Buy it ${payLabel(plan)}`, plan === buy.plans[0] ? 'primary' : 'secondary', () => send({ kind: 'buy', card: c.id, goldCards: plan.goldCards })));
+    } else {
+      add('act-sub', shortWords(view, my, c));
+      buttons.push(btn('Buy it', 'primary', () => {}, true));
     }
-    r.append(btn('Cancel', 'ghost', () => { sel = null; rerender(); }));
-    if (!fromHand && view.bank.gold && my.reserved.length < RESERVE_LIMIT && held(my) + 1 > TOKEN_LIMIT) add('act-note', 'Reserving brings a Gold — eleven tokens, so one would go back.');
+    if (!fromHand && !blocked) {
+      const full = my.reserved.length >= RESERVE_LIMIT;
+      buttons.push(btn(full ? `Reserve it (${RESERVE_LIMIT} held already)` : `Reserve it${view.bank.gold ? ' and take a Gold' : ''}`, 'secondary', () => send({ kind: 'reserve', card: c.id }), full));
+    }
+    buttons.push(btn('Cancel', 'ghost', () => { sel = null; rerender(); }));
+    row().append(...buttons);
+    if (!fromHand && !blocked && view.bank.gold && my.reserved.length < RESERVE_LIMIT && held(my) + 1 > TOKEN_LIMIT) add('act-note', 'Reserving brings a Gold — eleven tokens, so one would go back.');
     return;
   }
   if (sel && sel.level) {
-    add('act-head', `Reserve the top card of the level-${sel.level} deck, unseen${view.bank.gold ? ', and take a Gold' : ''}?`);
-    add('act-sub', 'You see it once it is yours; the others see only its level.');
+    add('act-head', `Reserve the top card of the level-${sel.level}${sel.orient ? ' Orient' : ''} deck, unseen${view.bank.gold ? ', and take a Gold' : ''}?`);
+    add('act-sub', my.posts.some((i) => TRADING_POSTS[i].power === 'draw2') ? 'Your Trading Post lets you draw two and keep one.' : 'You see it once it is yours; the others see only its level.');
     const r = row();
-    r.append(btn('Reserve it', 'primary', () => send({ kind: 'reserve', level: sel.level })));
+    r.append(btn('Reserve it', 'primary', () => send({ kind: 'reserve', level: sel.level, orient: !!sel.orient })));
     r.append(btn('Cancel', 'ghost', () => { sel = null; rerender(); }));
     return;
   }
   add('act-head', 'Your turn: take gems from the supply, or choose a card to buy or reserve.');
   const k = view.affordable.length;
   add('act-sub', k ? `You can buy ${k === 1 ? 'one card' : `${k} cards`} now — lit in gold.` : 'Three different gems, or two of one colour from a pile of four or more.');
+}
+
+const ONE_WORD = { diamond: 'a Diamond', sapphire: 'a Sapphire', emerald: 'an Emerald', ruby: 'a Ruby', onyx: 'an Onyx', gold: 'a Gold' };
+const MANY_WORD = { diamond: 'Diamonds', sapphire: 'Sapphires', emerald: 'Emeralds', ruby: 'Rubies', onyx: 'Onyx', gold: 'Gold' };
+
+// "a Sapphire, an Emerald and a Gold card"
+function payLabel(plan) {
+  const words = TOKENS.filter((t) => plan.pay[t]).map((t) => (plan.pay[t] === 1 ? ONE_WORD[t] : `${plan.pay[t]} ${MANY_WORD[t]}`));
+  if (plan.goldCards) words.push(plan.goldCards === 1 ? 'a Gold card' : `${plan.goldCards} Gold cards`);
+  return words.length ? `for ${listWords(words)}` : 'with bonuses alone';
+}
+
+// why a card cannot be bought yet
+function shortWords(view, p, c) {
+  if (isCopy(c) && !p.cards.some((x) => x.bonus)) return 'A copy card needs a card of yours with a bonus to match.';
+  if (c.kind === 'sacrifice') return `It takes two ${gemName(c.discard)} cards to discard; you have ${p.counts[c.discard]}.`;
+  const miss = {};
+  for (const g of GEMS) {
+    const m = Math.max(0, (c.cost[g] || 0) - p.bonuses[g] - p.tokens[g]);
+    if (m) miss[g] = m;
+  }
+  const gold = p.tokens.gold;
+  const gc = p.cards.filter((x) => x.kind === 'gold').length;
+  return `You are short ${tokenWords(miss)}${gold || gc ? `, less ${[gold ? `${gold} Gold` : '', gc ? `${gc} Gold card${gc === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ')}` : ''}.`;
 }
 
 // ---------------------------------------------------------------- what just happened
@@ -1573,6 +2002,7 @@ function stamp(seat, content, cls) {
 
 function showFx(view, f) {
   const name = seatName(view, f.seat);
+  const you = f.seat === view.you && !isObserver(view);
   const tokens = (t, sign) => GEMS.concat(GOLD).flatMap((g) => Array.from({ length: t[g] || 0 }, () => tokenEl(g, null, 'small'))).concat(sign ? [el('b', '', sign)] : []);
   switch (f.kind) {
     case 'take':
@@ -1580,13 +2010,23 @@ function showFx(view, f) {
     case 'return':
       return stamp(f.seat, [el('b', '', '−'), ...tokens(f.tokens)], 'return');
     case 'reserve':
-      return stamp(f.seat, [el('b', '', 'Reserves'), f.card ? cardEl(f.card, null, 'inline') : cardBack(f.level, null, 'inline')], 'reserve');
+      return stamp(f.seat, [el('b', '', 'Reserves'), f.card ? cardEl(f.card, null, 'inline') : cardBack(f.level, null, 'inline', 'div', f.orient)], 'reserve');
     case 'buy':
-      return stamp(f.seat, [cardEl(f.card, null, 'inline'), el('b', '', f.card.points ? `+${f.card.points}` : 'bought')], 'buy');
-    case 'noble':
-      return flash(`A Noble visits ${f.seat === view.you && !isObserver(view) ? 'you' : name}: +3`, 'noble');
+      return stamp(f.seat, [cardEl(f.card, null, 'inline'), el('b', '', f.free ? 'free' : f.conquest ? 'conquered' : f.card.points ? `+${f.card.points}` : 'bought')], 'buy');
+    case 'hold':
+      return stamp(f.seat, [el('b', '', '♜ Stronghold')], 'take');
+    case 'unhold':
+      return stamp(f.owner, [el('b', '', '♜ knocked off')], 'return');
+    case 'noble': {
+      const p = view.players.find((q) => q.seat === f.seat);
+      const nb = p && p.nobles.find((x) => x.id === f.noble);
+      return flash(`${nb ? nb.name : 'A Noble'} visits ${you ? 'you' : name}: +3`, 'noble');
+    }
+    case 'post':
+      return stamp(f.seat, [el('b', '', 'Trading Post')], 'buy');
     case 'ending':
-      return flash(`${f.seat === view.you && !isObserver(view) ? 'You reach' : `${name} reaches`} ${WIN_POINTS} — the last round`, 'plain');
+      if (f.city != null) return flash(`${you ? 'You meet' : `${name} meets`} ${CITIES[f.city].place} — the last round`, 'plain');
+      return flash(`${you ? 'You reach' : `${name} reaches`} ${WIN_POINTS} — the last round`, 'plain');
     default:
   }
 }
@@ -1623,7 +2063,7 @@ function renderGame(view, sess) {
   if (!canAct(view)) clearSel();
   // picks the supply can no longer give, and cards gone from the table
   picks = picks.filter((g) => view.bank[g] >= picks.filter((x) => x === g).length && (picks.filter((x) => x === g).length < 2 || view.bank[g] >= 4));
-  if (sel && sel.card != null && ![1, 2, 3].some((l) => view.market[l].some((c) => c && c.id === sel.card)) && !(me(view) && me(view).reserved.some((c) => c.id === sel.card))) sel = null;
+  if (sel && sel.card != null && !tableCards(view).some((c) => c.id === sel.card) && !(me(view) && me(view).reserved.some((c) => c.id === sel.card))) sel = null;
 
   $('#room-chip').textContent = view.code || '·····';
   const tc = $('#turn-chip');
@@ -1636,8 +2076,13 @@ function renderGame(view, sess) {
     const firstIdx = view.players.findIndex((p) => p.seat === view.first);
     const lastP = view.players[(firstIdx + view.players.length - 1) % view.players.length];
     lc.textContent = 'Last round';
-    lc.dataset.tip = `${seatName(view, view.ending)} reached ${WIN_POINTS}. The round ends with ${lastP.seat === view.you && !isObserver(view) ? 'you' : lastP.name}, so everyone plays as many turns.`;
+    lc.dataset.tip = `${seatName(view, view.ending)} ${view.opts.cities ? 'meets a City' : `reached ${WIN_POINTS}`}. The round ends with ${lastP.seat === view.you && !isObserver(view) ? 'you' : lastP.name}, so everyone plays as many turns.`;
   }
+  const mods = $('#mods-chip');
+  const on = MODULES.filter((m) => view.opts[m.key]).map((m) => m.name.replace(/^The /, '').replace(/^Their two /, '+2 '));
+  mods.classList.toggle('hidden', !on.length);
+  mods.textContent = on.join(' · ');
+  mods.dataset.tip = MODULES.filter((m) => view.opts[m.key]).map((m) => `${m.name} (${m.box}): ${m.text}`).join(' ');
 
   renderBoard(view);
   renderPlayers(view);
@@ -1681,12 +2126,17 @@ function showGameover(view, sess) {
   $('#go-sub').textContent = view.why ? `${view.why.charAt(0).toUpperCase()}${view.why.slice(1)}.` : '';
   const list = $('#go-rank');
   list.replaceChildren();
-  const order = view.players.slice().sort((a, b) => b.points - a.points || a.cards.length - b.cards.length);
+  const order = view.players.slice().sort((a, b) => (winners.includes(b.seat) - winners.includes(a.seat)) || b.points - a.points || a.cards.length - b.cards.length);
   for (const p of order) {
     const row = el('li', `rank-row${p.seat === view.you ? ' me' : ''}${winners.includes(p.seat) ? ' won' : ''}`);
     row.append(avatarEl(p.name, p.seat, p.bot));
     const nm = el('span', 'rank-name');
-    nm.append(el('b', '', p.name + (p.connected || p.bot ? '' : ' (left)')), el('small', '', `${p.cards.length} card${p.cards.length === 1 ? '' : 's'}${p.nobles.length ? ` · ${p.nobles.length} Noble${p.nobles.length === 1 ? '' : 's'}` : ''}`));
+    const bits = [`${p.cards.length} card${p.cards.length === 1 ? '' : 's'}`];
+    if (p.nobles.length) bits.push(`${p.nobles.length} Noble${p.nobles.length === 1 ? '' : 's'}`);
+    if (p.posts.length) bits.push(`${p.posts.length} Trading Post${p.posts.length === 1 ? '' : 's'}`);
+    const city = view.cities.find((c) => c.met.includes(p.seat));
+    if (city) bits.push(`meets ${city.place}`);
+    nm.append(el('b', '', p.name + (p.connected || p.bot ? '' : ' (left)')), el('small', '', bits.join(' · ')));
     row.append(nm, el('span', 'rank-score', String(p.points)));
     list.append(row);
   }

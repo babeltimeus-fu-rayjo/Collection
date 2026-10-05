@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Splendor — the gem merchants' game, online</title>
-  <meta name="description" content="Play Splendor online with 2 to 4 players: gather Diamonds, Sapphires, Emeralds, Rubies and Onyx, buy Development cards and win the Nobles' favour. All 90 cards and 10 Nobles. Peer-to-peer, with bots.">
+  <meta name="description" content="Play Splendor online with 2 to 4 players: gather Diamonds, Sapphires, Emeralds, Rubies and Onyx, buy Development cards and win the Nobles' favour. All 90 cards and 10 Nobles, and the four modules of The Silk Road and The Sun Never Sets. Peer-to-peer, with bots.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='4' y='4' width='92' height='92' rx='20' fill='%230c3433'/%3E%3Cpath d='M18 40 L34 20 H66 L82 40 L50 84 Z' fill='%23eaf2f6' stroke='%23e8c25a' stroke-width='4' stroke-linejoin='round'/%3E%3Cpath d='M18 40 H82 M34 20 L42 40 L50 84 L58 40 L66 20 M42 40 L50 20 L58 40' fill='none' stroke='%238aa3b3' stroke-width='3' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="style.css">
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -47,7 +47,7 @@
       <div class="logo-pre">Merchants of the Renaissance</div>
       <h1 class="logo">Splendor</h1>
     </div>
-    <p class="tagline">You are a Renaissance merchant in the gem trade. Take Diamonds, Sapphires, Emeralds, Rubies and Onyx; buy mines, caravans and shops whose bonuses make every later card cheaper; win the visits of the Nobles who admire them; and be the most prestigious when someone reaches 15. Two to four players, peer-to-peer: no accounts, no server, just a room code. Bots fill any empty seat.</p>
+    <p class="tagline">You are a Renaissance merchant in the gem trade. Take Diamonds, Sapphires, Emeralds, Rubies and Onyx; buy mines, caravans and shops whose bonuses make every later card cheaper; win the visits of the Nobles who admire them; and be the most prestigious when someone reaches 15. Two to four players, peer-to-peer: no accounts, no server, just a room code. Bots fill any empty seat. The host may add the expansions’ modules — the Cities, the Trading Posts, the Orient and the Strongholds.</p>
     <input id="name-input" class="field" maxlength="16" placeholder="Your name" autocomplete="nickname">
     <button id="btn-create" class="btn primary">Create a room</button>
     <div class="divider">or join one</div>
@@ -57,7 +57,7 @@
     </div>
     <div id="home-status" role="status"></div>
     <button class="btn ghost btn-rules" type="button">How to play</button>
-    <p class="small-print">An unofficial fan implementation of <b>Splendor</b> by Marc André (© Space Cowboys). All 90 Development cards are read off photographs of the printed cards and the 10 Nobles checked against a photograph of the tiles; the rules follow the publisher’s rulebook. Multiplayer runs over WebRTC: browsers find each other with Google STUN servers and a free signaling broker, then talk directly. The game lives in the host’s tab — keep it open!</p>
+    <p class="small-print">An unofficial fan implementation of <b>Splendor</b> by Marc André (© Space Cowboys). All 90 Development cards are read off photographs of the printed cards and the 10 Nobles checked against a photograph of the tiles; the rules follow the publisher’s rulebook. The expansions — The Silk Road and The Sun Never Sets — follow their rulebooks, with their cards and tiles from the licensed online edition, checked against the publisher’s photographs. Multiplayer runs over WebRTC: browsers find each other with Google STUN servers and a free signaling broker, then talk directly. The game lives in the host’s tab — keep it open!</p>
   </section>
 
   <!-- LOBBY -->
@@ -70,6 +70,8 @@
         <button id="btn-copy-link" class="btn ghost" type="button">Copy invite link</button>
       </div>
       <ul id="lobby-players"></ul>
+      <div class="lobby-label">The expansions</div>
+      <div id="module-picker"></div>
       <div class="lobby-label">The supply</div>
       <div id="cast-summary"></div>
       <div id="lobby-hint"></div>
@@ -88,6 +90,7 @@
       <span id="room-chip">·····</span>
       <span id="turn-chip"></span>
       <span id="last-chip" class="hidden"></span>
+      <span id="mods-chip" class="hidden"></span>
       <span class="spacer"></span>
       <button class="btn ghost btn-rules" type="button">Rules</button>
       <button class="btn ghost btn-leave" type="button">Leave</button>
@@ -124,7 +127,16 @@
         <li><b>The end.</b> When someone has 15 or more Prestige points at the end of their turn, the round is played out so everyone has had as many turns. The most Prestige points wins; on a tie, whoever bought fewer Development cards; if that ties too, they share the victory.</li>
         <li><b>At this table.</b> Tap gems in the supply to pick them, then take them; tap a card or a deck to buy or reserve it. Cards you can afford are lit in gold. Point at or tap anything to see what it means.</li>
       </ol>
-      <p class="credit"><b>Splendor</b> is by Marc André, published by Space Cowboys. This is an unofficial fan implementation. The 90 Development cards were read one by one off photographs of the printed cards and agree card for card with two independent transcriptions; the 10 Noble tiles agree across four transcriptions and with a photograph of the tiles; the rules follow Space Cowboys’ rulebook.</p>
+      <h3 class="rules-h">The expansions</h3>
+      <p class="rules-intro">The host chooses them in the lobby, alone or together. Each box has two modules.</p>
+      <ul class="rules">
+        <li><b>The Cities</b> <i>(The Silk Road)</i>. Three City tiles, each with a random side up, take the Nobles’ place. A City asks for Prestige points and cards; a grey square with a number asks for that many cards of one colour the tile names nowhere else. At the end of your turn, if you have the points and the cards a City asks for, the round is played out — 15 points alone no longer end the game. Then whoever meets a City wins; if several do, the most Prestige points among them, then the fewest cards.</li>
+        <li><b>The Trading Posts</b> <i>(The Silk Road)</i>. Five powers, one tile of each for every player. At the end of your turn, after the Nobles, you take a Trading Post whose cards you have — one a turn — and keep its power to the end. Its five powers: after you buy a card, take a gem of any colour; after you take two gems of one colour, take one of another; each Gold you spend buying is worth two gems of one colour; reserving from a deck, draw two and keep one, the other to the bottom; and 1 Prestige point for every Trading Post you have.</li>
+        <li><b>The Orient</b> <i>(The Sun Never Sets)</i>. A deck of Orient cards for each level, two of them face up at the end of each row, bought and reserved as any card. Their powers act when you buy them. Gold cards have no colour: discard one while buying, and it pays 2 Gold for that card. Copy cards take the colour and bonus of a card you have — you need one to buy them — and the level-2 ones also take a face-up level-1 card for free. Double cards bring two bonuses of their colour but count as one card for Nobles, Trading Posts and Cities. Some level-3 cards take a face-up level-2 card for free; that card is not a purchase. Others are bought not with gems but by discarding two cards of the colour shown — copy cards of that colour first.</li>
+        <li><b>The Strongholds</b> <i>(The Sun Never Sets)</i>. Three Strongholds each. Every time you buy a card, before the table is refilled, you must place or move one of yours onto a face-up card no rival holds, or knock a lone rival Stronghold off its card. Only the player whose Strongholds are on a card may buy or reserve it. With all three of yours on one card, you may buy it at the end of your action, before the ten-token limit and the Nobles.</li>
+        <li><b>Their two Nobles</b>. Each box adds a Noble tile to the ten: Rani Chennabhairadevi and Hino Tomiko.</li>
+      </ul>
+      <p class="credit"><b>Splendor</b> is by Marc André, published by Space Cowboys. This is an unofficial fan implementation. The 90 Development cards were read one by one off photographs of the printed cards and agree card for card with two independent transcriptions; the 10 Noble tiles agree across four transcriptions and with a photograph of the tiles; the rules follow Space Cowboys’ rulebook. The expansions follow the two expansion rulebooks; their 30 Orient cards, 7 City tiles and 2 Nobles are taken from Board Game Arena’s licensed edition and agree with every one the publisher’s product photographs show. One City side, Madrid’s second, is provisional: no photograph shows it, and that edition lists it twice, differently — the one used is the entry whose text and cost agree.</p>
       <button id="btn-rules-close" class="btn secondary" type="button">Got it</button>
     </div>
   </div>
