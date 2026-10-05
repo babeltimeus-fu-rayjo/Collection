@@ -92,6 +92,10 @@
     .art.skull { background: linear-gradient(150deg, #1b2a47, #0d1526); }
     .art.harmonies { background: linear-gradient(150deg, #1b3a2a, #0c1d14); }
     .art.mahjong { background: linear-gradient(150deg, #0d3320, #061a10); }
+    .art.spl { background: radial-gradient(120% 90% at 50% 0%, #17504d, #051a1b 72%); grid-auto-flow: column; justify-content: center; align-items: center; gap: 10px; }
+    .art.spl i { display: block; width: 38px; height: 38px; border-radius: 50%; background: radial-gradient(circle, #f3e9d0 0 48%, #cdbb93 50%, var(--c) 53% 100%); border: 2px solid rgba(0, 0, 0, .35); box-shadow: 0 3px 8px rgba(0, 0, 0, .5); }
+    .art.spl i:nth-child(2), .art.spl i:nth-child(4) { transform: translateY(-10px); }
+    .art.spl i:nth-child(3) { transform: translateY(-16px); }
     .art.bng { background: radial-gradient(120% 90% at 50% 0%, #6e3c1c, #1d0f07 72%); grid-auto-flow: column; justify-content: center; gap: 16px; }
     .art.bng .star { filter: drop-shadow(0 4px 8px rgba(0, 0, 0, .5)); }
     .art.bng .star i { display: block; width: 58px; height: 58px; background: linear-gradient(180deg, #ffe08a, #c98f24); clip-path: polygon(50% 0%, 64% 25.8%, 93.3% 25%, 78% 50%, 93.3% 75%, 64% 74.2%, 50% 100%, 36% 74.2%, 6.7% 75%, 22% 50%, 6.7% 25%, 36% 25.8%); }
@@ -397,6 +401,21 @@
   <p class="sub">Games that run entirely in your browser. Share a room code to play with friends peer-to-peer — most games can fill empty seats with bots. No accounts, no downloads, no server.</p>
 
   <main class="shelf">
+    <a class="game" href="./splendor/">
+      <div class="art spl">
+        <i style="--c: #eef2f5"></i><i style="--c: #2d66c8"></i><i style="--c: #1f8f55"></i><i style="--c: #c8342d"></i><i style="--c: #2e2927"></i>
+      </div>
+      <div class="body">
+        <div class="title-row">
+          <span class="name">Splendor</span>
+          <span class="players">2–4 players</span>
+        </div>
+        <p class="blurb">Renaissance gem merchants. Take Diamonds, Sapphires, Emeralds, Rubies and Onyx; buy cards whose bonuses make every later card cheaper; win the Nobles’ visits; first to 15 Prestige ends the round.</p>
+        <div class="tags"><span class="tag">engine building</span><span class="tag">cards</span><span class="tag">bots</span><span class="tag">~30 min</span></div>
+        <span class="play">Play Splendor →</span>
+      </div>
+    </a>
+
     <a class="game" href="./bang/">
       <div class="art bng">
         <span class="star"><i></i></span>
