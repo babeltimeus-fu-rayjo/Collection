@@ -1366,10 +1366,12 @@ function tableauEl(view) {
 
 function renderBoard(view) {
   const board = $('#board');
-  board.replaceChildren();
+  // Measured before anything is taken away, and swapped in whole at the end:
+  // an empty board would shrink the page for a moment, and the browser would
+  // pull a phone scrolled down to the vote record back to the top on every move.
+  const wide = (board.clientWidth || document.documentElement.clientWidth) >= 640;
   const ring = el('div', 'ring');
   const n = view.players.length;
-  const wide = (board.clientWidth || document.documentElement.clientWidth) >= 640;
   ring.classList.toggle('round', wide);
   ring.classList.add(`n${n}`);
   const youIdx = Math.max(0, view.players.findIndex((p) => p.seat === view.you));
@@ -1385,7 +1387,7 @@ function renderBoard(view) {
     }
     ring.append(s);
   }
-  board.append(ring);
+  board.replaceChildren(ring);
 }
 
 // ---------------------------------------------------------------- the action panel
