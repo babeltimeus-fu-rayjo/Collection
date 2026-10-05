@@ -1120,7 +1120,7 @@ function cardTitle(c) {
 function cardTipText(c, view) {
   const parts = [`${cardTitle(c)}${c.points ? `, ${c.points} Prestige point${c.points === 1 ? '' : 's'}` : ''}: ${c.kind === 'sacrifice' ? `costs two ${gemName(c.discard)} cards, discarded` : `costs ${tokenWords(c.cost) || 'nothing'}`}.`];
   if (c.orient) parts.push(POWER_WORDS[c.kind]);
-  else parts.push(`Bought, it is a ${gemName(c.bonus)} bonus for good — one ${gemName(c.bonus)} off every later card.`);
+  else parts.push(`Bought, it is ${ONE_WORD[c.bonus]} bonus for good — one ${gemName(c.bonus)} off every later card.`);
   const my = view && !isObserver(view) ? me(view) : null;
   if (my && (tableCards(view).some((x) => x.id === c.id) || my.reserved.some((r) => r.id === c.id))) {
     const buy = view.buys[c.id];
