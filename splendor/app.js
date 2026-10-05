@@ -1121,8 +1121,12 @@ function cardTipText(c, view) {
   const parts = [`${cardTitle(c)}${c.points ? `, ${c.points} Prestige point${c.points === 1 ? '' : 's'}` : ''}: ${c.kind === 'sacrifice' ? `costs two ${gemName(c.discard)} cards, discarded` : `costs ${tokenWords(c.cost) || 'nothing'}`}.`];
   if (c.orient) parts.push(POWER_WORDS[c.kind]);
   else parts.push(`Bought, it is a ${gemName(c.bonus)} bonus for good — one ${gemName(c.bonus)} off every later card.`);
-  const buy = view && view.buys && view.buys[c.id];
-  if (buy) parts.push(buyWords(buy));
+  const my = view && !isObserver(view) ? me(view) : null;
+  if (my && (tableCards(view).some((x) => x.id === c.id) || my.reserved.some((r) => r.id === c.id))) {
+    const buy = view.buys[c.id];
+    if (buy) parts.push(buyWords(buy));
+    else if (!blockedFor(view, c.id)) parts.push(shortWords(view, my, c));
+  }
   return parts.join(' ');
 }
 
@@ -1162,7 +1166,8 @@ function holdMarks(view, seats) {
   const box = el('span', 'holds');
   for (const s of seats) box.append(el('i', `hold s${s % 8}`, '♜'));
   const owner = seatName(view, seats[0]);
-  box.dataset.tip = `${seats.length} of ${owner === seatName(view, view.you) && !isObserver(view) ? 'your' : `${owner}’s`} Strongholds: only ${owner === seatName(view, view.you) && !isObserver(view) ? 'you' : owner} may buy or reserve this card.${seats.length === STRONGHOLDS ? ' All three: it can be conquered — bought at the end of an action.' : ''}`;
+  const yours = seats[0] === view.you && !isObserver(view);
+  box.dataset.tip = `${seats.length} of ${yours ? 'your' : `${owner}’s`} Strongholds: only ${yours ? 'you' : owner} may buy or reserve this card.${seats.length === STRONGHOLDS ? ' All three: it can be conquered — bought at the end of an action.' : ''}`;
   return box;
 }
 
@@ -1855,10 +1860,11 @@ function renderAction(view) {
         r.append(cardEl(c, view));
         box.append(r);
       }
-      const r = row();
-      if (buy && buy.sacrifice) r.append(btn(`Buy it by discarding two ${gemName(buy.sacrifice.colour)} cards`, 'primary', () => send({ buy: true, discard: buy.plan.discard })));
-      else if (buy) for (const plan of buy.plans) r.append(btn(`Buy it ${payLabel(plan)}`, plan === buy.plans[0] ? 'primary' : 'secondary', () => send({ buy: true, goldCards: plan.goldCards })));
-      r.append(btn('Not now', 'ghost', () => send({ buy: false })));
+      const buttons = [];
+      if (buy && buy.sacrifice) buttons.push(sacrificeChooser(view, box, buy, (discard) => send({ buy: true, discard })));
+      else if (buy) for (const plan of buy.plans) buttons.push(btn(`Buy it ${payLabel(plan)}`, plan === buy.plans[0] ? 'primary' : 'secondary', () => send({ buy: true, goldCards: plan.goldCards })));
+      buttons.push(btn('Not now', 'ghost', () => send({ buy: false })));
+      row().append(...buttons);
       return;
     }
     default:
@@ -1899,33 +1905,8 @@ function renderAction(view) {
     const blocked = blockedFor(view, c.id);
     const buttons = [];
     if (blocked) add('act-warn', 'A rival’s Stronghold is on it: only they may buy or reserve it.');
-    else if (buy && buy.sacrifice) {
-      // the copy cards of that colour go first: with two or fewer, they are
-      // fixed and the rest is chosen from the others; with more, two of them
-      const s = buy.sacrifice;
-      const fixed = s.copies.length <= 2 ? s.copies : [];
-      const choosable = s.copies.length <= 2 ? s.pool.filter((id) => !s.copies.includes(id)) : s.copies;
-      const free = 2 - fixed.length;
-      if (!discards) discards = buy.plan.discard.filter((id) => choosable.includes(id)).slice(0, free);
-      add('act-sub', `It costs two of your ${gemName(s.colour)} cards${s.must ? ` — your ${gemName(s.colour)} copy card${s.must === 2 ? 's' : ''} first` : ''}.${free > 0 && choosable.length > free ? ` Tap to choose ${free === 2 ? 'the two' : fixed.length ? 'the other' : 'the one'} to discard:` : ''}`);
-      const pick = el('div', 'card-row');
-      for (const id of s.pool) {
-        const f = my.cards.find((x) => x.id === id);
-        if (!f) continue;
-        const isFixed = fixed.includes(id);
-        const can = !isFixed && choosable.includes(id) && choosable.length > free;
-        const on = isFixed || discards.includes(id);
-        const n = cardEl(f, view, `mini${on ? ' picked' : ''}${can ? ' can' : ''}`, can ? 'button' : 'div');
-        if (can) n.addEventListener('click', () => {
-          discards = discards.includes(id) ? discards.filter((x) => x !== id) : [...discards, id].slice(-free);
-          rerender();
-        });
-        pick.append(n);
-      }
-      box.append(pick);
-      const chosen = [...fixed, ...discards];
-      buttons.push(btn('Buy it, discarding those two', 'primary', () => send({ kind: 'buy', card: c.id, discard: chosen }), chosen.length !== 2));
-    } else if (buy) {
+    else if (buy && buy.sacrifice) buttons.push(sacrificeChooser(view, box, buy, (discard) => send({ kind: 'buy', card: c.id, discard })));
+    else if (buy) {
       for (const plan of buy.plans) buttons.push(btn(`Buy it ${payLabel(plan)}`, plan === buy.plans[0] ? 'primary' : 'secondary', () => send({ kind: 'buy', card: c.id, goldCards: plan.goldCards })));
     } else {
       add('act-sub', shortWords(view, my, c));
@@ -1951,6 +1932,37 @@ function renderAction(view) {
   add('act-head', 'Your turn: take gems from the supply, or choose a card to buy or reserve.');
   const k = view.affordable.length;
   add('act-sub', k ? `You can buy ${k === 1 ? 'one card' : `${k} cards`} now — lit in gold.` : 'Three different gems, or two of one colour from a pile of four or more.');
+}
+
+// The two cards a sacrifice card takes, as the player chooses them: the copy
+// cards of its colour go first — with two or fewer, they are fixed and the
+// rest is chosen from the others; with more, two of them. Shown in the action
+// panel; returns the button that buys with the two chosen.
+function sacrificeChooser(view, box, buy, go) {
+  const my = me(view);
+  const s = buy.sacrifice;
+  const fixed = s.copies.length <= 2 ? s.copies : [];
+  const choosable = s.copies.length <= 2 ? s.pool.filter((id) => !s.copies.includes(id)) : s.copies;
+  const free = 2 - fixed.length;
+  if (!discards) discards = buy.plan.discard.filter((id) => choosable.includes(id)).slice(0, free);
+  box.append(el('p', 'act-sub', `It costs two of your ${gemName(s.colour)} cards${s.must ? ` — your ${gemName(s.colour)} copy card${s.must === 2 ? 's' : ''} first` : ''}.${free > 0 && choosable.length > free ? ` Tap to choose ${free === 2 ? 'the two' : fixed.length ? 'the other' : 'the one'} to discard:` : ''}`));
+  const pick = el('div', 'card-row');
+  for (const id of s.pool) {
+    const f = my.cards.find((x) => x.id === id);
+    if (!f) continue;
+    const isFixed = fixed.includes(id);
+    const can = !isFixed && free > 0 && choosable.includes(id) && choosable.length > free;
+    const on = isFixed || discards.includes(id);
+    const n = cardEl(f, view, `mini${on ? ' picked' : ''}${can ? ' can' : ''}`, can ? 'button' : 'div');
+    if (can) n.addEventListener('click', () => {
+      discards = discards.includes(id) ? discards.filter((x) => x !== id) : [...discards, id].slice(-free);
+      rerender();
+    });
+    pick.append(n);
+  }
+  box.append(pick);
+  const chosen = [...fixed, ...discards];
+  return btn('Buy it, discarding those two', 'primary', () => go(chosen), chosen.length !== 2);
 }
 
 const ONE_WORD = { diamond: 'a Diamond', sapphire: 'a Sapphire', emerald: 'an Emerald', ruby: 'a Ruby', onyx: 'an Onyx', gold: 'a Gold' };

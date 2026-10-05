@@ -207,6 +207,7 @@ export const score = (G, p) => p.cards.reduce((s, id) => s + G.cards[id].points,
 
 const marketIds = (G) => LEVELS.flatMap((l) => [...G.market[l], ...G.omarket[l]].filter((id) => id != null));
 function slotOf(G, id) {
+  if (id == null) return null;
   for (const l of LEVELS) {
     let i = G.market[l].indexOf(id);
     if (i >= 0) return { row: 'market', l, i };
@@ -232,22 +233,20 @@ export function payPlan(G, p, c, k = 0) {
   const b = bonuses(G, p);
   const per = hasPost(p, 'gold') ? 2 : 1;
   const goldCards = p.cards.filter((id) => G.cards[id].kind === 'gold');
-  if (k > goldCards.length) return null;
+  if (k < 0 || k > goldCards.length) return null;
   const rem = {};
-  let total = 0;
-  for (const g of GEMS) {
-    rem[g] = Math.max(0, (c.cost[g] || 0) - b[g]);
-    total += rem[g];
-  }
-  if (k > 0 && total <= 2 * (k - 1) * per) return null;
+  for (const g of GEMS) rem[g] = Math.max(0, (c.cost[g] || 0) - b[g]);
   const short = (g) => Math.max(0, rem[g] - p.tokens[g]);
+  let used = 0;
   for (let v = 2 * k; v > 0; v--) {
     let pick = null;
     for (const g of GEMS) if (short(g) > 0 && (pick == null || short(g) > short(pick))) pick = g;
     if (pick == null) for (const g of GEMS) if (rem[g] > 0 && (pick == null || rem[g] > rem[pick])) pick = g;
     if (pick == null) break;
     rem[pick] = Math.max(0, rem[pick] - per);
+    used++;
   }
+  if (k > 0 && used <= 2 * (k - 1)) return null;
   const pay = zero();
   let need = 0;
   for (const g of GEMS) {
@@ -281,8 +280,9 @@ export function buyPlan(G, p, id) {
   if (c.kind === 'sacrifice') {
     const s = sacrificeFor(G, p, c);
     if (!s.ok) return null;
-    const rest = s.pool.filter((x) => !s.copies.includes(x)).sort((a, b) => G.cards[a].points - G.cards[b].points || (G.cards[a].kind === 'double') - (G.cards[b].kind === 'double'));
-    return { discard: [...s.copies.slice(0, 2), ...rest].slice(0, 2) };
+    const cheap = (a, b) => G.cards[a].points - G.cards[b].points || (G.cards[a].kind === 'double') - (G.cards[b].kind === 'double');
+    const rest = s.pool.filter((x) => !s.copies.includes(x)).sort(cheap);
+    return { discard: [...s.copies.slice().sort(cheap).slice(0, 2), ...rest].slice(0, 2) };
   }
   const goldCards = p.cards.filter((x) => G.cards[x].kind === 'gold').length;
   for (let k = 0; k <= goldCards; k++) {
@@ -392,6 +392,7 @@ function advance(G) {
           G.ask = { kind: 'conquest', seat: p.seat, card: id };
           return;
         }
+        refill(G);
         continue;
       }
       case 'limit': {
@@ -528,6 +529,7 @@ function answer(G, p, a, move) {
     case 'conquest': {
       if (!move.buy) {
         G.ask = null;
+        refill(G);
         return { ok: true };
       }
       G.ask = null;
@@ -805,6 +807,9 @@ function runTask(G, p, task) {
       return;
     }
     case 'refill':
+      // the action's empty places wait while a Conquest may follow: "Finally,
+      // she places 1 Stronghold on card C and replaces both purchased cards"
+      if (G.stage === 'conquest' && G.opts.strongholds) return;
       refill(G);
       return;
     default:
@@ -904,9 +909,8 @@ export function viewFor(G, seat, code, opts = {}) {
   const over = G.phase === 'over';
   const mine = me && G.ask && G.ask.seat === seat;
   const buys = {};
-  if (mine && (G.ask.kind === 'turn' || G.ask.kind === 'conquest')) {
-    const ids = G.ask.kind === 'conquest' ? [G.ask.card] : affordable(G, me);
-    for (const id of ids) {
+  if (me && !over) {
+    for (const id of affordable(G, me)) {
       const c = G.cards[id];
       if (c.kind === 'sacrifice') {
         const s = sacrificeFor(G, me, c);
@@ -952,7 +956,7 @@ export function viewFor(G, seat, code, opts = {}) {
         turns: p.turns,
       };
     }),
-    ask: G.ask ? { ...G.ask } : null,
+    ask: G.ask ? (G.ask.kind === 'draw2' && !mine ? { kind: 'draw2', seat: G.ask.seat, level: G.ask.level, orient: G.ask.orient } : { ...G.ask }) : null,
     look: mine && G.ask.kind === 'draw2' ? G.ask.options.map((id) => faceOf(G, null, id)) : null,
     copyFaces: mine && G.ask.kind === 'copy' ? Object.fromEntries(G.ask.options.map((id) => [id, faceOf(G, me, id)])) : null,
     affordable: Object.keys(buys).map(Number),
@@ -1323,6 +1327,7 @@ export function botChoose(G, seat, weights = BOT) {
         const want = bestCard(G, p, o.to, ctx);
         const target = o.mine.find((id) => o.to.includes(id) && (G.holds[id] || []).length < STRONGHOLDS) ?? want;
         if (p.holds > 0) return { to: target };
+        if (o.remove.length && o.mine.some((id) => (G.holds[id] || []).length === STRONGHOLDS)) return { remove: bestCard(G, p, o.remove, ctx) };
         const from = o.mine.find((x) => x !== target);
         if (from != null) return { to: target, from };
         // every Stronghold already on the target: move one anywhere else

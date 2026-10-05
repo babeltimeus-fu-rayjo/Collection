@@ -40,6 +40,8 @@ function census(G, start) {
   (G.look || []).forEach((id) => put(id, 'the Trading Post’s choice'));
   if (seen.size !== G.cards.length) fail(`${seen.size} cards accounted for, not ${G.cards.length}`);
   if (G.out.some((id) => G.cards[id].kind !== 'gold' && !isSacrificed(G, id))) fail('a card in the box that should not be');
+  // a Noble's holder meets its demand — unless a sacrifice card took cards away
+  if (!G.opts.orient) for (const p of G.players) for (const id of p.nobles) if (!S.meets(G, p, G.nobles[id])) fail(`${p.name} has a Noble without the bonuses`);
   // Nobles: one more than players, on the table or with someone — none with the Cities
   const nob = G.nobleRow.length + G.players.reduce((a, p) => a + p.nobles.length, 0);
   if (nob !== (G.opts.cities ? 0 : G.n + 1)) fail(`${nob} Nobles in the game`);
@@ -59,7 +61,8 @@ function census(G, start) {
   // Trading Posts: each claimed once, by someone who met it then
   for (const p of G.players) if (new Set(p.posts).size !== p.posts.length) fail(`${p.name} has a Trading Post twice`);
 }
-const isSacrificed = () => true;
+const sacrificed = new Set();
+const isSacrificed = (G, id) => sacrificed.has(id);
 
 function invariants(G) {
   if (G.phase === 'over') return;
@@ -89,16 +92,17 @@ const stats = { 2: [], 3: [], 4: [] };
 let moves = 0;
 const firstWins = { 2: 0, 3: 0, 4: 0 };
 const byMix = {};
-// every mix of the four modules, the base game first; the two extra Nobles
-// come along every other game they can
+// every mix of the four modules at every size, the base game first; the two
+// extra Nobles come along in every other round of 48 games
 const MIXES = [];
 for (let m = 0; m < 16; m++) MIXES.push({ cities: !!(m & 1), trading: !!(m & 2), orient: !!(m & 4), strongholds: !!(m & 8) });
 for (let g = 0; g < GAMES; g++) {
   const n = 2 + (g % 3);
-  const opts = { ...MIXES[Math.floor(g / 3) % MIXES.length], nobles: g % 2 === 1 };
+  const opts = { ...MIXES[Math.floor(g / 3) % MIXES.length], nobles: Math.floor(g / 48) % 2 === 1 };
   const mix = Object.keys(opts).filter((k) => opts[k] && k !== 'nobles').join('+') || 'base';
   const G = S.newGame(Array.from({ length: n }, (_, i) => ({ seat: i, name: 'Bot' + i, bot: true })), opts);
   const start = { ...G.bank };
+  sacrificed.clear();
   census(G, start);
   let k = 0;
   while (G.phase !== 'over' && k < 2000) {
@@ -107,6 +111,7 @@ for (let g = 0; g < GAMES; g++) {
     if (!m) { fail(`game ${g}: no answer to ${a.kind}`); break; }
     const r = S.applyMove(G, a.seat, m);
     if (!r.ok) { fail(`game ${g}: illegal ${JSON.stringify(m)}: ${r.error}`); break; }
+    for (const id of m.discard || []) sacrificed.add(id);
     k++;
     census(G, start);
     invariants(G);
