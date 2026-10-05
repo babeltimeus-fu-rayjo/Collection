@@ -92,6 +92,11 @@
     .art.skull { background: linear-gradient(150deg, #1b2a47, #0d1526); }
     .art.harmonies { background: linear-gradient(150deg, #1b3a2a, #0c1d14); }
     .art.mahjong { background: linear-gradient(150deg, #0d3320, #061a10); }
+    .art.avl { background: radial-gradient(120% 90% at 50% 0%, #26355f, #0b1124 70%); }
+    .art.avl .quests { display: flex; gap: 7px; }
+    .art.avl .quests i { width: 30px; height: 30px; border-radius: 50%; border: 2px solid rgba(227, 196, 106, .6); background: #18234a; box-shadow: 0 3px 8px rgba(0, 0, 0, .45); }
+    .art.avl .quests i.g { background: radial-gradient(circle at 50% 35%, #5b9cf0, #23488a); border-color: #a9cbff; }
+    .art.avl .quests i.e { background: radial-gradient(circle at 50% 35%, #e0574f, #7d221d); border-color: #ff9e96; }
     .art.chg { background: linear-gradient(150deg, #173a5e, #081424); }
     .art.chg .cards { display: flex; gap: 6px; align-items: flex-end; position: relative; margin-top: 18px; }
     .art.chg .cards i { display: block; width: 34px; height: 48px; border-radius: 5px; background: #fbf7ea; border: 3px solid; box-shadow: 0 3px 8px rgba(0, 0, 0, .4); }
@@ -388,6 +393,21 @@
   <p class="sub">Games that run entirely in your browser. Share a room code to play with friends peer-to-peer — most games can fill empty seats with bots. No accounts, no downloads, no server.</p>
 
   <main class="shelf">
+    <a class="game" href="./avalon/">
+      <div class="art avl">
+        <span class="quests"><i class="g"></i><i class="e"></i><i class="g"></i><i></i><i></i></span>
+      </div>
+      <div class="body">
+        <div class="title-row">
+          <span class="name">Avalon</span>
+          <span class="players">5–10 players</span>
+        </div>
+        <p class="blurb">The Resistance: Avalon. Loyal Servants of Arthur against the hidden Minions of Mordred: pick Teams, vote in the open, fail Quests in secret — and keep Merlin safe from the Assassin.</p>
+        <div class="tags"><span class="tag">hidden roles</span><span class="tag">social deduction</span><span class="tag">bots</span><span class="tag">~30 min</span></div>
+        <span class="play">Play Avalon →</span>
+      </div>
+    </a>
+
     <a class="game" href="./challengers/">
       <div class="art chg">
         <span class="cards"><i></i><i></i><i></i></span>

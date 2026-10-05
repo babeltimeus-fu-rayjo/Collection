@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Avalon — The Resistance, online</title>
+  <meta name="description" content="Play The Resistance: Avalon online with 5 to 10 players: Loyal Servants of Arthur against the Minions of Mordred, Merlin, Percival, Morgana, Mordred, Oberon and the Lady of the Lake. Peer-to-peer, with bots.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='6' y='6' width='88' height='88' rx='20' fill='%23101a33'/%3E%3Cpath d='M50 16 L78 28 L74 62 Q66 80 50 88 Q34 80 26 62 L22 28 Z' fill='%233f7fd8' stroke='%23e3c46a' stroke-width='5'/%3E%3Cpath d='M50 30 L50 72 M38 44 L62 44' stroke='%23f2e8cf' stroke-width='7' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body>
+
+  <!-- HOME -->
+  <section id="screen-home" class="screen">
+    <a class="back-home" href="../">← Collection</a>
+    <div class="logo-wrap">
+      <div class="logo-pre">The Resistance</div>
+      <h1 class="logo">AVALON</h1>
+    </div>
+    <p class="tagline">Arthur’s knights ride out on five Quests — and hidden among them are the Minions of Mordred. Each round a Leader picks a Team, the whole table votes on it in the open, and the Team plays its Quest cards face down: a single Fail and the Quest is lost. Merlin knows the traitors but cannot say so; if Good wins three Quests, the Assassin gets one guess at who he is. Five to ten players, peer-to-peer: no accounts, no server, just a room code. Bots fill any empty seat.</p>
+    <input id="name-input" class="field" maxlength="16" placeholder="Your name" autocomplete="nickname">
+    <button id="btn-create" class="btn primary">Create a room</button>
+    <div class="divider">or join one</div>
+    <div class="join-row">
+      <input id="code-input" class="field" maxlength="40" placeholder="CODE" autocapitalize="characters" autocomplete="off" spellcheck="false">
+      <button id="btn-join" class="btn secondary">Join</button>
+    </div>
+    <div id="home-status" role="status"></div>
+    <button class="btn ghost btn-rules" type="button">How to play</button>
+    <p class="small-print">An unofficial fan implementation of <b>The Resistance: Avalon</b> by Don Eskridge (© Indie Boards &amp; Cards). The rules, the Set Up chart and the Team Building chart follow the publisher’s rulebook. Multiplayer runs over WebRTC: browsers find each other with Google STUN servers and a free signaling broker, then talk directly. The game lives in the host’s tab — keep it open!</p>
+  </section>
+
+  <!-- LOBBY -->
+  <section id="screen-lobby" class="screen hidden">
+    <div class="lobby-panel">
+      <div class="lobby-label">Room code</div>
+      <div id="lobby-code">·····</div>
+      <div class="copy-row">
+        <button id="btn-copy-code" class="btn ghost" type="button">Copy code</button>
+        <button id="btn-copy-link" class="btn ghost" type="button">Copy invite link</button>
+      </div>
+      <ul id="lobby-players"></ul>
+      <div class="lobby-label">Characters</div>
+      <div id="role-picker" class="pick-row"></div>
+      <div id="lady-picker" class="pick-row"></div>
+      <div id="cast-summary"></div>
+      <div id="lobby-hint"></div>
+      <button id="btn-add-bot" class="btn secondary hidden" type="button">🤖 Add a bot</button>
+      <button id="btn-start" class="btn primary hidden" type="button">Deal the Characters</button>
+      <div class="copy-row">
+        <button class="btn ghost btn-rules" type="button">How to play</button>
+        <button class="btn ghost btn-leave" type="button">Leave</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- GAME -->
+  <section id="screen-game" class="screen hidden">
+    <div class="topbar">
+      <span id="room-chip">·····</span>
+      <span id="quest-chip"></span>
+      <span id="phase-chip"></span>
+      <span class="spacer"></span>
+      <button id="btn-role" class="btn ghost" type="button">🛡 Your Character</button>
+      <button class="btn ghost btn-rules" type="button">Rules</button>
+      <button class="btn ghost btn-leave" type="button">Leave</button>
+    </div>
+    <div id="table">
+      <div id="stage">
+        <div id="board"></div>
+        <div id="action" aria-live="polite"></div>
+      </div>
+      <aside id="side">
+        <div id="tracker"></div>
+        <div id="feed"></div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- RULES -->
+  <div id="modal-rules" class="modal hidden">
+    <div class="panel wide">
+      <h2>How to play Avalon</h2>
+      <ol class="rules">
+        <li><b>Two sides.</b> Every player is dealt a secret Character: a Loyal Servant of Arthur (Good) or a Minion of Mordred (Evil). At 5 players it is 3 Good against 2 Evil; at 6, 4–2; at 7, 4–3; at 8, 5–3; at 9, 6–3; at 10, 6–4. The agents of Evil know each other.</li>
+        <li><b>Merlin and the Assassin</b> are in every game. Merlin, on the side of Good, sees the agents of Evil — but if Good wins, the Assassin gets one chance to name him, and naming him wins it for Evil. So Merlin can only hint.</li>
+        <li><b>Team Building.</b> Each round the Leader picks a Team for the next Quest — two to five players, as the Quest track shows. The Leader may pick themselves, or not.</li>
+        <li><b>The vote.</b> Everyone, the Leader too, votes to approve or reject the Team; the votes turn over together. A majority approves it and it goes on the Quest; a tie or less rejects it, and the next player clockwise becomes Leader. <b>If five Teams are rejected in a single round, Evil wins.</b></li>
+        <li><b>The Quest.</b> Each member of the Team plays Success or Fail, face down. Good must play Success; Evil may play either. A single Fail fails the Quest — except the 4th Quest at 7 or more players, which needs two. Only the number of Fails is ever shown.</li>
+        <li><b>Winning.</b> Three failed Quests and Evil wins. Three successful Quests, and the Assassin names Merlin: if right, Evil wins; if not, Good does.</li>
+        <li><b>Optional Characters.</b> <b>Percival</b> (Good) knows Merlin. <b>Morgana</b> (Evil) appears to Percival as Merlin, so he sees two and cannot tell which. <b>Mordred</b> (Evil) is hidden from Merlin. <b>Oberon</b> (Evil) does not know the other agents of Evil, nor they him — but Merlin sees him.</li>
+        <li><b>The Lady of the Lake</b> (optional, best at 7 or more). She starts with the player on the first Leader’s right. After the 2nd, 3rd and 4th Quests, her holder secretly sees one player’s loyalty — anyone who has not held her — may tell the table anything about it, and passes her to that player.</li>
+        <li><b>Talk.</b> “Players may make any claims during the game, at any point in the game.” Use the chat: accuse, defend, bluff. Point at or tap anything at the table to see what it means; the vote record on the side keeps every Team and every vote.</li>
+      </ol>
+      <p class="credit"><b>The Resistance: Avalon</b> is by Don Eskridge, published by Indie Boards &amp; Cards. This is an unofficial fan implementation. The rules, the Set Up chart (the sides at each table size) and the Team Building chart (the Team for each Quest) follow the publisher’s rulebook, as do the reveal scripts that decide who sees whom.</p>
+      <button id="btn-rules-close" class="btn secondary" type="button">Got it</button>
+    </div>
+  </div>
+
+  <!-- YOUR CHARACTER -->
+  <div id="modal-role" class="modal hidden">
+    <div class="panel">
+      <div id="role-body"></div>
+      <p class="rc-secret">Keep it to yourself — “A player’s Character Card may not be revealed at any point in the game.”</p>
+      <button id="btn-role-close" class="btn primary" type="button">To the table</button>
+    </div>
+  </div>
+
+  <!-- GAME OVER -->
+  <div id="gameover" class="modal hidden">
+    <div class="panel">
+      <h2 id="go-title">Game over</h2>
+      <div id="go-sub"></div>
+      <ul id="go-rank"></ul>
+      <div class="btn-row">
+        <button id="btn-again" class="btn primary hidden" type="button">Another game</button>
+        <button id="btn-golobby" class="btn secondary hidden" type="button">Back to lobby</button>
+      </div>
+      <div id="go-wait">Waiting for the host…</div>
+      <div class="btn-row">
+        <button class="btn ghost btn-leave" type="button">Leave game</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHAT -->
+  <div id="chat" class="hidden">
+    <div id="chat-panel" class="hidden">
+      <div class="chat-head">Round Table</div>
+      <div id="chat-msgs"></div>
+      <form id="chat-form">
+        <input id="chat-input" maxlength="200" placeholder="Accuse, defend, bluff…" autocomplete="off">
+        <button type="submit" class="chat-send" aria-label="Send">➤</button>
+      </form>
+    </div>
+    <button id="chat-peek" type="button" class="hidden"></button>
+    <button id="chat-toggle" type="button" aria-label="Toggle chat">💬<span id="chat-unread" class="hidden"></span></button>
+  </div>
+
+  <div id="toasts" aria-live="polite"></div>
+  <div id="banner" class="flash hidden"></div>
+  <div id="confetti"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
