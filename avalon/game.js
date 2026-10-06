@@ -10,7 +10,8 @@
 // and if that is right, Evil wins after all. Three failed Quests, or five
 // Teams rejected in a single round, and Evil wins outright.
 //
-// With every option off this is the base game. The Big Box adds Characters
+// With every option off this is the base game. The Big Box lets a table play
+// without Merlin, adds Characters
 // (Percival, Morgana, Mordred, Oberon, Lancelot, the Lunatic, the Brute, the
 // Revealer, the Cleric, the Trickster, the Troublemaker, the Untrustworthy
 // Servant), modules with their own Characters and Quest cards (the Rogues,
@@ -30,7 +31,7 @@
 // five or six uses is printed on the cards, and no source at hand shows all
 // of them — so here Plot cards are played at seven or more only.
 
-export const PROTO = 2;
+export const PROTO = 3;
 export const MIN_PLAYERS = 5;
 export const MAX_PLAYERS = 10;
 export const QUESTS = 5;
@@ -56,15 +57,15 @@ export const TEAM_SIZES = {
 export const failsNeeded = (n, quest) => (n >= 7 && quest === 3 ? 2 : 1);
 
 // The Character cards, with the side each starts on. Merlin and the Assassin
-// are in every game here; the rest of each side are Loyal Servants of Arthur
-// and Minions of Mordred.
+// are in the game unless the table plays without Merlin; the rest of each side
+// are Loyal Servants of Arthur and Minions of Mordred.
 export const ROLES = {
   merlin: { name: 'Merlin', side: 'good', power: 'You see the agents of Evil — all but Mordred (and the Evil Rogue). Speak only in riddles: if the Assassin finds you at the end, Evil wins.' },
   percival: { name: 'Percival', side: 'good', power: 'You know Merlin. With Morgana at the table you see two players, and only one of them is Merlin.' },
   servant: { name: 'Loyal Servant of Arthur', side: 'good', power: 'You know nothing but your own loyalty. Find the agents of Evil from what the table does.' },
   cleric: { name: 'Cleric', side: 'good', power: 'At the start you learn whether the first Leader is Good or Evil.' },
   troublemaker: { name: 'Troublemaker', side: 'good', power: 'You are Good, but whenever your loyalty is checked you must show Evil.' },
-  untrustworthy: { name: 'Untrustworthy Servant', side: 'good', power: 'You know the Assassin, and Merlin takes you for an agent of Evil. If three Quests succeed, the Assassin may recruit you: guessed, you turn Evil and name Merlin yourself.' },
+  untrustworthy: { name: 'Untrustworthy Servant', side: 'good', power: 'You know the Assassin, and Merlin takes you for an agent of Evil. If three Quests succeed, the Assassin may recruit you: guessed, you turn Evil and carry out the Assassination in their place.' },
   lancelotGood: { name: 'Good Lancelot', side: 'good', power: 'Lancelot has two cards, one Good and one Evil. With the Allegiance cards, the two Lancelots can switch sides during the game.' },
   rogueGood: { name: 'Good Rogue', side: 'good', power: 'You may play Rogue Success. Play it on the third successful Quest and on one before, and you win alone.' },
   sorcererGood: { name: 'Good Sorcerer', side: 'good', power: 'You may play Magic: an odd number of Magic cards turns a Quest’s result around.' },
@@ -94,6 +95,7 @@ export const RULES = ['trapper', 'lady', 'excalibur', 'plot'];
 
 export function defaultOpts() {
   return {
+    noMerlin: false, // "In most cases you will want to play with Merlin, but it is not required."
     percival: false, cleric: false, troublemaker: false, untrustworthy: false,
     morgana: false, mordred: false, oberon: false, lunatic: false, brute: false, revealer: false, trickster: false,
     lancelot: false, lancelotVariant: 0, // 0: the two know each other; 1, 2: the rulebook's variants
@@ -112,12 +114,18 @@ export function checkOpts(opts) {
   return null;
 }
 
+// Is there an Assassination stage, and so an Assassin? "If playing with
+// Merlin, you must include the Assassin"; with the Messengers "the Assassin
+// may target either Merlin or the Messengers" — without Merlin, the
+// Messengers. With neither, there is no one to name, and no Assassin.
+export const assassinIn = (opts) => !opts.noMerlin || !!opts.messengers;
+
 // The Characters dealt at a table of n: the specials first, the rest of each
 // side plain Servants and Minions.
 export function castFor(n, opts) {
   const [good, evil] = SIDES[n];
-  const g = ['merlin', ...GOOD_CHARS.filter((k) => opts[k])];
-  const e = ['assassin', ...EVIL_CHARS.filter((k) => opts[k])];
+  const g = [...(opts.noMerlin ? [] : ['merlin']), ...GOOD_CHARS.filter((k) => opts[k])];
+  const e = [...(assassinIn(opts) ? ['assassin'] : []), ...EVIL_CHARS.filter((k) => opts[k])];
   if (opts.lancelot) { g.push('lancelotGood'); e.push('lancelotEvil'); }
   if (opts.rogueGood) g.push('rogueGood');
   if (opts.rogueEvil) e.push('rogueEvil');
@@ -133,6 +141,8 @@ export function canStart(n, opts) {
   if (n > MAX_PLAYERS) return `At most ${MAX_PLAYERS} players.`;
   const why = checkOpts(opts);
   if (why) return why;
+  // Percival's "special power is knowledge of Merlin"
+  if (opts.noMerlin && opts.percival) return 'Percival is there to know Merlin: play him with Merlin, or leave him out.';
   const [good, evil] = SIDES[n];
   const cast = castFor(n, opts);
   const g = cast.filter((r) => r !== 'servant' && sideOf(r) === 'good').length;
@@ -148,6 +158,8 @@ export function advice(n, opts) {
   const out = [];
   if (opts.percival && n === 5 && !opts.morgana && !opts.mordred) out.push('For games of 5, the rulebook says to add Mordred or Morgana when playing with Percival.');
   if (opts.morgana && !opts.percival) out.push('The rulebook says Morgana must be played with Percival — without him she plays as a plain Minion.');
+  if (opts.noMerlin && opts.mordred) out.push('Without Merlin, Mordred plays as a plain Minion: hiding from Merlin is all he does.');
+  if (opts.noMerlin && opts.untrustworthy && !opts.messengers) out.push('Without Merlin or the Messengers there is no Assassin to know or to recruit them: the Untrustworthy Servant plays as a plain Loyal Servant.');
   const seven = [['lancelot', 'Lancelot'], ['lunatic', 'the Lunatic'], ['brute', 'the Brute'], ['revealer', 'the Revealer'], ['cleric', 'the Cleric'], ['messengers', 'the Messengers'], ['lady', 'the Lady of the Lake']].filter(([k]) => opts[k] && n < 7).map(([, w]) => w);
   if (seven.length) out.push(`The rulebook recommends ${seven.join(', ')} for games of 7 or more.`);
   if (opts.trapper && n < 8) out.push('The rulebook recommends the Trapper for games of 8 or more.');
@@ -901,6 +913,8 @@ function afterQuest(G, step) {
   if (won >= 3) {
     const gr = G.players.find((p) => p.role === 'rogueGood');
     if (gr && rogueWin(G, gr.seat, 'rogueSuccess')) return endGame(G, 'rogueGood', `three Quests succeeded, and ${gr.name}, the Good Rogue, played Rogue Success on the last and on one before`);
+    // without Merlin or the Messengers there is no one for Evil to name
+    if (!assassinIn(G.opts)) return endGame(G, 'good', 'three Quests succeeded');
     note(G, 'Three Quests have succeeded. Evil has one last chance.');
     bump(G, { kind: 'assassin' });
     if (G.players.some((p) => p.role === 'untrustworthy')) G.todo.unshift({ t: 'recruit' });
@@ -959,7 +973,7 @@ function recruit(G, p, target) {
   G.recruit = { by: p.seat, target, hit };
   if (hit) {
     t.side = 'evil';
-    note(G, `${p.name} recruits ${t.name} — the Untrustworthy Servant, who is now Evil and will name Merlin.`);
+    note(G, `${p.name} recruits ${t.name} — the Untrustworthy Servant, who is now Evil and carries out the Assassination.`);
   } else note(G, `${p.name} tries to recruit ${t.name}, who is not the Untrustworthy Servant.`);
   bump(G, { kind: 'recruit', by: p.seat, target, hit });
   return { ok: true };
@@ -969,7 +983,8 @@ function recruit(G, p, target) {
 // correctly, Evil wins the day." With the Messengers "the Assassin may target
 // either Merlin or the Messengers, but they must announce which before
 // assassinating. If the Assassin chooses the latter, they must correctly
-// identify both Good Messengers for Evil to win."
+// identify both Good Messengers for Evil to win." Without Merlin, only the
+// Messengers.
 export const assassinSeat = (G) => (G.ask && G.ask.kind === 'assassinate' ? G.ask.seat : seatOfRole(G, 'assassin'));
 
 function assassinate(G, p, move) {
@@ -985,6 +1000,7 @@ function assassinate(G, p, move) {
     else endGame(G, 'good', 'three Quests succeeded and the Good Messengers were not both found');
     return { ok: true };
   }
+  if (G.opts.noMerlin) return { ok: false, error: 'There is no Merlin in this game: name the two Good Messengers.' };
   const t = isSeat(G, move.target) ? playerBySeat(G, move.target) : null;
   if (!t || t.seat === p.seat) return { ok: false, error: 'Name another player.' };
   if (known.has(t.seat)) return { ok: false, error: 'Name a Good player — that one is an agent of Evil.' };
@@ -1450,6 +1466,7 @@ function botAsk(G, me, a) {
       return { kind: 'recruit', target: rand(others.filter((s) => !mine.has(s))) };
     }
     case 'assassinate':
+      if (G.opts.noMerlin) return { kind: 'assassinate', messengers: messengerGuess(G, seat) };
       return { kind: 'assassinate', target: merlinGuess(G, seat) };
     default:
       return null;
@@ -1538,4 +1555,17 @@ function merlinGuess(G, seat) {
     if (!best || score > best.score) best = { c, score };
   }
   return best.c;
+}
+
+// Without Merlin the Assassin names both Good Messengers: the players who were
+// on the Quests that showed Good Message tokens, most of all.
+function messengerGuess(G, seat) {
+  const mine = evilKnown(G, seat);
+  for (const [k, m] of Object.entries(knowledge(G, seat))) if (m === 'assassin') mine.add(Number(k));
+  const score = new Map(seats(G).filter((s) => !mine.has(s)).map((s) => [s, Math.random() * 0.25]));
+  for (const r of G.results) {
+    const on = r.team.filter((s) => score.has(s) && s !== r.trapped);
+    if (r.messages.good && on.length) for (const s of on) score.set(s, score.get(s) + r.messages.good / on.length);
+  }
+  return [...score].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([s]) => s);
 }

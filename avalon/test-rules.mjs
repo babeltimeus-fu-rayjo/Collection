@@ -1,7 +1,8 @@
 // The rules, checked one at a time against the Big Box rulebook's wording:
 // the two charts, who sees whom at the reveal, the vote, the Quest, the Lady
-// of the Lake, the assassination; every Character, module and optional rule
-// the Big Box adds — and that no player's view shows what it must not.
+// of the Lake, the assassination, a game without Merlin; every Character,
+// module and optional rule the Big Box adds — and that no player's view shows
+// what it must not.
 import * as A from './game.js';
 
 let fails = 0, checks = 0;
@@ -58,7 +59,7 @@ eq([5, 6, 7, 10].map((n) => [0, 1, 2, 3, 4].map((q) => A.failsNeeded(n, q))), [[
 for (let n = 5; n <= 10; n++) {
   const cast = A.castFor(n, { ...A.defaultOpts(), percival: true, morgana: true, mordred: n >= 7 });
   eq([cast.filter((r) => A.sideOf(r) === 'good').length, cast.filter((r) => A.sideOf(r) === 'evil').length], A.SIDES[n], `${n} players are dealt the chart's sides`);
-  ok(cast.includes('merlin') && cast.includes('assassin'), `Merlin and the Assassin are in every game of ${n}`);
+  ok(cast.includes('merlin') && cast.includes('assassin'), `Merlin and the Assassin are dealt at ${n}`);
 }
 ok(A.canStart(5, { ...A.defaultOpts(), morgana: true, mordred: true }), 'two agents of Evil cannot hold the Assassin, Morgana and Mordred');
 eq(A.canStart(10, { ...A.defaultOpts(), percival: true, morgana: true, mordred: true, oberon: true }), null, 'ten players can take every base Character');
@@ -160,6 +161,49 @@ for (const [target, winner] of [[0, 'evil'], [1, 'good']]) {
   bad(A.applyMove(G, 3, { kind: 'assassinate', target: 4 }), 'the Assassin names a Good player, not a known agent of Evil');
   play(G, 3, { kind: 'assassinate', target });
   eq(G.winner, winner, target === 0 ? 'naming Merlin wins it for Evil' : 'missing Merlin wins it for Good');
+}
+
+console.log('— without Merlin —');
+{
+  const no = { ...A.defaultOpts(), noMerlin: true };
+  eq(A.castFor(5, no), ['servant', 'servant', 'servant', 'minion', 'minion'], '"In most cases you will want to play with Merlin, but it is not required" — and with no one to name at the end, no Assassin');
+  eq(A.castFor(7, { ...no, messengers: true }).filter((r) => r === 'merlin' || r === 'assassin'), ['assassin'], 'with the Messengers there is an Assassin still, to name them');
+  ok(A.canStart(5, { ...no, percival: true }), 'Percival, whose "special power is knowledge of Merlin", needs Merlin');
+  eq(A.canStart(5, { ...no, mordred: true, untrustworthy: true }), null, 'Mordred and the Untrustworthy Servant may still be dealt…');
+  const words = A.advice(5, { ...no, mordred: true, untrustworthy: true }).join(' ');
+  ok(words.includes('Mordred plays as a plain Minion') && words.includes('Untrustworthy Servant plays as a plain Loyal Servant'), '…with a word that they play as a plain Minion and a plain Servant');
+  const G = table(['servant', 'servant', 'servant', 'minion', 'minion'], { noMerlin: true });
+  quest(G, [0, 1]);
+  quest(G, [0, 1, 2]);
+  quest(G, [0, 1]);
+  eq([G.phase, G.winner, G.assassination], ['over', 'good', null], 'three successful Quests win it for Good outright: there is no one to name');
+}
+{
+  // with the Messengers, the Assassin names both Good Messengers
+  const roles = ['messengerSenior', 'messengerJunior', 'servant', 'servant', 'assassin', 'messengerEvil', 'minion'];
+  for (const [named, winner] of [[[0, 1], 'evil'], [[0, 2], 'good']]) {
+    const G = table(roles, { noMerlin: true });
+    quest(G, [0, 1]);
+    quest(G, [0, 1, 2]);
+    quest(G, [0, 1, 2]);
+    eq([G.phase, G.ask.seat], ['assassin', 4], 'with the Messengers, three successes still call on the Assassin');
+    bad(A.applyMove(G, 4, { kind: 'assassinate', target: 0 }), 'there is no Merlin to name');
+    const mv = A.botChoose(G, 4);
+    ok(mv.messengers && mv.messengers.length === 2 && new Set(mv.messengers).size === 2 && mv.messengers.every((s) => s < 4), 'a bot Assassin names two players it does not know to be Evil');
+    play(G, 4, { kind: 'assassinate', messengers: named });
+    eq(G.winner, winner, winner === 'evil' ? 'both Good Messengers named: Evil wins' : 'one of them wrong: Good wins');
+  }
+  // the Untrustworthy Servant, recruited, names them in the Assassin's place
+  const U = table(['messengerSenior', 'messengerJunior', 'untrustworthy', 'servant', 'assassin', 'messengerEvil', 'minion'], { noMerlin: true });
+  eq(A.knowledge(U, 2), { 4: 'assassin' }, 'the Untrustworthy Servant still knows the Assassin');
+  quest(U, [0, 1]);
+  quest(U, [0, 1, 2]);
+  quest(U, [0, 1, 2]);
+  eq([U.phase, U.ask.seat], ['recruit', 4], 'the Recruitment comes first');
+  play(U, 4, { kind: 'recruit', target: 2 });
+  eq([U.ask.kind, U.ask.seat], ['assassinate', 2], 'recruited, the Untrustworthy Servant carries out the Assassination');
+  play(U, 2, { kind: 'assassinate', messengers: [0, 1] });
+  eq([U.winner, A.won(U, U.players[2])], ['evil', true], '…and wins with Evil');
 }
 
 console.log('— the Lady of the Lake —');

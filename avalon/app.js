@@ -24,6 +24,7 @@ import {
   PLOTS,
   sideOf,
   defaultOpts,
+  assassinIn,
   canStart,
   castFor,
   advice,
@@ -49,7 +50,7 @@ const cfg = initSettings('avl', [
   { key: 'botVote', label: 'Bot vote delay', def: [900, 1400], section: 'Host pacing', host: true },
   { key: 'botQuest', label: 'Bot Quest card delay', def: [900, 1100], section: 'Host pacing', host: true },
   { key: 'botLady', label: 'Bot Lady of the Lake delay', def: [1800, 1400], section: 'Host pacing', host: true },
-  { key: 'botAssassin', label: 'Bot Assassin thinks for', def: [3600, 1600], section: 'Host pacing', host: true, hint: 'The pause before a bot Assassin names Merlin — time for the agents of Evil to talk it over.' },
+  { key: 'botAssassin', label: 'Bot Assassin thinks for', def: [3600, 1600], section: 'Host pacing', host: true, hint: 'The pause before a bot Assassin names Merlin or the Messengers — time for the agents of Evil to talk it over.' },
   { key: 'bubbleChat', label: 'Chat bubbles linger', def: 6500, section: 'Bubbles & banners' },
   { key: 'bubbleTrunc', label: 'Bubble text cap', def: 84, min: 12, max: 400, step: 4, unit: 'ch', ms: false, section: 'Bubbles & banners' },
   { key: 'flashMs', label: 'Banner duration', def: 2100, section: 'Bubbles & banners' },
@@ -669,8 +670,8 @@ class HostSession {
     this.pushLobby();
   }
 
-  // The lobby's Characters: Merlin and the Assassin always, and any of the
-  // optional four; the Lady of the Lake on or off.
+  // The lobby's options: Merlin in or out, the Characters, Lancelot, the
+  // modules and the optional rules.
   setOpt(key, value) {
     if (this.G || !(key in defaultOpts())) return;
     if (key === 'lancelotVariant' ? ![0, 1, 2].includes(value) : typeof value !== 'boolean') return;
@@ -1089,6 +1090,9 @@ function listWords(a) {
   return a.length <= 1 ? a.join('') : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`;
 }
 
+// whom the Assassin names at the end, if there is anyone to name
+const preyWords = (o) => (o.noMerlin ? (o.messengers ? 'both Good Messengers' : null) : o.messengers ? 'Merlin or both Good Messengers' : 'Merlin');
+
 // "3 Good: Merlin and 2 Loyal Servants of Arthur"
 function castLine(n, opts, side) {
   const rs = castFor(n, opts).filter((r) => sideOf(r) === side);
@@ -1181,8 +1185,10 @@ function renderLobby(lob, sess) {
     return b;
   };
   const toggle = (k) => () => sess.setOpt(k, !opts[k]);
-  const chars = group('Characters', 'Merlin and the Assassin are in every game; the rest of each side are Loyal Servants of Arthur and Minions of Mordred. "It is best to add one special character into a game at a time."');
-  for (const k of ['merlin', 'assassin']) pickBtn(chars, { label: roleName(k), icon: ROLE_ICON[k], cls: `side-${sideOf(k)}`, on: true, fixed: true, tip: `${roleName(k)}, in every game. ${ROLES[k].power}` });
+  const chars = group('Characters', 'The rest of each side are Loyal Servants of Arthur and Minions of Mordred. "In most cases you will want to play with Merlin, but it is not required." "It is best to add one special character into a game at a time."');
+  pickBtn(chars, { label: roleName('merlin'), icon: ROLE_ICON.merlin, cls: 'side-good', on: !opts.noMerlin, set: () => sess.setOpt('noMerlin', !opts.noMerlin), tip: `Merlin (Good). ${ROLES.merlin.power} "In most cases you will want to play with Merlin, but it is not required" — without him there is no Assassin unless the Messengers are in, and three successful Quests win it for Good.` });
+  const hunt = assassinIn(opts);
+  pickBtn(chars, { label: roleName('assassin'), icon: ROLE_ICON.assassin, cls: 'side-evil', on: hunt, fixed: true, tip: !hunt ? 'No Assassin: without Merlin or the Messengers there is no one to name at the end.' : opts.noMerlin ? 'Assassin (Evil), dealt for the Messengers: with no Merlin, if three Quests succeed the Assassin names both Good Messengers — both right and Evil wins.' : `Assassin (Evil), in every game with Merlin. ${ROLES.assassin.power}` });
   for (const k of [...GOOD_CHARS, ...EVIL_CHARS]) pickBtn(chars, { label: roleName(k), icon: ROLE_ICON[k], cls: `side-${sideOf(k)}`, on: opts[k], set: toggle(k), tip: `${roleName(k)} (${SIDE_WORD[sideOf(k)]}). ${ROLES[k].power}` });
   const lan = group('Lancelot');
   pickBtn(lan, { label: 'Off', on: !opts.lancelot, cls: 'plain', set: () => sess.setOpt('lancelot', false), tip: 'No Lancelot.' });
@@ -1234,6 +1240,8 @@ let excal = null;         // who the Leader gives Excalibur to
 let aim = null;           // the player picked out for the question at hand
 let aims = [];            // two players, when the Assassin names the Messengers
 let mode = 'merlin';      // whom the Assassin goes after: Merlin, or the Messengers
+// …and with no Merlin, the Messengers
+const huntMode = (view) => (view.opts.noMerlin ? 'messengers' : mode);
 let card = null;          // the Plot card the Leader is about to give
 let askKey = null;        // the question the picks above belong to
 let roleShownFor = null;  // the game whose role card has been shown
@@ -1294,7 +1302,7 @@ function seatAct(view, seat) {
   const a = myAsk(view);
   if (!a) return null;
   if (a.kind === 'propose') return 'pick';
-  if (a.kind === 'assassinate' && mode === 'messengers') return aimable(view, seat) ? 'aim2' : null;
+  if (a.kind === 'assassinate' && huntMode(view) === 'messengers') return aimable(view, seat) ? 'aim2' : null;
   return aimable(view, seat) ? 'aim' : null;
 }
 
@@ -1765,20 +1773,21 @@ function renderAction(view) {
     case 'recruit':
       if (mine) {
         add('act-head', 'Three Quests have succeeded. First, the Recruitment: name the player you think is the Untrustworthy Servant — tap them.');
-        add('act-sub', 'Guess right and they turn Evil, and name Merlin in your place. Guess wrong and you name Merlin yourself.');
+        add('act-sub', `Guess right and they turn Evil, and name ${preyWords(view.opts)} in your place. Guess wrong and you name ${preyWords(view.opts)} yourself.`);
         pickRow('Recruit', (t) => sendMove({ kind: 'recruit', target: t }));
       } else add('act-head', `Three Quests have succeeded. ${who}, the Assassin, tries to recruit the Untrustworthy Servant.`);
       return;
     case 'assassinate': {
       const recruited = view.recruit && view.recruit.hit;
       if (mine) {
-        add('act-head', recruited ? 'You have been recruited: you are Evil now. Name Merlin, and Evil wins.' : 'Three Quests have succeeded. You are the Assassin: name Merlin, and Evil wins.');
-        if (view.opts.messengers) {
+        const prey = view.opts.noMerlin ? 'both Good Messengers' : 'Merlin';
+        add('act-head', recruited ? `You have been recruited: you are Evil now. Name ${prey}, and Evil wins.` : `Three Quests have succeeded. You are the Assassin: name ${prey}, and Evil wins.`);
+        if (view.opts.messengers && !view.opts.noMerlin) {
           const r = row();
           r.append(btn('Go after Merlin', mode === 'merlin' ? 'primary small' : 'ghost small', () => { mode = 'merlin'; aims = []; renderGame(lastView, session); }));
           r.append(btn('Go after the Messengers', mode === 'messengers' ? 'primary small' : 'ghost small', () => { mode = 'messengers'; aim = null; renderGame(lastView, session); }));
         }
-        if (mode === 'messengers' && view.opts.messengers) {
+        if (huntMode(view) === 'messengers' && view.opts.messengers) {
           add('act-sub', 'Name both Good Messengers — tap two players. Both must be right.');
           const r = row();
           r.append(btn(aims.length === 2 ? `Name ${namesOf(view, aims)}` : 'Name two…', 'quest-no', () => { const m = aims.slice(); aims = []; sendMove({ kind: 'assassinate', messengers: m }); }, aims.length !== 2));
@@ -1788,8 +1797,9 @@ function renderAction(view) {
           r.append(btn(aim != null ? `Name ${seatName(view, aim)} as Merlin` : 'Name Merlin…', 'quest-no', () => { const t = aim; aim = null; sendMove({ kind: 'assassinate', target: t }); }, aim == null));
         }
       } else {
-        add('act-head', `Three Quests have succeeded — but Evil has one last chance. ${who} ${recruited ? '(recruited) ' : ''}will name Merlin${view.opts.messengers ? ', or both Good Messengers' : ''}.`);
-        if (view.me && view.me.role === 'merlin') add('act-sub', 'Hold your nerve.');
+        add('act-head', `Three Quests have succeeded — but Evil has one last chance. ${who} ${recruited ? '(recruited) ' : ''}will name ${preyWords(view.opts)}.`);
+        const hunted = view.me && (view.me.role === 'merlin' || (view.opts.messengers && (view.me.role === 'messengerSenior' || view.me.role === 'messengerJunior')));
+        if (hunted) add('act-sub', 'Hold your nerve.');
       }
       return;
     }
@@ -1877,6 +1887,7 @@ function showRole(view) {
   if (r === 'merlin') facts.push(evil.length ? `You see the agents of Evil: ${namesOf(view, evil)}.${view.opts.mordred ? ' Mordred is among them unseen.' : ''}${view.opts.untrustworthy ? ' One you see may be the Untrustworthy Servant, who is Good.' : ''}` : 'You see no agents of Evil.');
   else if (sideOf(r) === 'evil' && evil.length) facts.push(`Your fellow agents of Evil: ${namesOf(view, evil)}.`);
   else if (r === 'oberon' || r === 'rogueEvil' || (r === 'sorcererEvil' && view.opts.sorcererHidden)) facts.push('You do not know your fellow agents of Evil, and they do not know you.');
+  if (r === 'assassin' && view.opts.noMerlin) facts.push('There is no Merlin in this game: if three Quests succeed, you name both Good Messengers.');
   if (by('merlin?').length) facts.push(`Merlin is ${namesOf(view, by('merlin?')).replace(' and ', ' or ')} — the other is Morgana.`);
   if (by('merlin').length) facts.push(`Merlin is ${namesOf(view, by('merlin'))}.`);
   if (by('assassin').length) facts.push(`The Assassin is ${namesOf(view, by('assassin'))}.`);
@@ -1889,10 +1900,11 @@ function showRole(view) {
   const ul = el('ul', 'rc-facts');
   for (const f of facts) ul.append(el('li', '', f));
   body.append(ul);
+  const prey = preyWords(view.opts);
   const win = r === 'rogueGood' ? 'You win alone with Rogue Success on the third successful Quest and on one before; otherwise you share Good’s victory in part.'
     : r === 'rogueEvil' ? 'You win alone with Rogue Fail on the third failed Quest and on one before; otherwise you share Evil’s victory in part.'
-      : mine.side === 'good' ? 'Good wins with three successful Quests — and Merlin unfound by the Assassin.'
-        : 'Evil wins with three failed Quests, five Teams rejected in one round, or by naming Merlin at the end.';
+      : mine.side === 'good' ? `Good wins with three successful Quests${prey ? ` — unless the Assassin then names ${prey}` : ''}.`
+        : `Evil wins with three failed Quests${prey ? `, five Teams rejected in one round, or by naming ${prey} at the end` : ' or five Teams rejected in one round'}.`;
   body.append(el('p', 'rc-win', win));
   $('#modal-role').classList.remove('hidden');
 }
@@ -1937,7 +1949,7 @@ function renderGame(view, sess) {
     onquest: 'The Quest is under way.',
     lady: 'The Lady of the Lake looks at one player’s loyalty.',
     recruit: 'The Assassin tries to recruit the Untrustworthy Servant.',
-    assassin: 'Three Quests have succeeded; Evil names Merlin. If right, Evil wins.',
+    assassin: `Three Quests have succeeded; Evil names ${preyWords(view.opts)}. If right, Evil wins.`,
     over: '',
   }[view.phase] || '';
   $('#btn-role').classList.toggle('hidden', !view.me);

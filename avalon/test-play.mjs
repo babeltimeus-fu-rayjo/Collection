@@ -28,6 +28,8 @@ function views(G) {
 
 function playOut(n, opts) {
   const G = A.newGame(Array.from({ length: n }, (_, i) => ({ seat: i, name: 'P' + i, bot: true })), opts);
+  if (G.players.some((p) => p.role === 'merlin') === !!opts.noMerlin) bad('Merlin dealt, or not, against the options');
+  if (G.players.some((p) => p.role === 'assassin') !== A.assassinIn(opts)) bad('an Assassin with no one to name, or none with someone');
   let steps = 0;
   while (G.phase !== 'over') {
     if (++steps > 4000) { bad(`a game of ${n} never ended (phase ${G.phase})`); return G; }
@@ -72,6 +74,12 @@ const MIXES = [
   { plot: true },
   { plot: true, excalibur: true, trapper: true, lady: true },
   { percival: true, morgana: true, cleric: true, trickster: true, lancelot: true, lancelotVariant: 1, rogueGood: true, plot: true, excalibur: true },
+  { noMerlin: true },
+  { noMerlin: true, mordred: true, lady: true },
+  { noMerlin: true, messengers: true },
+  { noMerlin: true, messengers: true, untrustworthy: true, messengerSenior: true },
+  { noMerlin: true, rogueGood: true, rogueEvil: true, sorcerers: true },
+  { noMerlin: true, lancelot: true, lancelotVariant: 2, cleric: true, troublemaker: true, plot: true, excalibur: true },
 ];
 const tally = {};
 const why = {};
@@ -92,8 +100,10 @@ for (let n = A.MIN_PLAYERS; n <= A.MAX_PLAYERS; n++) {
       // what the end must look like
       const won = G.results.filter((r) => r.success).length;
       const lost = G.results.length - won;
-      if (G.winner === 'good' && (won !== 3 || !G.assassination || G.assassination.hit)) bad('Good won without three Quests and a miss');
-      if (G.assassination && G.assassination.target !== undefined && G.assassination.hit !== (G.players.find((p) => p.seat === G.assassination.target).role === 'merlin')) bad('the assassination misread its target');
+      const named = A.assassinIn(G.opts) ? !G.assassination || G.assassination.hit : !!G.assassination;
+      if (G.winner === 'good' && (won !== 3 || named)) bad('Good won without three Quests and a miss (or, with no one to name, no assassination)');
+      if (G.assassination && G.assassination.target !== undefined && (G.opts.noMerlin || G.assassination.hit !== (G.players.find((p) => p.seat === G.assassination.target).role === 'merlin'))) bad('the assassination misread its target');
+      if (G.assassination && G.assassination.messengers && G.assassination.hit !== G.assassination.messengers.every((s) => /^messenger(Senior|Junior)$/.test(G.players.find((p) => p.seat === s).role))) bad('the Messengers were misread');
       if (lost >= 3 && G.winner !== 'evil' && G.winner !== 'rogueEvil') bad('three failed Quests and Evil did not win');
       if (G.winner === 'rogueGood' && (won !== 3 || G.assassination)) bad('a Good Rogue won without three Quests, or after an assassination');
       if (G.recruit && G.recruit.hit !== (G.players.find((p) => p.seat === G.recruit.target).role === 'untrustworthy')) bad('the recruitment misread its target');

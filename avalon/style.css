@@ -1097,6 +1097,7 @@ h2 { font-family: var(--serif); font-weight: 700; letter-spacing: 0.02em; }
 }
 .role-pick:disabled { cursor: default; }
 .role-pick.fixed { cursor: help; }
+.role-pick.fixed:not(.on) { opacity: 0.55; }
 .role-pick.on.side-good { background: var(--good-dim); border-color: rgba(91, 156, 240, 0.65); color: var(--good-ink); }
 .role-pick.on.side-evil { background: var(--evil-dim); border-color: rgba(224, 87, 79, 0.65); color: var(--evil-ink); }
 .role-pick.lady.on { background: rgba(94, 200, 210, 0.14); border-color: rgba(94, 200, 210, 0.6); color: #9fe6ee; }
