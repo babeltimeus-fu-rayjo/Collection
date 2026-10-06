@@ -1917,9 +1917,11 @@ function settleOverlay(sel, wanted, show) {
   overlayTimers.set(
     sel,
     setTimeout(() => {
+      // the newest render's screen, not the one that started the wait
+      const latest = overlayPending.get(sel) || show;
       overlayTimers.delete(sel);
       overlayPending.delete(sel);
-      show();
+      latest();
     }, delay),
   );
 }
