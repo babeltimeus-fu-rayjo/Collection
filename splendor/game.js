@@ -727,7 +727,10 @@ function purchase(G, p, move, conquest) {
   if (c.take) G.queue.push({ t: 'take', level: c.take });
   if (hasPost(p, 'gem')) G.queue.push({ t: 'gem' });
   if (G.opts.strongholds) G.queue.push({ t: 'hold' });
-  G.queue.push({ t: 'refill' });
+  // "Finally, she places 1 Stronghold on card C and replaces both purchased
+  // cards": with the Strongholds, the card bought by the action is replaced
+  // only once the Conquest is settled (see advance)
+  if (conquest || !G.opts.strongholds) G.queue.push({ t: 'refill' });
   return { ok: true };
 }
 
@@ -807,9 +810,6 @@ function runTask(G, p, task) {
       return;
     }
     case 'refill':
-      // the action's empty places wait while a Conquest may follow: "Finally,
-      // she places 1 Stronghold on card C and replaces both purchased cards"
-      if (G.stage === 'conquest' && G.opts.strongholds) return;
       refill(G);
       return;
     default:

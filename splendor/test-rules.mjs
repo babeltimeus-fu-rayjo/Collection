@@ -246,6 +246,16 @@ console.log('— the Orient —');
   eq([M.bank.gold, P(M, 0).tokens, M.out], [5, T('D1'), [gold]], '"If you spend only 1 of these virtual tokens, the second is lost"');
   const N = rig({ players: [{ tokens: 'D1', cards: [gold, H.cards.find((c) => c.kind === 'gold' && c.id !== gold).id, emer, emer2, rub, rub2] }, {}], opts: { orient: true }, market: { 1: [card] } });
   no(N, 0, { kind: 'buy', card, goldCards: 2 }, 'no Gold card spent that pays for nothing');
+  const gold2 = G0.cards.find((c) => c.kind === 'gold' && c.id !== gold).id;
+  const four = find(G0, 1, 'onyx', 0, 'D1 S1 E1 R1');
+  const GP = rig({ players: [{ cards: [gold, gold2, L1(G0, 'sapphire')], posts: [2] }, {}], opts: { orient: true, trading: true }, market: { 1: [four] } });
+  go(GP, 0, { kind: 'buy', card: four, goldCards: 2 });
+  eq([P(GP, 0).cards.includes(four), sorted(GP.out)], [true, sorted([gold, gold2])], 'with the Gold Trading Post a virtual Gold still covers one colour: two Gold cards for Diamond, Emerald and Ruby');
+  const NG = rig({ players: [{ tokens: 'D1 E2 R2', cards: [gold, gold2] }, {}], opts: { orient: true }, market: { 1: [card] } });
+  no(NG, 0, { kind: 'buy', card, goldCards: -1 }, 'no negative count of Gold cards');
+  eq(NG.out, [], '…and none thrown away');
+  const EP = rig({ players: [{}, {}], bare: true });
+  no(EP, 0, { kind: 'buy', card: null }, 'an empty place on the table is not a card');
   const Z = rig({ players: [{ cards: [gold] }, {}], opts: { orient: true } });
   eq([S.counts(Z, P(Z, 0)), S.bonuses(Z, P(Z, 0))], [{ diamond: 0, sapphire: 0, emerald: 0, ruby: 0, onyx: 0 }, { diamond: 0, sapphire: 0, emerald: 0, ruby: 0, onyx: 0 }], '"For all purposes, this card has no color"');
 }
@@ -314,6 +324,9 @@ console.log('— the Orient —');
   no(K, 0, { kind: 'buy', card: sac, discard: [s1, s2] }, '"cards that are considered to be that color ... must be discarded before other cards of that color"');
   go(K, 0, { kind: 'buy', card: sac, discard: [copy, s2] });
   eq(sorted(P(K, 0).cards), sorted([s1, sac]), '…and the copy goes first');
+  const ct = oc(G0, 'copytake', null, 'D1 E3 R4'), copy2 = oc(G0, 'copy', null, 'D3 R2');
+  const L = rig({ players: [{ cards: [s2, ct, copy, copy2], assoc: { [ct]: 'sapphire', [copy]: 'sapphire', [copy2]: 'sapphire' } }, {}], opts: { orient: true }, omarket: { 3: [sac] } });
+  eq(sorted(S.buyPlan(L, P(L, 0), sac).discard), sorted([copy, copy2]), 'with three Sapphire copies, the two worth least are the ones to go');
 }
 
 console.log('— the Strongholds —');
@@ -345,6 +358,20 @@ console.log('— the Strongholds —');
   eq([C.ask.kind, C.ask.card], ['conquest', card], '"Conquest: When all 3 of your Strongholds are on a single card, you may purchase that card after performing your standard turn action"');
   go(C, 0, { buy: true });
   eq([P(C, 0).cards, C.ask.kind, P(C, 0).holds], [[card], 'hold', 3], 'bought with the gems just taken — the Strongholds come back, and a purchase places one');
+  const X = rig({ players: [{ tokens: 'D3 S1 E2 R2' }, {}], opts: { strongholds: true }, market: { 1: [card, card2] } });
+  X.holds[card2] = [0, 0];
+  P(X, 0).holds = 1;
+  go(X, 0, { kind: 'buy', card });
+  go(X, 0, { to: card2 });
+  eq([X.ask.kind, X.market[1][0]], ['conquest', null], '"Finally, she ... replaces both purchased cards": not before the Conquest');
+  go(X, 0, { buy: true });
+  go(X, 0, { to: X.market[3][0] });
+  eq([X.market[1][0] != null, X.market[1][1] != null], [true, true], '…but after it, both');
+  const Y = rig({ players: [{ tokens: 'D2 S1' }, {}], opts: { strongholds: true }, market: { 1: [card, card2] } });
+  Y.holds[card2] = [0, 0, 0];
+  P(Y, 0).holds = 0;
+  go(Y, 0, { kind: 'reserve', card });
+  eq([Y.ask.kind, Y.market[1][0] != null], ['conquest', true], 'a reserved card is replaced at once, before the Conquest');
 }
 
 console.log('— the Trading Posts —');
@@ -372,6 +399,7 @@ console.log('— the Trading Posts —');
   const two = T5.decks[1].slice(-2).reverse();
   go(T5, 0, { kind: 'reserve', level: 1 });
   eq([T5.ask.kind, T5.ask.options], ['draw2', two], '"draw the first 2 cards from the chosen deck"');
+  eq([S.viewFor(T5, 1, 'T').ask, S.viewFor(T5, 1, 'T').look], [{ kind: 'draw2', seat: 0, level: 1, orient: false }, null], '"without showing them to the other players"');
   go(T5, 0, { keep: two[1] });
   eq([P(T5, 0).reserved[0].id, T5.decks[1][0]], [two[1], two[0]], '"Keep 1 ... and return the other card to the bottom of its deck"');
   const T6 = rig({ players: [{ posts: [4] }, {}], opts: { trading: true } });
