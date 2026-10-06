@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Coup — with Reformation, online</title>
+  <meta name="description" content="Play Coup online with 2 to 10 players: claim the Duke, the Assassin, the Captain, the Ambassador or the Contessa — whether you hold them or not — and call out everyone else's bluffs. With the Reformation expansion: Loyalists and Reformists, Conversion, Embezzlement and the Inquisitor. Peer-to-peer, with bots.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='6' y='6' width='88' height='88' rx='20' fill='%23201218'/%3E%3Cpath d='M22 70 L28 34 L41 50 L50 24 L59 50 L72 34 L78 70 Z' fill='%23e2b45a' stroke='%23fff1cf' stroke-width='3' stroke-linejoin='round'/%3E%3Crect x='22' y='72' width='56' height='8' rx='3' fill='%23c0392b'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body>
+
+  <!-- HOME -->
+  <section id="screen-home" class="screen">
+    <a class="back-home" href="../">← Collection</a>
+    <div class="logo-wrap">
+      <h1 class="logo">COUP</h1>
+      <div class="logo-post">with Reformation</div>
+    </div>
+    <p class="tagline">Two cards face down, two coins, and a court where everyone lies. Claim the Duke and take Tax, the Captain and steal, the Assassin and strike — whether you hold them or not. Anyone may call your bluff: lose a challenge and a card turns face up; lose both and you are exiled. The last one with influence wins. With the Reformation expansion to add as you like: Loyalists and Reformists, Conversion, Embezzlement from the Treasury Reserve, the Inquisitor, and tables of up to ten. Two to ten players, peer-to-peer: no accounts, no server, just a room code. Bots fill any empty seat.</p>
+    <input id="name-input" class="field" maxlength="16" placeholder="Your name" autocomplete="nickname">
+    <button id="btn-create" class="btn primary">Create a room</button>
+    <div class="divider">or join one</div>
+    <div class="join-row">
+      <input id="code-input" class="field" maxlength="40" placeholder="CODE" autocapitalize="characters" autocomplete="off" spellcheck="false">
+      <button id="btn-join" class="btn secondary">Join</button>
+    </div>
+    <div id="home-status" role="status"></div>
+    <button class="btn ghost btn-rules" type="button">How to play</button>
+    <p class="small-print">An unofficial fan implementation of <b>Coup</b> and its <b>Reformation</b> expansion by Rikki Tahta (© Indie Boards &amp; Cards). The rules follow the publisher’s rulebooks. Multiplayer runs over WebRTC: browsers find each other with Google STUN servers and a free signaling broker, then talk directly. The game lives in the host’s tab — keep it open!</p>
+  </section>
+
+  <!-- LOBBY -->
+  <section id="screen-lobby" class="screen hidden">
+    <div class="lobby-panel">
+      <div class="lobby-label">Room code</div>
+      <div id="lobby-code">·····</div>
+      <div class="copy-row">
+        <button id="btn-copy-code" class="btn ghost" type="button">Copy code</button>
+        <button id="btn-copy-link" class="btn ghost" type="button">Copy invite link</button>
+      </div>
+      <ul id="lobby-players"></ul>
+      <div id="option-picker"></div>
+      <div id="cast-summary"></div>
+      <div id="lobby-hint"></div>
+      <button id="btn-add-bot" class="btn secondary hidden" type="button">🤖 Add a bot</button>
+      <button id="btn-start" class="btn primary hidden" type="button">Deal the cards</button>
+      <div class="copy-row">
+        <button class="btn ghost btn-rules" type="button">How to play</button>
+        <button class="btn ghost btn-leave" type="button">Leave</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- GAME -->
+  <section id="screen-game" class="screen hidden">
+    <div class="topbar">
+      <span id="room-chip">·····</span>
+      <span id="turn-chip"></span>
+      <span id="phase-chip"></span>
+      <span class="spacer"></span>
+      <button class="btn ghost btn-rules" type="button">Rules</button>
+      <button class="btn ghost btn-leave" type="button">Leave</button>
+    </div>
+    <div id="table">
+      <div id="stage">
+        <div id="board"></div>
+        <div id="action" aria-live="polite"></div>
+      </div>
+      <aside id="side">
+        <div id="tracker"></div>
+        <div id="feed"></div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- RULES -->
+  <div id="modal-rules" class="modal hidden">
+    <div class="panel wide">
+      <h2>How to play Coup</h2>
+      <ol class="rules">
+        <li><b>Influence.</b> Everyone is dealt two face-down character cards — their influence — and 2 coins (in a game of two, the starting player takes only 1). To lose an influence is to turn one of your cards face up, your choice which; with both face up you are exiled. The last player with influence wins.</li>
+        <li><b>Your turn: one action.</b> You may not pass. <b>Income</b>: take 1 coin. <b>Foreign Aid</b>: take 2 — any player claiming the Duke may block it. <b>Coup</b>: pay 7 coins, and another player loses an influence; nothing stops it. With 10 coins or more you must Coup.</li>
+        <li><b>Character actions</b> are claims — true or not. <b>Duke</b>: Tax, take 3 coins. <b>Assassin</b>: pay 3 coins, and another player loses an influence; the Contessa blocks it. <b>Captain</b>: Steal 2 coins from a player who has some; the Captain or the Ambassador blocks it. <b>Ambassador</b>: Exchange — draw 2 cards from the Court deck, keep what you like, return 2.</li>
+        <li><b>Challenges.</b> Any other player may challenge a claim. If it is true and shown, the challenger loses an influence, and the card shown goes back into the Court deck for a new one. If not, the claimant loses an influence and the action fails — any coins paid come back.</li>
+        <li><b>Blocks.</b> Once any challenge to an action is settled, it may be blocked — the target of an assassination with the Contessa, of a steal with the Captain or the Ambassador, Foreign Aid by anyone with the Duke. A block is a claim too, and may be challenged. A blocked action fails, and the 3 coins paid for an assassination stay spent.</li>
+        <li><b>Twice in one turn.</b> The target of an assassination who challenges the Assassin and loses — or claims the Contessa and is caught — loses an influence for the challenge and then another for the assassination.</li>
+        <li><b>Talk.</b> “Any negotiations are allowed, but none are ever binding.” No one may show their cards or give away coins. Use the chat. The record on the side keeps every claim: <i>shown</i> when a challenge proved it, <i>lost</i> when it did not.</li>
+      </ol>
+      <h3 class="rules-h">Reformation</h3>
+      <p class="rules-intro">The host picks any of it in the lobby.</p>
+      <ul class="rules">
+        <li><b>Allegiances.</b> The start player chooses to be a Loyalist or a Reformist; round the table the others alternate. No one may Coup, Assassinate, Steal from, Examine or block the Foreign Aid of their own side — unless everyone left is on one side.</li>
+        <li><b>Conversion.</b> Pay 1 coin onto the Treasury Reserve to change your Allegiance, or 2 to change another player’s.</li>
+        <li><b>Embezzlement.</b> Claim <i>not</i> to hold the Duke, and take every coin on the Treasury Reserve. A challenger says you do hold it: if you do, you must concede — lose an influence and take nothing; if you do not, show your cards — the challenger loses an influence, and your cards are shuffled into the Court deck for new ones.</li>
+        <li><b>The Inquisitor</b>, in place of the Ambassador: <b>Exchange</b> one card with the Court deck, or <b>Examine</b> — another player shows you a card of their choice, and you hand it back or make them draw a new one and return that card to the Court deck. Blocks stealing.</li>
+        <li><b>Seven to ten players.</b> Four of each character at seven or eight, five at nine or ten — “recommended for experienced players”: the eliminated wait longest.</li>
+        <li><b>The two-player variant.</b> Each player secretly chooses one card from a set of the five characters, and is dealt the second from a third set; the three cards left are the Court deck.</li>
+      </ul>
+      <p class="credit"><b>Coup</b> and <b>Coup: Reformation</b> are by Rikki Tahta, published by Indie Boards &amp; Cards. This is an unofficial fan implementation. The rules follow the Coup rulebook, read from RulesPal’s transcription and checked against the publisher-verified rules on Dized, whose FAQ settles the order of challenges and blocks; Reformation’s follow its rulebook, read from UltraBoardGames’ transcription. Where the rulebooks are silent — a target saying early that they will block, one block to an action, the cards shown against an Embezzlement challenge shown to the whole table, a Treasury that never runs out — the choices made are noted in the code. The character signs are this page’s own, not the cards’ art.</p>
+      <button id="btn-rules-close" class="btn secondary" type="button">Got it</button>
+    </div>
+  </div>
+
+  <!-- GAME OVER -->
+  <div id="gameover" class="modal hidden">
+    <div class="panel">
+      <h2 id="go-title">Game over</h2>
+      <div id="go-sub"></div>
+      <ul id="go-rank"></ul>
+      <div class="btn-row">
+        <button id="btn-again" class="btn primary hidden" type="button">Another game</button>
+        <button id="btn-golobby" class="btn secondary hidden" type="button">Back to lobby</button>
+      </div>
+      <div id="go-wait">Waiting for the host…</div>
+      <div class="btn-row">
+        <button class="btn ghost btn-leave" type="button">Leave game</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHAT -->
+  <div id="chat" class="hidden">
+    <div id="chat-panel" class="hidden">
+      <div class="chat-head">The Court</div>
+      <div id="chat-msgs"></div>
+      <form id="chat-form">
+        <input id="chat-input" maxlength="200" placeholder="Accuse, bargain, bluff…" autocomplete="off">
+        <button type="submit" class="chat-send" aria-label="Send">➤</button>
+      </form>
+    </div>
+    <button id="chat-peek" type="button" class="hidden"></button>
+    <button id="chat-toggle" type="button" aria-label="Toggle chat">💬<span id="chat-unread" class="hidden"></span></button>
+  </div>
+
+  <div id="toasts" aria-live="polite"></div>
+  <div id="banner" class="flash hidden"></div>
+  <div id="confetti"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

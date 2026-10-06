@@ -100,6 +100,11 @@
     .art.bng .star { filter: drop-shadow(0 4px 8px rgba(0, 0, 0, .5)); }
     .art.bng .star i { display: block; width: 58px; height: 58px; background: linear-gradient(180deg, #ffe08a, #c98f24); clip-path: polygon(50% 0%, 64% 25.8%, 93.3% 25%, 78% 50%, 93.3% 75%, 64% 74.2%, 50% 100%, 36% 74.2%, 6.7% 75%, 22% 50%, 6.7% 25%, 36% 25.8%); }
     .art.bng .word { font-family: 'Rockwell', 'Rockwell Nova', 'American Typewriter', 'Roboto Slab', serif; font-weight: 900; font-size: 34px; letter-spacing: .04em; color: #ffd77a; transform: rotate(-8deg); text-shadow: 3px 3px 0 #6e1d12, 0 6px 14px rgba(0, 0, 0, .5); }
+    .art.cop { background: radial-gradient(120% 90% at 50% 0%, #4a2034, #12070d 72%); grid-auto-flow: column; justify-content: center; align-items: center; gap: 12px; }
+    .art.cop .cd { display: block; width: 42px; height: 58px; border-radius: 6px; border: 2px solid rgba(226, 180, 90, .7); background: repeating-linear-gradient(45deg, rgba(226, 180, 90, .2) 0 4px, transparent 4px 9px), linear-gradient(180deg, #3a1b29, #1d0e16); box-shadow: 0 4px 10px rgba(0, 0, 0, .5); transform: rotate(-8deg); }
+    .art.cop .cd.up { display: grid; place-items: center; font-size: 24px; background: linear-gradient(180deg, #5b3a8a, #24132f); border-color: #a77ce6; transform: rotate(7deg) translateY(-4px); }
+    .art.cop .coins { display: flex; flex-direction: column; }
+    .art.cop .coins i { display: block; width: 32px; height: 10px; border-radius: 50%; background: linear-gradient(180deg, #ffe08a, #c98f24); border: 1px solid #8a6216; margin-top: -3px; }
     .art.avl { background: radial-gradient(120% 90% at 50% 0%, #26355f, #0b1124 70%); }
     .art.avl .quests { display: flex; gap: 7px; }
     .art.avl .quests i { width: 30px; height: 30px; border-radius: 50%; border: 2px solid rgba(227, 196, 106, .6); background: #18234a; box-shadow: 0 3px 8px rgba(0, 0, 0, .45); }
@@ -401,6 +406,22 @@
   <p class="sub">Games that run entirely in your browser. Share a room code to play with friends peer-to-peer — most games can fill empty seats with bots. No accounts, no downloads, no server.</p>
 
   <main class="shelf">
+    <a class="game" href="./coup/">
+      <div class="art cop">
+        <span class="cd"></span><span class="cd up">👑</span>
+        <span class="coins"><i></i><i></i><i></i><i></i></span>
+      </div>
+      <div class="body">
+        <div class="title-row">
+          <span class="name">Coup</span>
+          <span class="players">2–10 players</span>
+        </div>
+        <p class="blurb">Two cards face down and a court full of liars. Claim the Duke, the Assassin or the Captain — held or not — and call everyone else’s bluffs; lose both cards and you are exiled. With the Reformation expansion: Loyalists and Reformists, Conversion, Embezzlement and the Inquisitor.</p>
+        <div class="tags"><span class="tag">bluffing</span><span class="tag">hidden cards</span><span class="tag">Reformation</span><span class="tag">bots</span><span class="tag">~15 min</span></div>
+        <span class="play">Play Coup →</span>
+      </div>
+    </a>
+
     <a class="game" href="./splendor/">
       <div class="art spl">
         <i style="--c: #eef2f5"></i><i style="--c: #2d66c8"></i><i style="--c: #1f8f55"></i><i style="--c: #c8342d"></i><i style="--c: #2e2927"></i>
