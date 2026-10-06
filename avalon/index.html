@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Avalon — The Resistance, online</title>
-  <meta name="description" content="Play The Resistance: Avalon online with 5 to 10 players: Loyal Servants of Arthur against the Minions of Mordred, Merlin, Percival, Morgana, Mordred, Oberon and the Lady of the Lake. Peer-to-peer, with bots.">
+  <title>Avalon — The Resistance, Big Box, online</title>
+  <meta name="description" content="Play The Resistance: Avalon online with 5 to 10 players, with everything in the Big Box: Merlin, Percival, Morgana, Mordred, Oberon, Lancelot, the Cleric, the Trickster and more; the Rogues, Sorcerers and Messengers; the Lady of the Lake, Excalibur, the Trapper and Plot cards. Peer-to-peer, with bots.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='6' y='6' width='88' height='88' rx='20' fill='%23101a33'/%3E%3Cpath d='M50 16 L78 28 L74 62 Q66 80 50 88 Q34 80 26 62 L22 28 Z' fill='%233f7fd8' stroke='%23e3c46a' stroke-width='5'/%3E%3Cpath d='M50 30 L50 72 M38 44 L62 44' stroke='%23f2e8cf' stroke-width='7' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="style.css">
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -17,8 +17,9 @@
     <div class="logo-wrap">
       <div class="logo-pre">The Resistance</div>
       <h1 class="logo">AVALON</h1>
+      <div class="logo-post">Big Box</div>
     </div>
-    <p class="tagline">Arthur’s knights ride out on five Quests — and hidden among them are the Minions of Mordred. Each round a Leader picks a Team, the whole table votes on it in the open, and the Team plays its Quest cards face down: a single Fail and the Quest is lost. Merlin knows the traitors but cannot say so; if Good wins three Quests, the Assassin gets one guess at who he is. Five to ten players, peer-to-peer: no accounts, no server, just a room code. Bots fill any empty seat.</p>
+    <p class="tagline">Arthur’s knights ride out on five Quests — and hidden among them are the Minions of Mordred. Each round a Leader picks a Team, the whole table votes on it in the open, and the Team plays its Quest cards face down: a single Fail and the Quest is lost. Merlin knows the traitors but cannot say so; if Good wins three Quests, the Assassin gets one guess at who he is. With everything in the Big Box to add as you like: Lancelot, the Cleric, the Trickster and the other Characters, the Rogues, Sorcerers and Messengers, the Lady of the Lake, Excalibur, the Trapper and Plot cards. Five to ten players, peer-to-peer: no accounts, no server, just a room code. Bots fill any empty seat.</p>
     <input id="name-input" class="field" maxlength="16" placeholder="Your name" autocomplete="nickname">
     <button id="btn-create" class="btn primary">Create a room</button>
     <div class="divider">or join one</div>
@@ -28,7 +29,7 @@
     </div>
     <div id="home-status" role="status"></div>
     <button class="btn ghost btn-rules" type="button">How to play</button>
-    <p class="small-print">An unofficial fan implementation of <b>The Resistance: Avalon</b> by Don Eskridge (© Indie Boards &amp; Cards). The rules, the Set Up chart and the Team Building chart follow the publisher’s rulebook. Multiplayer runs over WebRTC: browsers find each other with Google STUN servers and a free signaling broker, then talk directly. The game lives in the host’s tab — keep it open!</p>
+    <p class="small-print">An unofficial fan implementation of <b>The Resistance: Avalon</b> by Don Eskridge (© Indie Boards &amp; Cards). The rules follow the publisher’s Avalon Big Box rulebook. Multiplayer runs over WebRTC: browsers find each other with Google STUN servers and a free signaling broker, then talk directly. The game lives in the host’s tab — keep it open!</p>
   </section>
 
   <!-- LOBBY -->
@@ -41,9 +42,7 @@
         <button id="btn-copy-link" class="btn ghost" type="button">Copy invite link</button>
       </div>
       <ul id="lobby-players"></ul>
-      <div class="lobby-label">Characters</div>
-      <div id="role-picker" class="pick-row"></div>
-      <div id="lady-picker" class="pick-row"></div>
+      <div id="option-picker"></div>
       <div id="cast-summary"></div>
       <div id="lobby-hint"></div>
       <button id="btn-add-bot" class="btn secondary hidden" type="button">🤖 Add a bot</button>
@@ -93,7 +92,20 @@
         <li><b>The Lady of the Lake</b> (optional, best at 7 or more). She starts with the player on the first Leader’s right. After the 2nd, 3rd and 4th Quests, her holder secretly sees one player’s loyalty — anyone who has not held her — may tell the table anything about it, and passes her to that player.</li>
         <li><b>Talk.</b> “Players may make any claims during the game, at any point in the game.” Use the chat: accuse, defend, bluff. Point at or tap anything at the table to see what it means; the vote record on the side keeps every Team and every vote.</li>
       </ol>
-      <p class="credit"><b>The Resistance: Avalon</b> is by Don Eskridge, published by Indie Boards &amp; Cards. This is an unofficial fan implementation. The rules, the Set Up chart (the sides at each table size) and the Team Building chart (the Team for each Quest) follow the publisher’s rulebook, as do the reveal scripts that decide who sees whom.</p>
+      <h3 class="rules-h">The Big Box</h3>
+      <p class="rules-intro">Everything below is optional: the host picks it in the lobby. The rulebook advises adding one new Character at a time.</p>
+      <ul class="rules">
+        <li><b>Checking loyalty.</b> The Cleric, the Lady of the Lake and some Plot cards check a player’s loyalty: that player passes a Good or an Evil Loyalty card, seen only by the checker. The <b>Trickster</b> (Evil) may lie and show Good; the <b>Troublemaker</b> (Good) must lie and show Evil.</li>
+        <li><b>More Characters.</b> The <b>Cleric</b> (Good) learns at the start whether the first Leader is Good or Evil. The <b>Lunatic</b> (Evil) must Fail every Quest; the <b>Brute</b> (Evil) may Fail only the first three. The <b>Revealer</b> (Evil) must reveal themself after the second failed Quest. The <b>Untrustworthy Servant</b> (Good) knows the Assassin, and Merlin takes them for Evil; if three Quests succeed, the Assassin first tries to recruit them — guessed, they turn Evil and name Merlin in the Assassin’s place.</li>
+        <li><b>Lancelot.</b> A Good and an Evil Lancelot, who know each other. In <b>Variant 1</b> they do not; Evil Lancelot is known to Evil but does not know them, and at the start of each Quest an Allegiance card (four No Change, two Switch) may make the two Lancelots change sides. In <b>Variant 2</b> five Allegiance cards are dealt face up over the Quests at the start, and Evil Lancelot must Fail every Quest he is on.</li>
+        <li><b>Rogues.</b> A Good and an Evil Rogue, or one alone; the Evil Rogue is hidden from Evil and from Merlin. After a Team is approved the Leader gives a Watch token to one member (not on the first two Quests at 5 or 6 players): a watched Rogue may not play their Rogue card. Rogue Success and Rogue Fail count as Success and Fail and leave a token on the Quest. The Good Rogue wins alone with Rogue Success on the third successful Quest and one before it; the Evil Rogue, with Rogue Fail on the third failed Quest and one before. A Rogue whose side wins otherwise has a partial victory.</li>
+        <li><b>Sorcerers.</b> A Good and an Evil Sorcerer may play Magic; an odd number of Magic cards turns a Quest’s result around. The Evil Sorcerer may play Success or Magic, never Fail. Optional: the Evil Sorcerer stays unseen at the reveal.</li>
+        <li><b>Messengers.</b> Two Good Messengers and an Evil one. A Good Messenger may play a Good Message (a Success) twice in the game; the Evil Messenger may play an Evil Message (a Fail). Each leaves a token. After the fifth Quest’s cards, three Good Messages let Good take a Fail off it, two Evil Messages let Evil add one — both, and nothing happens. At the end the Assassin may go after both Good Messengers instead of Merlin. Optional: the Senior Messenger knows the Junior.</li>
+        <li><b>The Trapper.</b> Every Team takes one more player. Once the cards are played, the Leader looks at one and sets it aside: it does not count.</li>
+        <li><b>Excalibur.</b> The Leader gives it to a member of the Team other than themselves. Once the cards are played, its holder may switch one other member’s card for their other one — and sees what it was. A card played face up cannot be switched.</li>
+        <li><b>Plot cards</b> (here at 7 or more). At the start of each Quest the Leader draws two (7–8 players) or three (9–10) and gives each to another player. ♛ cards act at once: <i>Are You the One?</i> (check a neighbour’s loyalty), <i>Show Your Strength</i> (the Leader shows their loyalty to a player of their choice), <i>Show Your True Nature</i> (you show yours), <i>Restore Your Honor</i> (take a Plot card from another player). ⚜ cards are held until used: <i>Lead to Victory</i> (become Leader before the Leader acts), <i>The King Returns</i> (turn back an approved Team — a failed vote), <i>We Found You!</i> (make a member of the Team play face up), <i>Ambush</i> (look at a played card). ✿ <i>Charge!</i> stays all game: its holder votes first, for all to see.</li>
+      </ul>
+      <p class="credit"><b>The Resistance: Avalon</b> and <b>Avalon Big Box</b> are by Don Eskridge, published by Indie Boards &amp; Cards. This is an unofficial fan implementation. The rules, the charts and the reveal script that decides who sees whom follow the Big Box rulebook, read from RulesPal’s full transcription of it. The make-up of the Plot deck is The Resistance’s, whose nine cards the Big Box renamed: the counts come from its consolidated rules. Which seven Plot cards a table of five or six uses is printed on the cards and not yet checked, so Plot cards are played here at seven or more. Where the rulebook is silent — Excalibur switching a card from a set of three or four, the Evil Sorcerer’s optional rule — the choices made are noted in the code.</p>
       <button id="btn-rules-close" class="btn secondary" type="button">Got it</button>
     </div>
   </div>

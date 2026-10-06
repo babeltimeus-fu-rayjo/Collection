@@ -17,7 +17,11 @@ import {
   SIDES,
   TEAM_SIZES,
   ROLES,
-  OPTIONAL,
+  GOOD_CHARS,
+  EVIL_CHARS,
+  RULES,
+  CARDS,
+  PLOTS,
   sideOf,
   defaultOpts,
   canStart,
@@ -667,15 +671,13 @@ class HostSession {
 
   // The lobby's Characters: Merlin and the Assassin always, and any of the
   // optional four; the Lady of the Lake on or off.
-  toggleRole(key) {
-    if (this.G || !OPTIONAL.includes(key)) return;
-    this.opts = { ...this.opts, [key]: !this.opts[key] };
-    this.pushLobby();
-  }
-
-  toggleLady() {
-    if (this.G) return;
-    this.opts = { ...this.opts, lady: !this.opts.lady };
+  setOpt(key, value) {
+    if (this.G || !(key in defaultOpts())) return;
+    if (key === 'lancelotVariant' ? ![0, 1, 2].includes(value) : typeof value !== 'boolean') return;
+    this.opts = { ...this.opts, [key]: value };
+    // a sub-option goes with its module
+    if (key === 'sorcerers' && !value) this.opts.sorcererHidden = false;
+    if (key === 'messengers' && !value) this.opts.messengerSenior = false;
     this.pushLobby();
   }
 
@@ -689,8 +691,10 @@ class HostSession {
   }
 
   botDelay() {
-    const k = { team: 'botLead', vote: 'botVote', quest: 'botQuest', lady: 'botLady', assassin: 'botAssassin' }[this.G.phase];
-    return k ? cfg.range(k) : 1000;
+    const G = this.G;
+    const a = G.ask ? G.ask.kind : G.phase;
+    const k = { propose: 'botLead', give: 'botLead', vote: 'botVote', quest: 'botQuest', lady: 'botLady', declare: 'botLady', loyalty: 'botLady', adjacent: 'botLady', showto: 'botLady', take: 'botLady', recruit: 'botAssassin', assassinate: 'botAssassin' }[a];
+    return k ? cfg.range(k) : cfg.range('botVote');
   }
 
   tick() {
@@ -1057,12 +1061,29 @@ function guestGone(code, why) {
 
 // ---------------------------------------------------------------- Characters, as the table shows them
 
-const ROLE_ICON = { merlin: '🧙', percival: '🛡️', servant: '⚔️', assassin: '🗡️', morgana: '🔮', mordred: '🐉', oberon: '🌑', minion: '🐍' };
+const ROLE_ICON = {
+  merlin: '🧙', percival: '🛡️', servant: '⚔️', cleric: '📿', troublemaker: '🧨', untrustworthy: '🤞',
+  lancelotGood: '🏇', lancelotEvil: '🏇', rogueGood: '🏹', rogueEvil: '🏹', sorcererGood: '🪄', sorcererEvil: '🪄',
+  messengerSenior: '📜', messengerJunior: '📜', messengerEvil: '📜',
+  assassin: '🗡️', morgana: '🔮', mordred: '🐉', oberon: '🌑', minion: '🐍', lunatic: '🤪', brute: '🪓', revealer: '👁️', trickster: '🎭',
+};
 const LADY_ICON = '🌊';
 const roleName = (r) => ROLES[r].name;
-const SHORT = { servant: 'Loyal Servant', minion: 'Minion' };
+const SHORT = { servant: 'Loyal Servant', minion: 'Minion', untrustworthy: 'Untrustworthy', messengerSenior: 'Sr. Messenger', messengerJunior: 'Jr. Messenger' };
 const SIDE_WORD = { good: 'Good', evil: 'Evil' };
 const PLURAL = { servant: 'Loyal Servants of Arthur', minion: 'Minions of Mordred' };
+// the three kinds of Plot card: the Leader's crown (used at once), the
+// fleur-de-lis (held until used), the flower (in play all game)
+const PLOT_ICON = { now: '♛', held: '⚜', always: '✿' };
+const CARD_TIP = {
+  success: 'Success.',
+  fail: 'Fail: one fails the Quest (two on the 4th Quest at seven or more).',
+  rogueSuccess: 'Rogue Success: counts as Success, and leaves a Rogue token on the Quest. Played on the third successful Quest and one before, the Good Rogue wins alone.',
+  rogueFail: 'Rogue Fail: counts as Fail, and leaves a Rogue token on the Quest. Played on the third failed Quest and one before, the Evil Rogue wins alone.',
+  magic: 'Magic: an odd number of Magic cards turns the Quest’s result around.',
+  goodMessage: 'Good Message: counts as Success. Three by the fifth Quest and Good may take a Fail off it. Twice in the game at most.',
+  evilMessage: 'Evil Message: counts as Fail. Two by the fifth Quest and Evil may add a Fail to it.',
+};
 
 function listWords(a) {
   return a.length <= 1 ? a.join('') : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`;
@@ -1078,6 +1099,19 @@ function castLine(n, opts, side) {
 }
 
 // ---------------------------------------------------------------- lobby UI
+
+// what each lobby option is, in the rulebook's words where it has them
+const RULE_TIP = {
+  trapper: 'The Trapper: every Team takes one more player, and the Leader looks at one played Quest card and sets it aside — it does not count. Recommended for 8 or more.',
+  lady: 'The Lady of the Lake: after the 2nd, 3rd and 4th Quests, whoever holds her looks at one player’s loyalty in secret — then she passes to that player. No one is looked at twice by her. Recommended for 7 or more.',
+  excalibur: 'Excalibur: the Leader gives it to a member of the Team (not themselves). Once the cards are played, its holder may switch one other member’s card for their other one — and sees what it was.',
+  plot: 'Plot cards: at the start of each Quest the Leader draws one, two or three and gives them away — cards used at once, cards held until used, and Charge!, in play all game. Here at 7 or more players only: which seven cards a table of 5 or 6 uses is printed on the cards, and not yet checked.',
+};
+const LANCELOT = [
+  [0, 'Know each other', 'Lancelot: a Good and an Evil card, dealt in place of a Servant and a Minion. The two Lancelots know each other, and each other’s allegiance.'],
+  [1, 'Variant 1', 'Variant 1: the Lancelots do not know each other, and Evil Lancelot is known to Evil but does not know them. At the start of each Quest a card is drawn from an Allegiance deck — four No Change, two Switch: on a Switch the two Lancelots change sides.'],
+  [2, 'Variant 2', 'Variant 2: as Variant 1, but five of seven Allegiance cards (two Switch) are dealt face up over the Quests at the start, so everyone knows when the switches come — and Evil Lancelot must Fail every Quest he is on.'],
+];
 
 function renderLobby(lob, sess) {
   logLines = [];
@@ -1118,43 +1152,59 @@ function renderLobby(lob, sess) {
     list.append(row);
   }
 
+  // the options, in four groups: Characters, Lancelot, modules, optional rules
   const opts = lob.opts;
-  const cp = $('#role-picker');
-  cp.replaceChildren();
-  for (const k of ['merlin', 'assassin']) {
-    const b = el('span', `role-pick side-${sideOf(k)} on fixed`);
-    b.append(el('span', 'role-ic', ROLE_ICON[k]), el('span', '', roleName(k)));
-    b.dataset.tip = `${roleName(k)}, in every game. ${ROLES[k].power}`;
-    cp.append(b);
-  }
-  for (const k of OPTIONAL) {
-    const on = !!opts[k];
-    const b = el('button', `role-pick side-${sideOf(k)}${on ? ' on' : ''}`);
-    b.type = 'button';
-    b.setAttribute('aria-pressed', String(on));
-    b.disabled = !sess.isHost;
-    b.append(el('span', 'role-ic', ROLE_ICON[k]), el('span', '', roleName(k)));
-    b.dataset.tip = `${roleName(k)} (${SIDE_WORD[sideOf(k)]}). ${ROLES[k].power}`;
-    if (sess.isHost) b.addEventListener('click', () => sess.toggleRole(k));
-    cp.append(b);
-  }
-  const lp = $('#lady-picker');
-  lp.replaceChildren();
-  const lady = el('button', `role-pick lady${opts.lady ? ' on' : ''}`);
-  lady.type = 'button';
-  lady.setAttribute('aria-pressed', String(!!opts.lady));
-  lady.disabled = !sess.isHost;
-  lady.append(el('span', 'role-ic', LADY_ICON), el('span', '', opts.lady ? 'Lady of the Lake: in play' : 'Lady of the Lake: off'));
-  lady.dataset.tip = 'After the 2nd, 3rd and 4th Quests, whoever holds the Lady looks at one player’s loyalty in secret — then the Lady passes to that player. No one is looked at twice by her.';
-  if (sess.isHost) lady.addEventListener('click', () => sess.toggleLady());
-  lp.append(lady);
+  const host = sess.isHost;
+  const op = $('#option-picker');
+  op.replaceChildren();
+  const group = (title, hint) => {
+    const g = el('div', 'opt-group');
+    const h = el('div', 'opt-title', title);
+    if (hint) h.dataset.tip = hint;
+    const r = el('div', 'pick-row');
+    g.append(h, r);
+    op.append(g);
+    return r;
+  };
+  const pickBtn = (row, { label, icon = '', cls = '', on, tip, set, fixed, sub }) => {
+    const b = el(fixed ? 'span' : 'button', `role-pick ${cls}${on ? ' on' : ''}${fixed ? ' fixed' : ''}${sub ? ' sub' : ''}`);
+    if (!fixed) {
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(!!on));
+      b.disabled = !host;
+      if (host) b.addEventListener('click', set);
+    }
+    if (icon) b.append(el('span', 'role-ic', icon));
+    b.append(el('span', '', label));
+    b.dataset.tip = tip;
+    row.append(b);
+    return b;
+  };
+  const toggle = (k) => () => sess.setOpt(k, !opts[k]);
+  const chars = group('Characters', 'Merlin and the Assassin are in every game; the rest of each side are Loyal Servants of Arthur and Minions of Mordred. "It is best to add one special character into a game at a time."');
+  for (const k of ['merlin', 'assassin']) pickBtn(chars, { label: roleName(k), icon: ROLE_ICON[k], cls: `side-${sideOf(k)}`, on: true, fixed: true, tip: `${roleName(k)}, in every game. ${ROLES[k].power}` });
+  for (const k of [...GOOD_CHARS, ...EVIL_CHARS]) pickBtn(chars, { label: roleName(k), icon: ROLE_ICON[k], cls: `side-${sideOf(k)}`, on: opts[k], set: toggle(k), tip: `${roleName(k)} (${SIDE_WORD[sideOf(k)]}). ${ROLES[k].power}` });
+  const lan = group('Lancelot');
+  pickBtn(lan, { label: 'Off', on: !opts.lancelot, cls: 'plain', set: () => sess.setOpt('lancelot', false), tip: 'No Lancelot.' });
+  for (const [v, label, tip] of LANCELOT) pickBtn(lan, { label, icon: v === 0 ? ROLE_ICON.lancelotGood : '⇄', cls: 'plain', on: opts.lancelot && opts.lancelotVariant === v, set: () => { sess.setOpt('lancelot', true); sess.setOpt('lancelotVariant', v); }, tip });
+  const mods = group('Modules', '"These modules were designed to be played without Merlin but may be combined with Merlin, other optional modules, characters, and rules. It is recommended that you play each module separately before combining them."');
+  pickBtn(mods, { label: 'Good Rogue', icon: ROLE_ICON.rogueGood, cls: 'side-good', on: opts.rogueGood, set: toggle('rogueGood'), tip: `The Rogue module. ${ROLES.rogueGood.power} The Leader gives a Watch token to a member of each Team: a watched Rogue may not play their Rogue card.` });
+  pickBtn(mods, { label: 'Evil Rogue', icon: ROLE_ICON.rogueEvil, cls: 'side-evil', on: opts.rogueEvil, set: toggle('rogueEvil'), tip: `The Rogue module. ${ROLES.rogueEvil.power}` });
+  pickBtn(mods, { label: 'Sorcerers', icon: ROLE_ICON.sorcererGood, cls: 'mod', on: opts.sorcerers, set: toggle('sorcerers'), tip: 'One Good and one Evil Sorcerer, who may play Magic: an odd number of Magic cards turns a Quest’s result around. The Evil Sorcerer may play Success or Magic, never Fail.' });
+  if (opts.sorcerers) pickBtn(mods, { label: 'Evil Sorcerer unseen', cls: 'mod', sub: true, on: opts.sorcererHidden, set: toggle('sorcererHidden'), tip: 'The optional rule: "The Evil Sorcerer does not reveal themself in the Reveal stage" — Evil does not know them, Merlin does not see them.' });
+  pickBtn(mods, { label: 'Messengers', icon: ROLE_ICON.messengerSenior, cls: 'mod', on: opts.messengers, set: toggle('messengers'), tip: 'Two Good Messengers and an Evil one, with Message cards: three Good Messages by the fifth Quest and Good takes a Fail off it; two Evil and Evil adds one. At the end the Assassin may go after both Good Messengers instead of Merlin. Recommended for 7 or more.' });
+  if (opts.messengers) pickBtn(mods, { label: 'Senior knows Junior', cls: 'mod', sub: true, on: opts.messengerSenior, set: toggle('messengerSenior'), tip: 'The optional rule: "the Senior Messenger knows who the Junior Messenger is, but the Junior Messenger does not know their teammate."' });
+  const rules = group('Optional rules');
+  const RULE_ICON = { trapper: '🪤', lady: LADY_ICON, excalibur: '⚔', plot: '🂠' };
+  const RULE_NAME = { trapper: 'Trapper', lady: 'Lady of the Lake', excalibur: 'Excalibur', plot: 'Plot cards' };
+  for (const k of RULES) pickBtn(rules, { label: RULE_NAME[k], icon: RULE_ICON[k], cls: `rule ${k}`, on: opts[k], set: toggle(k), tip: RULE_TIP[k] });
 
   // the Characters the table will be dealt, at its size now (or five)
   const tn = Math.min(MAX_PLAYERS, Math.max(MIN_PLAYERS, n));
   const sum = $('#cast-summary');
   sum.replaceChildren();
   const fit = canStart(tn, opts);
-  if (fit && n >= MIN_PLAYERS) sum.append(el('div', 'cast-bad', fit));
+  if (fit) sum.append(el('div', 'cast-bad', n >= MIN_PLAYERS ? fit : `At a table of ${tn}: ${fit}`));
   else {
     sum.append(el('div', 'cast-head', n >= MIN_PLAYERS ? `Dealt at this table of ${tn}:` : `Dealt at a table of ${tn}:`));
     sum.append(el('div', 'cast-good', castLine(tn, opts, 'good')), el('div', 'cast-evil', castLine(tn, opts, 'evil')));
@@ -1180,7 +1230,12 @@ function renderLobby(lob, sess) {
 
 let viewMid = null;
 let pick = [];            // the Leader's Team, as it is being chosen
-let aim = null;           // the player the Lady or the Assassin has picked out
+let excal = null;         // who the Leader gives Excalibur to
+let aim = null;           // the player picked out for the question at hand
+let aims = [];            // two players, when the Assassin names the Messengers
+let mode = 'merlin';      // whom the Assassin goes after: Merlin, or the Messengers
+let card = null;          // the Plot card the Leader is about to give
+let askKey = null;        // the question the picks above belong to
 let roleShownFor = null;  // the game whose role card has been shown
 
 const me = (view) => view.players.find((p) => p.seat === view.you);
@@ -1191,6 +1246,11 @@ const seatName = (view, seat) => {
 const namesOf = (view, seats) => listWords(seats.map((s) => seatName(view, s)));
 const isObserver = (view) => !!view.observer;
 const lastOf = (a) => (a.length ? a[a.length - 1] : null);
+const myAsk = (view) => (view.ask && view.ask.seat === view.you && view.me && !isObserver(view) ? view.ask : null);
+const plotName = (t) => PLOTS[t].name;
+const isTeam = (view, s) => !!view.team && view.team.includes(s);
+// the players the viewer knows (or was shown) to be Evil
+const knownEvil = (view, s) => ['evil', 'assassin'].includes(view.me.knows[s]);
 
 function btn(label, cls, fn, disabled = false) {
   const b = el('button', `btn ${cls}`, label);
@@ -1200,29 +1260,54 @@ function btn(label, cls, fn, disabled = false) {
   return b;
 }
 
-const PHASE = { team: 'Team Building', vote: 'Team Vote', quest: 'Quest', lady: 'Lady of the Lake', assassin: 'Merlin’s fate', over: 'Game over' };
+const PHASE = { team: 'Team Building', vote: 'Team Vote', onquest: 'Quest', quest: 'Quest', lady: 'Lady of the Lake', recruit: 'Recruitment', assassin: 'Assassination', over: 'Game over' };
+const ASK_LABEL = {
+  lead: 'Lead to Victory?', give: 'Plot cards', adjacent: 'Are You the One?', showto: 'Loyalty shown', take: 'Restore Your Honor', loyalty: 'Loyalty check',
+  king: 'The King Returns?', watch: 'Watch token', spot: 'We Found You!?', excalibur: 'Excalibur', ambush: 'Ambush?', trap: 'The Trapper', declare: 'Lady of the Lake',
+};
+
+// who a tap at a seat may pick out now
+function aimable(view, seat) {
+  const a = myAsk(view);
+  if (!a) return false;
+  const you = view.you;
+  switch (a.kind) {
+    case 'give': case 'showto': return seat !== you;
+    case 'adjacent': {
+      const i = view.players.findIndex((p) => p.seat === you);
+      const n = view.players.length;
+      return [view.players[(i + 1) % n].seat, view.players[(i + n - 1) % n].seat].includes(seat);
+    }
+    case 'watch': case 'trap': return isTeam(view, seat);
+    case 'spot': return isTeam(view, seat) && !(seat in view.faceUp);
+    case 'excalibur': return isTeam(view, seat) && seat !== you && !(seat in view.faceUp);
+    case 'ambush': return isTeam(view, seat) && seat !== you;
+    case 'lady': return !view.lady.held.includes(seat);
+    case 'recruit': return seat !== you && !knownEvil(view, seat);
+    case 'assassinate': return seat !== you && !knownEvil(view, seat);
+    default: return false;
+  }
+}
 
 // what the viewer may do with a seat right now
 function seatAct(view, seat) {
-  if (isObserver(view) || !view.me) return null;
-  if (view.phase === 'team' && view.leader === view.you) return 'pick';
-  if (view.phase === 'lady' && view.lady && view.lady.holder === view.you && !view.check) return view.lady.held.includes(seat) ? null : 'aim';
-  if (view.phase === 'assassin' && view.assassin === view.you) {
-    if (seat === view.you || view.me.knows[seat] === 'evil') return null;
-    return 'aim';
-  }
-  return null;
+  const a = myAsk(view);
+  if (!a) return null;
+  if (a.kind === 'propose') return 'pick';
+  if (a.kind === 'assassinate' && mode === 'messengers') return aimable(view, seat) ? 'aim2' : null;
+  return aimable(view, seat) ? 'aim' : null;
 }
 
 function seatClick(view, seat, act) {
   if (act === 'pick') {
     const k = view.sizes[view.quest];
-    if (pick.includes(seat)) pick = pick.filter((s) => s !== seat);
-    else if (pick.length < k) pick = [...pick, seat];
+    if (pick.includes(seat)) {
+      pick = pick.filter((s) => s !== seat);
+      if (excal === seat) excal = null;
+    } else if (pick.length < k) pick = [...pick, seat];
     else { toast(`The Team is full at ${k} — tap a member to take them off.`); return; }
-  } else if (act === 'aim') {
-    aim = aim === seat ? null : seat;
-  }
+  } else if (act === 'aim') aim = aim === seat ? null : seat;
+  else if (act === 'aim2') aims = aims.includes(seat) ? aims.filter((s) => s !== seat) : [...aims, seat].slice(-2);
   renderGame(lastView, session);
 }
 
@@ -1231,21 +1316,33 @@ function seatClick(view, seat, act) {
 function shownVotes(view) {
   const pr = lastOf(view.proposals);
   if (!pr || view.phase === 'vote' || view.phase === 'over') return null;
-  if (pr.quest !== view.quest && view.phase !== 'assassin') return null;
+  if (pr.quest !== view.quest && view.phase !== 'assassin' && view.phase !== 'recruit') return null;
   return pr;
 }
 
+const MARK = {
+  evil: ['evil', 'Evil'], good: ['good', 'Good'], merlin: ['good', 'Merlin'], 'merlin?': ['maybe', 'Merlin?'], assassin: ['evil', 'Assassin'],
+  junior: ['good', 'Messenger'], 'lancelot-good': ['good', 'Lancelot'], 'lancelot-evil': ['evil', 'Lancelot'],
+  'shown-good': ['good shown', 'showed Good'], 'shown-evil': ['evil shown', 'showed Evil'],
+};
 function markTag(view, seat, mark) {
-  const fromLady = view.lady && view.lady.checks.some((c) => c.holder === view.you && c.target === seat);
-  const looking = view.check && view.check.holder === view.you && view.check.target === seat;
   const mine = view.me.role;
-  const tip = fromLady || looking ? 'The Lady of the Lake showed you this loyalty.'
-    : mark === 'evil' ? (mine === 'merlin' ? 'Merlin sees this agent of Evil.' : 'A fellow agent of Evil.')
-      : mark === 'merlin' ? 'Merlin — you know him as Percival.'
-        : mark === 'merlin?' ? 'Merlin or Morgana: of the two you see, one is Merlin and the other Morgana.'
-          : 'Loyal to Arthur.';
-  const word = { evil: 'Evil', good: 'Good', merlin: 'Merlin', 'merlin?': 'Merlin?' }[mark];
-  const t = el('span', `mark ${mark === 'evil' ? 'evil' : mark === 'merlin?' ? 'maybe' : 'good'}`, word);
+  const lanTip = (side) => `Holds the ${side === 'good' ? 'Good' : 'Evil'} Lancelot card${view.switches ? ` — after ${view.switches === 1 ? 'one switch' : `${view.switches} switches`} of allegiance, now ${(side === 'good') === (view.switches % 2 === 0) ? 'Good' : 'Evil'}` : ''}.`;
+  const liars = view.opts.trickster || view.opts.troublemaker;
+  const tip = {
+    evil: mine === 'merlin' ? 'Merlin sees this agent of Evil.' : 'A fellow agent of Evil.',
+    good: 'Loyal to Arthur.',
+    merlin: 'Merlin — you know him as Percival.',
+    'merlin?': 'Merlin or Morgana: of the two you see, one is Merlin and the other Morgana.',
+    assassin: 'The Assassin: revealed to you, the Untrustworthy Servant.',
+    junior: 'The Junior Messenger, known to you as the Senior.',
+    'lancelot-good': lanTip('good'),
+    'lancelot-evil': lanTip('evil'),
+    'shown-good': `A loyalty check showed you Good.${liars ? ' The Trickster may lie, the Troublemaker must.' : ''}`,
+    'shown-evil': `A loyalty check showed you Evil.${liars ? ' The Trickster may lie, the Troublemaker must.' : ''}`,
+  }[mark];
+  const [cls, word] = MARK[mark];
+  const t = el('span', `mark ${cls}`, word);
   t.dataset.tip = tip;
   return t;
 }
@@ -1257,6 +1354,19 @@ function roleTag(r, extra = '') {
   return t;
 }
 
+function plotTag(c, extra = '') {
+  const P = PLOTS[c.type];
+  const t = el('span', `tok plot ${P.use}${extra}`, `${PLOT_ICON[P.use]} ${P.name}`);
+  t.dataset.tip = `${P.name} — ${P.use === 'now' ? 'used at once' : P.use === 'held' ? 'held until used' : 'in play all game'}. ${P.text}`;
+  return t;
+}
+
+function cardTag(c, cls = '') {
+  const t = el('span', `tok qcard ${CARDS[c].fail ? 'fail' : c === 'magic' ? 'magic' : 'success'}${cls}`, CARDS[c].name);
+  t.dataset.tip = CARD_TIP[c];
+  return t;
+}
+
 function seatEl(view, p, act) {
   const s = el(act ? 'button' : 'div', 'seat');
   if (act) {
@@ -1265,67 +1375,71 @@ function seatEl(view, p, act) {
     s.addEventListener('click', () => seatClick(view, p.seat, act));
   }
   s.dataset.seat = String(p.seat);
-  const onTeam = (view.phase === 'vote' || view.phase === 'quest') && view.team && view.team.includes(p.seat);
-  const picked = view.phase === 'team' && pick.includes(p.seat);
+  const live = view.phase === 'vote' || view.phase === 'quest' || view.phase === 'onquest';
+  const onTeam = live && isTeam(view, p.seat);
+  const picked = myAsk(view) && myAsk(view).kind === 'propose' && pick.includes(p.seat);
   s.classList.toggle('me', p.seat === view.you);
   s.classList.toggle('leader', view.leader === p.seat && view.phase !== 'over');
   s.classList.toggle('team', onTeam || picked);
-  s.classList.toggle('aimed', aim === p.seat);
+  s.classList.toggle('aimed', aim === p.seat || aims.includes(p.seat));
   s.classList.toggle('gone', !p.connected && !p.bot);
+  s.classList.toggle('asked', !!view.ask && view.ask.seat === p.seat && view.phase !== 'over');
   const top = el('div', 'seat-top');
   top.append(avatarEl(p.name, p.seat, p.bot), el('span', 'seat-name', p.name));
   if (p.seat === view.you) top.append(el('span', 'you-tag', 'you'));
   s.append(top);
   const marks = el('div', 'seat-marks');
-  if (view.leader === p.seat && view.phase !== 'over') {
-    const c = el('span', 'tok leader', 'Leader');
-    c.dataset.tip = 'The Leader proposes the Team. The role passes clockwise after every vote that fails and every Quest.';
-    marks.append(c);
+  const tok = (cls, text, tip) => { const c = el('span', `tok ${cls}`, text); c.dataset.tip = tip; marks.append(c); return c; };
+  if (view.leader === p.seat && view.phase !== 'over') tok('leader', 'Leader', 'The Leader proposes the Team. The role passes clockwise after every vote that fails and every Quest.');
+  if (view.lady && view.lady.holder === p.seat && view.phase !== 'over') tok('lady', `${LADY_ICON} Lady`, 'Holds the Lady of the Lake: after the 2nd, 3rd and 4th Quests, looks at one player’s loyalty.');
+  if (onTeam || picked) tok('team', '🛡 Team', picked ? 'In the Team you are choosing.' : 'On the Team.');
+  const exc = picked ? excal === p.seat : live && view.excalibur === p.seat;
+  if (exc) tok('excalibur', '⚔ Excalibur', 'Holds Excalibur: once the cards are played, may switch one other member’s card — and sees what it was.');
+  if (live && view.watch === p.seat) tok('watch', '👁 Watch', 'Holds the Watch token: if a Rogue, may not play their Rogue card on this Quest.');
+  if (live && p.seat in view.faceUp) {
+    const c = view.faceUp[p.seat];
+    if (c) marks.append(cardTag(c, ' up'));
+    else tok('up', '⤒ face up', 'We Found You!: must play their Quest card face up.');
   }
-  if (view.lady && view.lady.holder === p.seat && view.phase !== 'over') {
-    const c = el('span', 'tok lady', `${LADY_ICON} Lady`);
-    c.dataset.tip = 'Holds the Lady of the Lake: after the 2nd, 3rd and 4th Quests, looks at one player’s loyalty.';
-    marks.append(c);
-  }
-  if (onTeam || picked) {
-    const c = el('span', 'tok team', '🛡 Team');
-    c.dataset.tip = picked ? 'In the Team you are choosing.' : 'On the proposed Team.';
-    marks.append(c);
-  }
+  if (view.switched && view.switched.target === p.seat && live) tok('switched', '⇄ switched', `${seatName(view, view.switched.by)} switched this player’s Quest card with Excalibur.`);
+  if (view.trapped === p.seat && live) tok('trapped', '🪤 set aside', 'The Leader set this card aside: it does not count.');
   if (view.phase === 'vote') {
-    const done = view.voted.includes(p.seat);
-    const c = el('span', `tok pip${done ? ' done' : ''}`, done ? '✓ voted' : '… voting');
-    c.dataset.tip = done ? 'Has voted — the votes turn over together when everyone has.' : 'Still to vote.';
-    marks.append(c);
+    const charge = view.chargeVotes && p.seat in view.chargeVotes;
+    if (charge) {
+      const yes = view.chargeVotes[p.seat];
+      tok(`vote ${yes ? 'yes' : 'no'}`, yes ? '✿ Approve' : '✿ Reject', 'A Charge! vote, revealed before the others.');
+    } else {
+      const done = view.voted.includes(p.seat);
+      tok(`pip${done ? ' done' : ''}`, done ? '✓ voted' : '… voting', done ? 'Has voted — the votes turn over together when everyone has.' : view.chargers.includes(p.seat) ? 'Holds Charge!: votes first, for all to see.' : 'Still to vote.');
+    }
   } else if (view.phase === 'quest' && onTeam) {
     const done = view.played.includes(p.seat);
-    const c = el('span', `tok pip${done ? ' done' : ''}`, done ? '✓ played' : '… on Quest');
-    c.dataset.tip = done ? 'Has played a Quest card, face down.' : 'Still to play a Quest card.';
-    marks.append(c);
+    tok(`pip${done ? ' done' : ''}`, done ? '✓ played' : '… on Quest', done ? 'Has played a Quest card.' : 'Still to play a Quest card.');
   }
   const pr = shownVotes(view);
   if (pr && pr.votes[p.seat] !== undefined) {
     const yes = pr.votes[p.seat];
-    const c = el('span', `tok vote ${yes ? 'yes' : 'no'}`, yes ? 'Approve' : 'Reject');
-    c.dataset.tip = `Voted to ${yes ? 'approve' : 'reject'} ${seatName(view, pr.leader)}’s Team: ${namesOf(view, pr.team)}.`;
-    marks.append(c);
+    tok(`vote ${yes ? 'yes' : 'no'}`, yes ? 'Approve' : 'Reject', `Voted to ${yes ? 'approve' : 'reject'} ${seatName(view, pr.leader)}’s Team: ${namesOf(view, pr.team)}.`);
   }
   // what the Lady of the Lake said of this player, out loud
   if (view.lady) {
-    const said = view.lady.checks.filter((c) => c.target === p.seat && c.declared);
-    const c = lastOf(said);
-    if (c) {
-      const t = el('span', `tok said ${c.declared}`, `${LADY_ICON} ${c.declared === 'good' ? 'Good' : 'Evil'}`);
-      t.dataset.tip = `${seatName(view, c.holder)}, holding the Lady of the Lake, declared ${p.name} ${c.declared === 'good' ? 'a Loyal Servant of Arthur' : 'a Minion of Mordred'}.`;
-      marks.append(t);
-    }
+    const c = lastOf(view.lady.checks.filter((x) => x.target === p.seat && x.declared));
+    if (c) tok(`said ${c.declared}`, `${LADY_ICON} ${c.declared === 'good' ? 'Good' : 'Evil'}`, `${seatName(view, c.holder)}, holding the Lady of the Lake, declared ${p.name} ${c.declared === 'good' ? 'Good' : 'Evil'}.`);
   }
-  if (p.role) marks.append(roleTag(p.role, p.seat === view.you ? ' mine' : ''));
+  for (const c of p.plots || []) marks.append(plotTag(c));
+  if (p.role) marks.append(roleTag(p.role, p.seat === view.you ? ' mine' : p.revealed ? ' revealed' : ''));
+  // a Lancelot who has switched, or a recruited Servant, is on the other side now
+  if (p.seat === view.you && view.me && p.role && view.me.side !== sideOf(p.role)) {
+    const t = el('span', `mark ${view.me.side}`, `now ${view.me.side === 'good' ? 'Good' : 'Evil'}`);
+    t.dataset.tip = `Your side has changed: you are ${view.me.side === 'good' ? 'Good' : 'Evil'} now, and win or lose with them.`;
+    marks.append(t);
+  }
   else if (view.me && view.me.knows[p.seat]) marks.append(markTag(view, p.seat, view.me.knows[p.seat]));
   const bot = view.revealBots && view.revealBots.find((b) => b.seat === p.seat);
   if (!p.role && bot) marks.append(roleTag(bot.role, ' peek'));
   s.append(marks);
-  if (view.assassination && view.assassination.target === p.seat) s.classList.add('named');
+  const a = view.assassination;
+  if (a && (a.target === p.seat || (a.messengers && a.messengers.includes(p.seat)))) s.classList.add('named');
   return s;
 }
 
@@ -1333,17 +1447,35 @@ function seatEl(view, p, act) {
 function tableauEl(view) {
   const t = el('div', 'tableau');
   const qs = el('div', 'quests');
+  const dealt = view.allegiance && view.allegiance.dealt;
   for (let q = 0; q < 5; q++) {
     const r = view.results[q];
-    const now = !r && q === view.quest && view.phase !== 'over' && view.phase !== 'assassin';
+    const now = !r && q === view.quest && !['over', 'assassin', 'recruit'].includes(view.phase);
     const d = el('div', `qt${r ? (r.success ? ' won' : ' lost') : ''}${now ? ' now' : ''}`);
     d.append(el('span', 'qt-n', `Quest ${q + 1}`));
     d.append(el('b', '', r ? (r.success ? '✓' : '✗') : String(view.sizes[q])));
     d.append(el('small', '', r ? (r.fails ? `${r.fails} Fail${r.fails === 1 ? '' : 's'}` : 'all Success') : `players`));
     if (view.twoFail === q) d.append(el('i', 'qt-two', 'needs 2 Fails'));
-    d.dataset.tip = r
-      ? `Quest ${q + 1}: ${namesOf(view, r.team)} — ${r.fails ? `${r.fails} Fail card${r.fails === 1 ? '' : 's'}` : 'every card a Success'}. ${r.success ? 'Success for Arthur.' : 'A failure: Mordred scores.'}`
-      : `Quest ${q + 1} takes a Team of ${view.sizes[q]}.${view.twoFail === q ? ' At seven or more players it fails only on two Fail cards.' : ''}`;
+    const toks = [];
+    if (r && r.magic) toks.push(`🪄${r.magic > 1 ? r.magic : ''}`);
+    if (r && r.messages.good) toks.push(`📜${'✓'.repeat(r.messages.good)}`);
+    if (r && r.messages.evil) toks.push(`📜${'✗'.repeat(r.messages.evil)}`);
+    if (r && (r.rogue.success || r.rogue.fail)) toks.push(`🏹${r.rogue.success ? '✓' : ''}${r.rogue.fail ? '✗' : ''}`);
+    if (dealt && dealt[q] === 'switch') toks.push('⇄');
+    if (toks.length) d.append(el('i', 'qt-toks', toks.join(' ')));
+    const bits = [];
+    if (r) {
+      bits.push(`Quest ${q + 1}: ${namesOf(view, r.team)} — ${r.fails ? `${r.fails} Fail card${r.fails === 1 ? '' : 's'}` : 'no Fail'}.`);
+      if (r.magic) bits.push(`${r.magic} Magic card${r.magic === 1 ? '' : 's'}${r.magic % 2 ? ': the result turned around' : ', which cancel out'}.`);
+      if (r.messages.good || r.messages.evil) bits.push(`Message tokens: ${r.messages.good} Good, ${r.messages.evil} Evil.`);
+      if (r.rogue.success || r.rogue.fail) bits.push(`Rogue tokens: ${[r.rogue.success ? 'Rogue Success' : '', r.rogue.fail ? 'Rogue Fail' : ''].filter(Boolean).join(' and ')}.`);
+      if (r.backup) bits.push(r.backup === 'cancel' ? 'Both sides called for backup: it cancels out.' : r.backup === 'good' ? 'Good’s backup took a Fail away.' : 'Evil’s backup added a Fail.');
+      if (r.switched) bits.push(`${seatName(view, r.switched.by)} switched ${seatName(view, r.switched.target)}’s card with Excalibur.`);
+      if (r.trapped != null) bits.push(`${seatName(view, r.trapped)}’s card was set aside by the Trapper.`);
+      bits.push(r.success ? 'Success for Arthur.' : 'A failure: Mordred scores.');
+    } else bits.push(`Quest ${q + 1} takes a Team of ${view.sizes[q]}.${view.twoFail === q ? ' At seven or more players it fails only on two Fail cards.' : ''}`);
+    if (dealt && dealt[q] === 'switch') bits.push('A Switch Allegiance card lies over this Quest: the Lancelots change sides as it begins.');
+    d.dataset.tip = bits.join(' ');
     qs.append(d);
   }
   t.append(qs);
@@ -1361,6 +1493,32 @@ function tableauEl(view) {
   score.append(el('span', 'sc good', `Arthur ${won}`), el('span', 'sc-sep', '·'), el('span', 'sc evil', `Mordred ${lost}`));
   score.dataset.tip = 'Three successful Quests and Good is one step from victory; three failed and Evil wins.';
   t.append(score);
+  // the module counters under the score
+  const extra = el('div', 'tab-extra');
+  if (view.opts.messengers) {
+    const g = view.results.reduce((a, r) => a + r.messages.good, 0);
+    const e = view.results.reduce((a, r) => a + r.messages.evil, 0);
+    const m = el('span', 'tx', `📜 ${g} Good · ${e} Evil`);
+    m.dataset.tip = `Message tokens so far. After the fifth Quest's cards: 3 or more Good Messages and Good takes a Fail off it; 2 or more Evil Messages and Evil adds one; both, and nothing happens.`;
+    extra.append(m);
+  }
+  if (view.allegiance && view.allegiance.drawn) {
+    const a = el('span', 'tx', `⇄ Allegiance: ${view.allegiance.drawn.length ? view.allegiance.drawn.map((c) => (c === 'switch' ? 'Switch' : 'No Change')).join(', ') : 'none drawn'}`);
+    a.dataset.tip = `Lancelot’s Allegiance deck: four No Change and two Switch, one drawn as each Quest begins. ${view.allegiance.left} left.`;
+    extra.append(a);
+  }
+  if (view.plot) {
+    const pd = el('span', 'tx', `🂠 Plot deck: ${view.plot.deck}`);
+    pd.dataset.tip = 'Plot cards left to draw. At the start of each Quest the Leader draws 1 (5–6 players), 2 (7–8) or 3 (9–10) and gives them away.';
+    extra.append(pd);
+  }
+  if (extra.childNodes.length) t.append(extra);
+  if (view.plot && view.plot.hand.length) {
+    const h = el('div', 'plot-hand');
+    h.append(el('span', 'tx', 'Drawn:'));
+    for (const c of view.plot.hand) h.append(plotTag(c, card === c.id ? ' chosen' : ''));
+    t.append(h);
+  }
   return t;
 }
 
@@ -1392,6 +1550,8 @@ function renderBoard(view) {
 
 // ---------------------------------------------------------------- the action panel
 
+const REASON = { cleric: 'the Cleric', lady: 'the Lady of the Lake', one: 'Are You the One?', strength: 'Show Your Strength', nature: 'Show Your True Nature' };
+
 function renderAction(view) {
   const box = $('#action');
   box.replaceChildren();
@@ -1400,16 +1560,35 @@ function renderAction(view) {
   const k = view.sizes[view.quest];
   const leader = seatName(view, view.leader);
   const watching = isObserver(view);
-  const mine = view.me && !watching;
-  box.className = `act-${view.phase}`;
+  const a = view.ask;
+  const mine = myAsk(view);
+  const who = a ? seatName(view, a.seat) : '';
+  box.className = `act-${a ? a.kind : view.phase}`;
 
-  if (view.phase === 'team') {
-    if (view.leader === view.you && mine) {
+  if (view.phase === 'over') {
+    const w = { good: 'Good', evil: 'Evil', rogueGood: 'The Good Rogue', rogueEvil: 'The Evil Rogue' }[view.winner];
+    add(`act-head win-${view.winner === 'rogueGood' ? 'good' : view.winner === 'rogueEvil' ? 'evil' : view.winner}`, `${w} wins — ${view.why}.`);
+    return;
+  }
+
+  if (a && a.kind === 'propose') {
+    if (mine) {
       add('act-head', `You are the Leader. Choose ${k} players for Quest ${view.quest + 1} — tap them at the table.`);
       add('act-sub', pick.length ? `Your Team: ${namesOf(view, pick)} (${pick.length} of ${k}).` : 'You may put yourself on the Team, or not. Talk it over in the chat first if you like.');
+      let ready = pick.length === k;
+      if (view.opts.excalibur) {
+        const cands = pick.filter((s) => s !== view.you);
+        if (excal != null && !cands.includes(excal)) excal = null;
+        if (cands.length) {
+          add('act-sub', 'Give Excalibur to a member of the Team other than yourself:');
+          const r = row();
+          for (const s of cands) r.append(btn(`⚔ ${seatName(view, s)}`, excal === s ? 'primary small' : 'ghost small', () => { excal = s; renderGame(lastView, session); }));
+        }
+        ready = ready && excal != null;
+      }
       const r = row();
-      r.append(btn(`Propose this Team`, 'primary', () => { const team = pick.slice(); pick = []; sendMove({ kind: 'propose', team }); }, pick.length !== k));
-      if (pick.length) r.append(btn('Clear', 'ghost', () => { pick = []; renderGame(lastView, session); }));
+      r.append(btn('Propose this Team', 'primary', () => { const team = pick.slice(); const ex = excal; pick = []; excal = null; sendMove({ kind: 'propose', team, ...(view.opts.excalibur ? { excalibur: ex } : {}) }); }, !ready));
+      if (pick.length) r.append(btn('Clear', 'ghost', () => { pick = []; excal = null; renderGame(lastView, session); }));
     } else {
       add('act-head', `${leader} is choosing a Team of ${k} for Quest ${view.quest + 1}.`);
       add('act-sub', 'Say whom you trust in the chat — the Leader is listening.');
@@ -1419,16 +1598,20 @@ function renderAction(view) {
   }
 
   if (view.phase === 'vote') {
-    add('act-head', `${leader} proposes ${namesOf(view, view.team)} for Quest ${view.quest + 1}.`);
+    add('act-head', `${leader} proposes ${namesOf(view, view.team)} for Quest ${view.quest + 1}${view.excalibur != null ? `, with Excalibur for ${seatName(view, view.excalibur)}` : ''}.`);
     if (view.rejects === 4) add('act-warn', 'The fifth Team this round: if it is rejected, Evil wins.');
-    const waiting = view.players.filter((p) => !view.voted.includes(p.seat)).map((p) => p.name);
-    if (mine && view.myVote === undefined) {
-      add('act-sub', 'Everyone votes at once; the votes turn over when the last is in.');
+    const chargeFirst = view.chargers.filter((s) => !view.voted.includes(s));
+    const mayVote = view.me && !watching && view.myVote === undefined && (view.chargers.includes(view.you) || !chargeFirst.length);
+    if (mayVote) {
+      add('act-sub', view.chargers.includes(view.you) ? 'You hold Charge!: your vote is revealed before anyone else votes.' : 'Everyone votes at once; the votes turn over when the last is in.');
       const r = row();
       r.append(btn('Approve', 'vote-yes', () => sendMove({ kind: 'vote', approve: true })));
       r.append(btn('Reject', 'vote-no', () => sendMove({ kind: 'vote', approve: false })));
+    } else if (chargeFirst.length) {
+      add('act-sub', `${namesOf(view, chargeFirst)} hold${chargeFirst.length === 1 ? 's' : ''} Charge! and vote${chargeFirst.length === 1 ? 's' : ''} first, for all to see.`);
     } else {
-      add('act-sub', `${mine ? `You voted to ${view.myVote ? 'approve' : 'reject'}. ` : ''}Waiting for ${listWords(waiting)}.`);
+      const waiting = view.players.filter((p) => !view.voted.includes(p.seat)).map((p) => p.name);
+      add('act-sub', `${view.me && !watching ? `You voted to ${view.myVote ? 'approve' : 'reject'}. ` : ''}Waiting for ${listWords(waiting)}.`);
     }
     return;
   }
@@ -1437,69 +1620,181 @@ function renderAction(view) {
     const two = view.twoFail === view.quest;
     add('act-head', `${namesOf(view, view.team)} ${view.team.length === 1 ? 'is' : 'are'} on Quest ${view.quest + 1}.`);
     if (two) add('act-sub', 'This Quest fails only if two Fail cards are played.');
-    const waiting = view.team.filter((s) => !view.played.includes(s));
-    if (mine && view.team.includes(view.you) && !view.myCard) {
-      const good = view.me.side === 'good';
-      add('act-sub', good ? 'Loyal Servants of Arthur must play Success.' : 'An agent of Evil may play either card. Only the number of Fails is shown.');
+    if (view.myCards) {
+      const up = view.you in view.faceUp;
+      add('act-sub', `${up ? 'We Found You!: your card is played face up, for all to see. ' : ''}${view.myCards.length === 1 ? `You must play ${CARDS[view.myCards[0]].name}.` : view.me.side === 'good' ? 'Choose your Quest card.' : 'An agent of Evil may play Fail. Only what the cards add up to is shown.'}`);
       const r = row();
-      r.append(btn('Success', 'quest-yes', () => sendMove({ kind: 'quest', card: 'success' })));
-      const f = btn('Fail', 'quest-no', () => sendMove({ kind: 'quest', card: 'fail' }), good);
-      if (good) f.dataset.tip = 'Loyal Servants of Arthur must play Success.';
-      r.append(f);
+      for (const c of view.myCards) {
+        const b = btn(CARDS[c].name, CARDS[c].fail ? 'quest-no' : c === 'magic' ? 'quest-magic' : 'quest-yes', () => sendMove({ kind: 'quest', card: c }));
+        b.dataset.tip = CARD_TIP[c];
+        r.append(b);
+      }
     } else {
-      add('act-sub', `${mine && view.myCard ? 'Your card is played, face down. ' : ''}Waiting for ${namesOf(view, waiting)}.`);
+      const waiting = view.team.filter((s) => !view.played.includes(s));
+      add('act-sub', `${view.myCard ? 'Your card is played. ' : ''}Waiting for ${namesOf(view, waiting)}.`);
     }
     return;
   }
 
-  if (view.phase === 'lady') {
-    const holder = seatName(view, view.lady.holder);
-    if (!view.check) {
-      if (view.lady.holder === view.you && mine) {
-        add('act-head', `You hold the Lady of the Lake. Choose a player whose loyalty you will see — tap them at the table.`);
-        add('act-sub', `No one who has held the Lady can be examined: ${namesOf(view, view.lady.held)}.`);
+  if (!a) return;
+  const pickRow = (verb, go, extra) => {
+    const r = row();
+    r.append(btn(aim != null ? `${verb} ${seatName(view, aim)}` : `${verb}…`, 'primary', () => { const t = aim; aim = null; go(t); }, aim == null));
+    if (extra) r.append(extra);
+  };
+  switch (a.kind) {
+    case 'lead':
+      if (mine) {
+        add('act-head', `Play Lead to Victory and become the Leader, in ${leader}’s place?`);
         const r = row();
-        r.append(btn(aim != null ? `Examine ${seatName(view, aim)}` : 'Examine…', 'primary', () => { const target = aim; aim = null; sendMove({ kind: 'lady', target }); }, aim == null));
+        r.append(btn('Play it', 'primary', () => sendMove({ kind: 'lead', use: true })), btn('Keep it', 'ghost', () => sendMove({ kind: 'lead', use: false })));
+      } else add('act-head', `${who} holds Lead to Victory and may take the lead from ${leader}.`);
+      return;
+    case 'give': {
+      const hand = view.plot.hand;
+      if (mine) {
+        if (card == null || !hand.some((c) => c.id === card)) card = hand[0].id;
+        add('act-head', `You drew ${listWords(hand.map((c) => plotName(c.type)))}. Give ${hand.length === 1 ? 'it' : 'each'} to another player — tap them at the table.`);
+        if (hand.length > 1) {
+          add('act-sub', 'Which card first?');
+          const r = row();
+          for (const c of hand) r.append(btn(`${PLOT_ICON[PLOTS[c.type].use]} ${plotName(c.type)}`, card === c.id ? 'primary small' : 'ghost small', () => { card = c.id; renderGame(lastView, session); }));
+        }
+        add('act-sub', PLOTS[hand.find((c) => c.id === card).type].text);
+        pickRow(`Give ${plotName(hand.find((c) => c.id === card).type)} to`, (t) => { const id = card; card = null; sendMove({ kind: 'give', card: id, to: t }); });
+      } else add('act-head', `${leader} drew ${listWords(hand.map((c) => plotName(c.type)))} and is choosing who gets ${hand.length === 1 ? 'it' : 'them'}.`);
+      return;
+    }
+    case 'adjacent':
+      if (mine) {
+        add('act-head', 'Are You the One?: check the loyalty of the player to your left or right — tap them.');
+        pickRow('Check', (t) => sendMove({ kind: 'adjacent', target: t }));
+      } else add('act-head', `${who} will check the loyalty of a neighbour (Are You the One?).`);
+      return;
+    case 'showto':
+      if (mine) {
+        add('act-head', `${PLOTS[a.plot].name}: pass your Loyalty card to another player for examination — tap them.`);
+        pickRow('Show it to', (t) => sendMove({ kind: 'showto', target: t }));
+      } else add('act-head', `${who} must show their loyalty to another player (${PLOTS[a.plot].name}).`);
+      return;
+    case 'take': {
+      if (mine) {
+        add('act-head', 'Restore Your Honor: take one Plot card from another player.');
+        const r = row();
+        for (const p of view.players) if (p.seat !== view.you) for (const c of p.plots) r.append(btn(`${plotName(c.type)} from ${p.name}`, 'ghost small', () => sendMove({ kind: 'take', from: p.seat, card: c.id })));
+      } else add('act-head', `${who} takes a Plot card from another player (Restore Your Honor).`);
+      return;
+    }
+    case 'loyalty': {
+      const checker = a.checker != null ? seatName(view, a.checker) : null;
+      if (mine) {
+        add('act-head', a.reason === 'cleric' ? 'The Cleric looks at the first Leader’s loyalty: pass your Loyalty card.' : `${checker} checks your loyalty (${REASON[a.reason]}): pass them your Loyalty card.`);
+        const ops = view.me.loyalty;
+        if (ops.length > 1) add('act-sub', 'You are the Trickster: you may lie and show Good.');
+        else if (view.me.role === 'troublemaker') add('act-sub', 'You are the Troublemaker: you must show Evil.');
+        const r = row();
+        for (const o of ops) r.append(btn(o === 'good' ? 'Pass the Good card' : 'Pass the Evil card', o === 'good' ? 'quest-yes' : 'quest-no', () => sendMove({ kind: 'loyalty', card: o })));
+      } else if (a.reason === 'cleric') add('act-head', `The Cleric looks at ${who}’s loyalty — the first Leader’s.`);
+      else add('act-head', `${who} passes a Loyalty card to ${checker} (${REASON[a.reason]}).`);
+      return;
+    }
+    case 'king':
+      if (mine) {
+        add('act-head', 'Play The King Returns and reject the approved Team?');
+        add('act-sub', `It counts as a failed vote: the Vote Track would move to ${view.rejects + 1}${view.rejects === 4 ? ' — the fifth, and Evil wins' : ''}.`);
+        const r = row();
+        r.append(btn('Play it', 'quest-no', () => sendMove({ kind: 'king', use: true })), btn('Let the Team go', 'ghost', () => sendMove({ kind: 'king', use: false })));
+      } else add('act-head', `${who} holds The King Returns and may turn the Team back.`);
+      return;
+    case 'watch':
+      if (mine) {
+        add('act-head', 'Give the Watch token to a member of the Team — tap them. A watched Rogue may not play their Rogue card.');
+        pickRow('Watch', (t) => sendMove({ kind: 'watch', target: t }));
+      } else add('act-head', `${leader} gives the Watch token to a member of the Team.`);
+      return;
+    case 'spot':
+      if (mine) {
+        add('act-head', 'Play We Found You! and make a member of the Team play their card face up? Tap them.');
+        pickRow('Make face up:', (t) => sendMove({ kind: 'spot', target: t }), btn('Keep it', 'ghost', () => sendMove({ kind: 'spot', target: null })));
+      } else add('act-head', `${who} holds We Found You! and may make a member of the Team play face up.`);
+      return;
+    case 'excalibur':
+      if (mine) {
+        add('act-head', 'The cards are played. Wield Excalibur? Tap another member of the Team to switch their card — you will see what it was.');
+        pickRow('Switch the card of', (t) => sendMove({ kind: 'excalibur', target: t }), btn('Keep it sheathed', 'ghost', () => sendMove({ kind: 'excalibur', target: null })));
+      } else add('act-head', `${who} holds Excalibur and may switch another member’s Quest card.`);
+      return;
+    case 'ambush':
+      if (mine) {
+        add('act-head', 'Play Ambush and look at a member’s played card? Tap them.');
+        pickRow('Look at the card of', (t) => sendMove({ kind: 'ambush', target: t }), btn('Keep it', 'ghost', () => sendMove({ kind: 'ambush', target: null })));
+      } else add('act-head', `${who} holds Ambush and may look at a played card.`);
+      return;
+    case 'trap':
+      if (mine) {
+        add('act-head', 'The Trapper: tap a member of the Team to look at their card and set it aside — it will not count.');
+        pickRow('Set aside the card of', (t) => sendMove({ kind: 'trap', target: t }));
+      } else add('act-head', `${leader}, the Leader, sets one played card aside unseen by the rest.`);
+      return;
+    case 'lady':
+      if (mine) {
+        add('act-head', 'You hold the Lady of the Lake. Choose a player whose loyalty you will see — tap them at the table.');
+        add('act-sub', `No one who has held the Lady can be examined: ${namesOf(view, view.lady.held)}.`);
+        pickRow('Examine', (t) => sendMove({ kind: 'lady', target: t }));
+      } else add('act-head', `${who} holds the Lady of the Lake and is choosing whom to examine.`);
+      return;
+    case 'declare': {
+      const target = seatName(view, a.target);
+      if (mine) {
+        const c = lastOf(view.me.checks.filter((x) => x.reason === 'lady' && x.target === a.target));
+        const good = c && c.shown === 'good';
+        const res = add(`act-head lady-${good ? 'good' : 'evil'}`, `The Lady shows you: ${target} is ${good ? 'Good' : 'Evil'}.`);
+        res.dataset.tip = 'Only you see this. You may tell the table anything you like — the truth or not.';
+        if (view.opts.trickster || view.opts.troublemaker) add('act-sub', 'The Trickster may lie to the Lady, and the Troublemaker must.');
+        add('act-sub', 'What do you tell the table? Then the Lady passes to them.');
+        const r = row();
+        r.append(btn(`“${target} is Good”`, 'vote-yes', () => sendMove({ kind: 'declare', says: 'good' })));
+        r.append(btn(`“${target} is Evil”`, 'vote-no', () => sendMove({ kind: 'declare', says: 'evil' })));
+        r.append(btn('Say nothing', 'ghost', () => sendMove({ kind: 'declare', says: null })));
       } else {
-        add('act-head', `${holder} holds the Lady of the Lake and is choosing whom to examine.`);
+        add('act-head', `${who}, the Lady of the Lake, has looked at ${target}’s loyalty.`);
+        add('act-sub', `Waiting for ${who} to speak.`);
       }
       return;
     }
-    const target = seatName(view, view.check.target);
-    if (view.check.holder === view.you && mine) {
-      const good = view.check.loyalty === 'good';
-      const res = add(`act-head lady-${view.check.loyalty}`, `The Lady shows you: ${target} is ${good ? 'a Loyal Servant of Arthur — Good' : 'a Minion of Mordred — Evil'}.`);
-      res.dataset.tip = 'Only you see this. You may tell the table anything you like — the truth or not.';
-      add('act-sub', 'What do you tell the table? Then the Lady passes to them.');
-      const r = row();
-      r.append(btn(`“${target} is Good”`, 'vote-yes', () => sendMove({ kind: 'declare', says: 'good' })));
-      r.append(btn(`“${target} is Evil”`, 'vote-no', () => sendMove({ kind: 'declare', says: 'evil' })));
-      r.append(btn('Say nothing', 'ghost', () => sendMove({ kind: 'declare', says: null })));
-    } else {
-      add('act-head', `${holder}, the Lady of the Lake, has looked at ${target}’s loyalty.`);
-      add('act-sub', `Waiting for ${holder} to speak.`);
+    case 'recruit':
+      if (mine) {
+        add('act-head', 'Three Quests have succeeded. First, the Recruitment: name the player you think is the Untrustworthy Servant — tap them.');
+        add('act-sub', 'Guess right and they turn Evil, and name Merlin in your place. Guess wrong and you name Merlin yourself.');
+        pickRow('Recruit', (t) => sendMove({ kind: 'recruit', target: t }));
+      } else add('act-head', `Three Quests have succeeded. ${who}, the Assassin, tries to recruit the Untrustworthy Servant.`);
+      return;
+    case 'assassinate': {
+      const recruited = view.recruit && view.recruit.hit;
+      if (mine) {
+        add('act-head', recruited ? 'You have been recruited: you are Evil now. Name Merlin, and Evil wins.' : 'Three Quests have succeeded. You are the Assassin: name Merlin, and Evil wins.');
+        if (view.opts.messengers) {
+          const r = row();
+          r.append(btn('Go after Merlin', mode === 'merlin' ? 'primary small' : 'ghost small', () => { mode = 'merlin'; aims = []; renderGame(lastView, session); }));
+          r.append(btn('Go after the Messengers', mode === 'messengers' ? 'primary small' : 'ghost small', () => { mode = 'messengers'; aim = null; renderGame(lastView, session); }));
+        }
+        if (mode === 'messengers' && view.opts.messengers) {
+          add('act-sub', 'Name both Good Messengers — tap two players. Both must be right.');
+          const r = row();
+          r.append(btn(aims.length === 2 ? `Name ${namesOf(view, aims)}` : 'Name two…', 'quest-no', () => { const m = aims.slice(); aims = []; sendMove({ kind: 'assassinate', messengers: m }); }, aims.length !== 2));
+        } else {
+          add('act-sub', 'Tap the player you name. Your fellow agents of Evil can help you in the chat.');
+          const r = row();
+          r.append(btn(aim != null ? `Name ${seatName(view, aim)} as Merlin` : 'Name Merlin…', 'quest-no', () => { const t = aim; aim = null; sendMove({ kind: 'assassinate', target: t }); }, aim == null));
+        }
+      } else {
+        add('act-head', `Three Quests have succeeded — but Evil has one last chance. ${who} ${recruited ? '(recruited) ' : ''}will name Merlin${view.opts.messengers ? ', or both Good Messengers' : ''}.`);
+        if (view.me && view.me.role === 'merlin') add('act-sub', 'Hold your nerve.');
+      }
+      return;
     }
-    return;
-  }
-
-  if (view.phase === 'assassin') {
-    const who = seatName(view, view.assassin);
-    if (view.assassin === view.you && mine) {
-      add('act-head', 'Three Quests have succeeded. You are the Assassin: name Merlin, and Evil wins. Tap a player.');
-      add('act-sub', 'Your fellow agents of Evil can help you in the chat.');
-      const r = row();
-      r.append(btn(aim != null ? `Name ${seatName(view, aim)} as Merlin` : 'Name Merlin…', 'quest-no', () => { const target = aim; aim = null; sendMove({ kind: 'assassinate', target }); }, aim == null));
-    } else if (view.me && view.me.side === 'evil' && view.me.role !== 'oberon') {
-      add('act-head', `Three Quests have succeeded. ${who}, the Assassin, will name Merlin — help them find him in the chat.`);
-    } else {
-      add('act-head', `Three Quests have succeeded — but Evil has one last chance. ${who}, the Assassin, will name Merlin.`);
-      if (view.me && view.me.role === 'merlin') add('act-sub', 'Hold your nerve.');
-    }
-    return;
-  }
-
-  if (view.phase === 'over') {
-    add(`act-head win-${view.winner}`, `${view.winner === 'good' ? 'Good' : 'Evil'} wins — ${view.why}.`);
+    default:
+      add('act-head', `${who} is deciding.`);
   }
 }
 
@@ -1530,32 +1825,34 @@ function renderTracker(view) {
     const tr = el('tr', live ? 'live' : '');
     tr.append(el('th', '', label));
     for (const p of view.players) {
-      const v = live ? undefined : pr.votes[p.seat];
+      const v = live ? (view.chargeVotes && p.seat in view.chargeVotes ? view.chargeVotes[p.seat] : undefined) : pr.votes[p.seat];
       const td = el('td', v === undefined ? '' : v ? 'yes' : 'no');
       const bits = [];
       if (pr.leader === p.seat) bits.push('♛');
-      if (pr.team.includes(p.seat)) bits.push('◆');
+      if (pr.team.includes(p.seat)) bits.push(pr.excalibur === p.seat ? '⚔' : '◆');
       td.textContent = bits.join('');
       if (live && view.voted.includes(p.seat)) td.classList.add('in');
-      td.dataset.tip = `${p.name}${pr.leader === p.seat ? ', the Leader,' : ''}${pr.team.includes(p.seat) ? ' (on the Team)' : ''}${v === undefined ? (live ? (view.voted.includes(p.seat) ? ' has voted.' : ' has not voted yet.') : '.') : ` voted to ${v ? 'approve' : 'reject'}.`}`;
+      td.dataset.tip = `${p.name}${pr.leader === p.seat ? ', the Leader,' : ''}${pr.team.includes(p.seat) ? ` (on the Team${pr.excalibur === p.seat ? ', with Excalibur' : ''})` : ''}${v === undefined ? (live ? (view.voted.includes(p.seat) ? ' has voted.' : ' has not voted yet.') : '.') : ` voted to ${v ? 'approve' : 'reject'}.`}`;
       tr.append(td);
     }
     let res = '';
     if (live) res = 'voting';
     else if (!pr.approved) res = 'rejected';
+    else if (pr.vetoed != null) res = 'King Returns';
     else {
       const r = view.results[pr.quest];
       res = r ? (r.success ? 'Quest ✓' : `Quest ✗${r.fails > 1 ? ` ${r.fails}` : ''}`) : 'on Quest';
     }
-    const td = el('td', `tr-res ${live ? '' : pr.approved ? (view.results[pr.quest] ? (view.results[pr.quest].success ? 'won' : 'lost') : 'ok') : 'rej'}`, res);
+    const td = el('td', `tr-res ${live ? '' : !pr.approved || pr.vetoed != null ? 'rej' : view.results[pr.quest] ? (view.results[pr.quest].success ? 'won' : 'lost') : 'ok'}`, res);
+    if (pr.vetoed != null) td.dataset.tip = `${seatName(view, pr.vetoed)} played The King Returns and turned the approved Team back.`;
     tr.append(td);
     tbl.append(tr);
   };
   for (const pr of view.proposals) addRow(`${pr.quest + 1}.${pr.attempt}`, pr, false);
-  if (view.phase === 'vote') addRow(`${view.quest + 1}.${view.rejects + 1}`, { leader: view.leader, team: view.team, votes: {} }, true);
+  if (view.phase === 'vote') addRow(`${view.quest + 1}.${view.rejects + 1}`, { leader: view.leader, team: view.team, excalibur: view.excalibur, votes: {} }, true);
   wrap.append(tbl);
   host.append(wrap);
-  host.append(el('p', 'tr-key dim', '♛ Leader · ◆ on the Team · green approved, red rejected'));
+  host.append(el('p', 'tr-key dim', `♛ Leader · ◆ on the Team${view.opts.excalibur ? ' · ⚔ Excalibur' : ''} · green approved, red rejected`));
 }
 
 // ---------------------------------------------------------------- your Character
@@ -1569,26 +1866,34 @@ function showRole(view) {
   const card = el('div', `role-card side-${mine.side}`);
   card.append(el('div', 'rc-icon', ROLE_ICON[r]));
   card.append(el('div', 'rc-name', roleName(r)));
-  card.append(el('div', 'rc-side', mine.side === 'good' ? 'Loyal to Arthur — Good' : 'Servant of Mordred — Evil'));
+  const turned = mine.side !== sideOf(r);
+  card.append(el('div', 'rc-side', `${mine.side === 'good' ? 'Loyal to Arthur — Good' : 'Servant of Mordred — Evil'}${turned ? ' (for now)' : ''}`));
   card.append(el('p', 'rc-power', ROLES[r].power));
   body.append(card);
   const k = mine.knows;
   const by = (m) => Object.keys(k).filter((s) => k[s] === m).map(Number);
   const facts = [];
-  const evil = by('evil').filter((s) => !(view.lady && view.lady.checks.some((c) => c.holder === view.you && c.target === s)));
-  if (r === 'merlin') facts.push(evil.length ? `You see the agents of Evil: ${namesOf(view, evil)}.${view.opts.mordred ? ' Mordred is among them unseen.' : ''}` : 'You see no agents of Evil.');
-  else if (mine.side === 'evil' && r !== 'oberon') facts.push(evil.length ? `Your fellow agents of Evil: ${namesOf(view, evil)}.${view.opts.oberon ? ' Oberon is with you too, but neither of you knows the other.' : ''}` : 'You see no fellow agents of Evil.');
-  else if (r === 'oberon') facts.push('You do not know your fellow agents of Evil, and they do not know you.');
+  const evil = by('evil');
+  if (r === 'merlin') facts.push(evil.length ? `You see the agents of Evil: ${namesOf(view, evil)}.${view.opts.mordred ? ' Mordred is among them unseen.' : ''}${view.opts.untrustworthy ? ' One you see may be the Untrustworthy Servant, who is Good.' : ''}` : 'You see no agents of Evil.');
+  else if (sideOf(r) === 'evil' && evil.length) facts.push(`Your fellow agents of Evil: ${namesOf(view, evil)}.`);
+  else if (r === 'oberon' || r === 'rogueEvil' || (r === 'sorcererEvil' && view.opts.sorcererHidden)) facts.push('You do not know your fellow agents of Evil, and they do not know you.');
   if (by('merlin?').length) facts.push(`Merlin is ${namesOf(view, by('merlin?')).replace(' and ', ' or ')} — the other is Morgana.`);
   if (by('merlin').length) facts.push(`Merlin is ${namesOf(view, by('merlin'))}.`);
-  if (view.lady) for (const c of view.lady.checks) if (c.holder === view.you && c.loyalty) facts.push(`The Lady of the Lake showed you that ${seatName(view, c.target)} is ${c.loyalty === 'good' ? 'Good' : 'Evil'}.`);
+  if (by('assassin').length) facts.push(`The Assassin is ${namesOf(view, by('assassin'))}.`);
+  if (by('junior').length) facts.push(`The Junior Messenger is ${namesOf(view, by('junior'))}.`);
+  for (const m of ['lancelot-good', 'lancelot-evil']) if (by(m).length) facts.push(`${namesOf(view, by(m))} holds the ${m === 'lancelot-good' ? 'Good' : 'Evil'} Lancelot card.`);
+  if ((r === 'lancelotGood' || r === 'lancelotEvil') && view.switches) facts.push(`The Lancelots have switched sides ${view.switches === 1 ? 'once' : `${view.switches} times`}: you are ${mine.side === 'good' ? 'Good' : 'Evil'} now.`);
+  for (const c of mine.checks) facts.push(`${REASON[c.reason] ? REASON[c.reason].charAt(0).toUpperCase() + REASON[c.reason].slice(1) : 'A check'}: ${seatName(view, c.target)} showed you ${c.shown === 'good' ? 'Good' : 'Evil'}.`);
+  for (const l of mine.looks) facts.push(`${{ excalibur: 'Excalibur', ambush: 'Ambush', trap: 'As the Trapper' }[l.kind]} on Quest ${l.quest + 1}: ${seatName(view, l.target)} had played ${CARDS[l.card].name}.`);
   if (!facts.length) facts.push('No one is revealed to you: watch the votes and the Quests.');
   const ul = el('ul', 'rc-facts');
   for (const f of facts) ul.append(el('li', '', f));
   body.append(ul);
-  body.append(el('p', 'rc-win', mine.side === 'good'
-    ? 'Good wins with three successful Quests — and Merlin unfound by the Assassin.'
-    : 'Evil wins with three failed Quests, five Teams rejected in one round, or by naming Merlin at the end.'));
+  const win = r === 'rogueGood' ? 'You win alone with Rogue Success on the third successful Quest and on one before; otherwise you share Good’s victory in part.'
+    : r === 'rogueEvil' ? 'You win alone with Rogue Fail on the third failed Quest and on one before; otherwise you share Evil’s victory in part.'
+      : mine.side === 'good' ? 'Good wins with three successful Quests — and Merlin unfound by the Assassin.'
+        : 'Evil wins with three failed Quests, five Teams rejected in one round, or by naming Merlin at the end.';
+  body.append(el('p', 'rc-win', win));
   $('#modal-role').classList.remove('hidden');
 }
 
@@ -1601,25 +1906,38 @@ function renderGame(view, sess) {
   if (viewMid !== view.mid) {
     viewMid = view.mid;
     pick = [];
+    excal = null;
     aim = null;
+    aims = [];
+    card = null;
+    mode = 'merlin';
     lastFxSeq = view.fx ? view.fx.seq : 0;
   }
-  if (view.phase !== 'team' || view.leader !== view.you) pick = [];
-  if (view.phase !== 'lady' && view.phase !== 'assassin') aim = null;
+  // picks belong to the question they were made for
+  const key = view.ask ? `${view.ask.kind}:${view.ask.seat}:${view.quest}:${view.rejects}` : view.phase;
+  if (key !== askKey) {
+    askKey = key;
+    pick = [];
+    excal = null;
+    aim = null;
+    aims = [];
+  }
 
   $('#room-chip').textContent = view.code || '·····';
   const qc = $('#quest-chip');
   const won = view.results.filter((r) => r.success).length;
-  qc.textContent = view.phase === 'over' || view.phase === 'assassin' ? `Quests: Arthur ${won}, Mordred ${view.results.length - won}` : `Quest ${view.quest + 1} of 5`;
+  qc.textContent = ['over', 'assassin', 'recruit'].includes(view.phase) ? `Quests: Arthur ${won}, Mordred ${view.results.length - won}` : `Quest ${view.quest + 1} of 5`;
   qc.dataset.tip = `${view.n} players: ${view.sides[0]} Good, ${view.sides[1]} Evil. Teams of ${view.sizes.join(', ')}.`;
   const pc = $('#phase-chip');
-  pc.textContent = PHASE[view.phase] || '';
+  pc.textContent = (view.ask && ASK_LABEL[view.ask.kind]) || PHASE[view.phase] || '';
   pc.dataset.tip = {
     team: 'The Leader chooses the Team for this Quest.',
     vote: 'Everyone votes on the Team at once. A majority approves it; a tie rejects it.',
     quest: 'The Team plays Quest cards face down. One Fail fails the Quest.',
+    onquest: 'The Quest is under way.',
     lady: 'The Lady of the Lake looks at one player’s loyalty.',
-    assassin: 'Three Quests have succeeded; the Assassin names Merlin. If right, Evil wins.',
+    recruit: 'The Assassin tries to recruit the Untrustworthy Servant.',
+    assassin: 'Three Quests have succeeded; Evil names Merlin. If right, Evil wins.',
     over: '',
   }[view.phase] || '';
   $('#btn-role').classList.toggle('hidden', !view.me);
@@ -1635,9 +1953,14 @@ function renderGame(view, sess) {
     lastFxSeq = view.fx.seq;
     const fx = view.fx;
     if (fx.kind === 'vote') flash(fx.approved ? `Team approved ${fx.yes}–${fx.no}` : `Team rejected ${fx.yes}–${fx.no}${fx.rejects ? ` · Vote Track ${fx.rejects} of 5` : ''}`, fx.approved ? 'good' : 'bad');
-    else if (fx.kind === 'quest') flash(fx.success ? `Quest ${fx.quest + 1} succeeds${fx.fails ? ` — ${fx.fails} Fail, ${fx.needed} needed` : ''}` : `Quest ${fx.quest + 1} fails — ${fx.fails} Fail card${fx.fails === 1 ? '' : 's'}`, fx.success ? 'good' : 'bad');
-    else if (fx.kind === 'assassin') flash('Three Quests won — the Assassin names Merlin', 'plain');
+    else if (fx.kind === 'quest') flash(fx.success ? `Quest ${fx.quest + 1} succeeds${fx.magic % 2 ? ' — by Magic' : fx.fails ? ` — ${fx.fails} Fail, ${fx.needed} needed` : ''}` : `Quest ${fx.quest + 1} fails${fx.magic % 2 ? ' — by Magic' : ` — ${fx.fails} Fail card${fx.fails === 1 ? '' : 's'}`}`, fx.success ? 'good' : 'bad');
+    else if (fx.kind === 'assassin') flash('Three Quests won — Evil’s last chance', 'plain');
     else if (fx.kind === 'declare' && fx.says) flash(`${seatName(view, fx.holder)}: “${seatName(view, fx.target)} is ${fx.says === 'good' ? 'Good' : 'Evil'}”`, 'plain');
+    else if (fx.kind === 'switch') flash('Switch Allegiance — the Lancelots change sides', 'plain');
+    else if (fx.kind === 'reveal') flash(`${seatName(view, fx.seat)} is the Revealer`, 'bad');
+    else if (fx.kind === 'recruit') flash(fx.hit ? `${seatName(view, fx.target)} is recruited to Evil` : `${seatName(view, fx.target)} is not the Untrustworthy Servant`, fx.hit ? 'bad' : 'plain');
+    else if (fx.kind === 'excalibur') flash(`${seatName(view, fx.seat)} wields Excalibur`, 'plain');
+    else if (fx.kind === 'plot' && !fx.given) flash(`${seatName(view, fx.seat)} plays ${plotName(fx.type)}`, 'plain');
   }
 
   // the reveal: everyone sees their Character once, as a game starts
@@ -1656,27 +1979,36 @@ function showGameover(view, sess) {
   const m = $('#gameover');
   m.classList.remove('hidden');
   const mine = view.me;
-  const won = mine && mine.side === view.winner;
-  $('#go-title').textContent = `${view.winner === 'good' ? 'Good' : 'Evil'} wins${mine && !isObserver(view) ? (won ? ' — so do you!' : ' — you lose') : ''}`;
-  $('#go-title').className = `win-${view.winner}`;
+  const meP = view.players.find((p) => p.seat === view.you);
+  const solo = view.winner === 'rogueGood' || view.winner === 'rogueEvil';
+  const iWon = mine && meP && (solo ? meP.role === view.winner : meP.side === view.winner);
+  const partial = mine && view.partial.includes(view.you);
+  const w = { good: 'Good', evil: 'Evil', rogueGood: 'The Good Rogue', rogueEvil: 'The Evil Rogue' }[view.winner];
+  $('#go-title').textContent = `${w} wins${mine && !isObserver(view) ? (iWon ? (partial ? ' — a partial victory for you' : ' — so do you!') : ' — you lose') : ''}`;
+  $('#go-title').className = `win-${view.winner === 'rogueGood' ? 'good' : view.winner === 'rogueEvil' ? 'evil' : view.winner}`;
   $('#go-sub').textContent = view.why ? view.why.charAt(0).toUpperCase() + view.why.slice(1) + '.' : '';
   const list = $('#go-rank');
   list.replaceChildren();
-  const order = view.players.slice().sort((a, b) => (sideOf(a.role) === view.winner ? 0 : 1) - (sideOf(b.role) === view.winner ? 0 : 1));
+  const winner = (p) => (solo ? p.role === view.winner : p.side === view.winner);
+  const order = view.players.slice().sort((a, b) => (winner(a) ? 0 : 1) - (winner(b) ? 0 : 1));
   for (const p of order) {
-    const row = el('li', `rank-row side-${sideOf(p.role)}${p.seat === view.you ? ' me' : ''}`);
+    const row = el('li', `rank-row side-${p.side}${p.seat === view.you ? ' me' : ''}`);
     row.append(avatarEl(p.name, p.seat, p.bot));
     row.append(el('span', 'rank-name', p.name + (p.connected || p.bot ? '' : ' (left)')));
     const r = el('span', 'rank-score');
     r.append(el('span', 'role-ic', ROLE_ICON[p.role]), document.createTextNode(` ${roleName(p.role)}`));
-    if (view.assassination && view.assassination.target === p.seat) r.append(el('span', 'go-named', ' · named as Merlin'));
+    if (p.side !== sideOf(p.role)) r.append(el('span', 'go-named', ` · ${p.side === 'good' ? 'Good' : 'Evil'} at the end`));
+    if (view.partial.includes(p.seat)) r.append(el('span', 'go-partial', ' · partial victory'));
+    const a = view.assassination;
+    if (a && a.target === p.seat) r.append(el('span', 'go-named', ' · named as Merlin'));
+    if (a && a.messengers && a.messengers.includes(p.seat)) r.append(el('span', 'go-named', ' · named'));
     row.append(r);
     list.append(row);
   }
   $('#btn-again').classList.toggle('hidden', !sess.isHost);
   $('#btn-golobby').classList.toggle('hidden', !sess.isHost);
   $('#go-wait').classList.toggle('hidden', sess.isHost);
-  if (won && !confettiDone && !isObserver(view)) {
+  if (iWon && !confettiDone && !isObserver(view)) {
     confettiDone = true;
     confetti();
   }
