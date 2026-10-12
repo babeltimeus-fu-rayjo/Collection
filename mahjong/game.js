@@ -589,6 +589,13 @@ function doDiscard(G, p, move) {
   return { ok: true };
 }
 
+// Ippatsu runs from a riichi to that player's next discard (doDiscard ends it),
+// and any call at the table in between — a chi, a pon or a kan, a closed kan
+// included — breaks it for everyone.
+function breakIppatsu(G) {
+  for (const q of G.players) q.ippatsu = false;
+}
+
 function doRiichi(G, p, move) {
   if (!canRiichi(G, p.seat)) return { ok: false, error: 'Cannot declare riichi' };
   const tile = p.hand.find((t) => t.id === move.tileId);
@@ -667,6 +674,7 @@ function doKan(G, p, move) {
       const tiles = p.hand.filter((t) => t.key === key).slice(0, 4);
       p.hand = p.hand.filter((t) => !tiles.some((x) => x.id === t.id));
       p.melds.push({ type: 'kan', tiles, open: false });
+      breakIppatsu(G);
       addLog(G, `${p.name} declares a closed kan of ${tileName(tiles[0])}.`);
       say(G, p.seat, 'Kan!', 'claim');
       revealDora(G, `${p.name}'s kan turns up a new`);
@@ -686,6 +694,7 @@ function doKan(G, p, move) {
       const meld = p.melds.find((m) => m.type === 'pon' && m.tiles[0].key === tile.key);
       meld.type = 'kan';
       meld.tiles.push(tile);
+      breakIppatsu(G);
       addLog(G, `${p.name} upgrades a pon to kan with ${tileName(tile)}.`);
       say(G, p.seat, 'Kan!', 'claim');
       revealDora(G, `${p.name}'s kan turns up a new`);
@@ -825,6 +834,7 @@ function resolveClaims(G) {
     tiles.push(tile);
     p.hand = p.hand.filter((h) => !tiles.slice(0, 3).some((x) => x.id === h.id));
     p.melds.push({ type: 'kan', tiles, open: true, from: G.lastDiscardSeat });
+    breakIppatsu(G);
     G.lastDiscard = null; // taken off the table into the meld
     addLog(G, `${p.name} calls Kan on ${tileName(tile)}!`);
     say(G, p.seat, 'Kan!', 'claim');
@@ -841,6 +851,7 @@ function resolveClaims(G) {
     const tiles = p.hand.filter((h) => h.key === tile.key).slice(0, 2);
     p.hand = p.hand.filter((h) => !tiles.some((x) => x.id === h.id));
     p.melds.push({ type: 'pon', tiles: [...tiles, tile], open: true, from: G.lastDiscardSeat });
+    breakIppatsu(G);
     addLog(G, `${p.name} calls Pon on ${tileName(tile)}!`);
     say(G, p.seat, 'Pon!', 'claim');
     G.turn = p.seat;
@@ -856,6 +867,7 @@ function resolveClaims(G) {
     p.hand = p.hand.filter((h) => !combo.some((x) => x.id === h.id));
     const meldTiles = [...combo, tile].sort(tileSort);
     p.melds.push({ type: 'chi', tiles: meldTiles, open: true, from: G.lastDiscardSeat });
+    breakIppatsu(G);
     addLog(G, `${p.name} calls Chi: ${meldTiles.map(tileName).join(', ')}!`);
     say(G, p.seat, 'Chi!', 'claim');
     G.turn = p.seat;
@@ -882,13 +894,6 @@ function advanceTurn(G) {
   }
 
   const p = playerBySeat(G, next);
-
-  // JP: clear ippatsu for everyone after a full round
-  if (G.variant === 'jp') {
-    for (const q of G.players) {
-      if (q.seat !== p.seat) q.ippatsu = false;
-    }
-  }
 
   // draw (flowers are set aside and re-drawn, so the hand keeps its size)
   const drawn = drawTileFor(G, p);
@@ -1266,10 +1271,10 @@ export const SCORING_GUIDE = [
       ['Seat wind', '1', 'Triplet of your seat wind'],
       ['Round wind', '1', 'Triplet of the round wind'],
       ['Haku / Hatsu / Chun', '1 each', 'Triplet of the white, green or red dragon'],
-      ['Pinfu', '1', 'All sequences, concealed'],
+      ['Pinfu', '1', 'All runs, concealed, a pair that scores nothing and a two-sided wait'],
       ['Iipeiko', '1', 'Two identical sequences, concealed'],
       ['Toitoi', '2', 'Every set is a triplet or kan'],
-      ['Chiitoitsu', '2', 'Seven pairs, concealed'],
+      ['Chiitoitsu', '2', 'Seven pairs, concealed — always 25 fu'],
       ['Honitsu', '3 / 2', 'One suit plus honours (concealed / open)'],
       ['Chinitsu', '6 / 5', 'A single suit, no honours (concealed / open)'],
       ['Kokushi Musou', '13', 'Thirteen orphans — yakuman, 32000 pts'],
@@ -1295,7 +1300,7 @@ export const SCORING_GUIDE = [
   },
 ];
 
-function scoreHand(G, winnerSeat, loserSeat, isTsumo) {
+export function scoreHand(G, winnerSeat, loserSeat, isTsumo) {
   if (G.variant === 'jp') return scoreJP(G, winnerSeat, loserSeat, isTsumo);
   if (G.variant === 'tw') return scoreTW(G, winnerSeat, loserSeat, isTsumo);
   return scoreHK(G, winnerSeat, loserSeat, isTsumo);
@@ -1416,60 +1421,38 @@ function scoreJP(G, winnerSeat, loserSeat, isTsumo) {
   const p = playerBySeat(G, winnerSeat);
   const hand = p.hand;
   const melds = p.melds;
+  const keys = hand.map((t) => t.key);
   const allTiles = [...hand, ...melds.flatMap((m) => m.tiles)];
   const isConcealed = melds.every((m) => !m.open);
-  const yaku = [];
+  const isDealer = winnerSeat === G.dealer;
 
-  // riichi
+  // thirteen orphans: a yakuman — and like every limit, half as much again
+  // for the dealer
+  if (isConcealed && hand.length === 14 && isThirteenOrphans(keys)) {
+    const points = jpHanFuToPoints(13, 0, isDealer);
+    return { yaku: [{ name: 'Kokushi Musou', han: 13 }], han: 13, fu: 0, points, summary: `Yakuman! Kokushi Musou (${points} pts)` };
+  }
+
+  // the yaku the whole hand earns, however its sets are read
+  const lead = [];
   if (p.riichi) {
-    yaku.push({ name: 'Riichi', han: 1 });
-    if (p.ippatsu) yaku.push({ name: 'Ippatsu', han: 1 });
+    lead.push({ name: 'Riichi', han: 1 });
+    if (p.ippatsu) lead.push({ name: 'Ippatsu', han: 1 });
   }
-
   // tsumo (concealed only)
-  if (isTsumo && isConcealed) yaku.push({ name: 'Menzen Tsumo', han: 1 });
-
+  if (isTsumo && isConcealed) lead.push({ name: 'Menzen Tsumo', han: 1 });
   // tanyao (no terminals or honors)
-  if (allTiles.every((t) => isNumber(t) && t.v >= 2 && t.v <= 8)) {
-    yaku.push({ name: 'Tanyao', han: 1 });
-  }
-
+  if (allTiles.every((t) => isNumber(t) && t.v >= 2 && t.v <= 8)) lead.push({ name: 'Tanyao', han: 1 });
   // yakuhai (value tiles)
   const sw = seatWind(G, winnerSeat);
-  if (hasTripletOf(hand, melds, 'wind', sw)) yaku.push({ name: `Seat wind (${sw})`, han: 1 });
-  if (hasTripletOf(hand, melds, 'wind', G.roundWind)) yaku.push({ name: `Round wind (${G.roundWind})`, han: 1 });
+  if (hasTripletOf(hand, melds, 'wind', sw)) lead.push({ name: `Seat wind (${sw})`, han: 1 });
+  if (hasTripletOf(hand, melds, 'wind', G.roundWind)) lead.push({ name: `Round wind (${G.roundWind})`, han: 1 });
   for (const d of HONOR_DRAGONS) {
-    if (hasTripletOf(hand, melds, 'dragon', d)) {
-      yaku.push({ name: `${d === 'R' ? 'Chun' : d === 'G' ? 'Hatsu' : 'Haku'}`, han: 1 });
-    }
+    if (hasTripletOf(hand, melds, 'dragon', d)) lead.push({ name: DRAGON_WORD[d], han: 1 });
   }
-
-  // pinfu (all sequences, valueless pair, two-sided wait, concealed)
-  if (isConcealed && isAllSequences(hand, melds, 'jp')) {
-    yaku.push({ name: 'Pinfu', han: 1 });
-  }
-
-  // iipeiko (two identical sequences, concealed)
-  if (isConcealed && hasIipeiko(hand, melds)) yaku.push({ name: 'Iipeiko', han: 1 });
-
-  // all triplets
-  if (isAllTriplets(hand, melds, 'jp')) yaku.push({ name: 'Toitoi', han: 2 });
-
-  // seven pairs
-  if (isConcealed && hand.length === 14 && isSevenPairs(hand.map((t) => t.key))) {
-    yaku.push({ name: 'Chiitoitsu', han: 2 });
-  }
-
-  // mixed flush
-  if (isMixedFlush(allTiles)) yaku.push({ name: 'Honitsu', han: isConcealed ? 3 : 2 });
-
-  // full flush
-  if (isFullFlush(allTiles)) yaku.push({ name: 'Chinitsu', han: isConcealed ? 6 : 5 });
-
-  // thirteen orphans
-  if (isConcealed && hand.length === 14 && isThirteenOrphans(hand.map((t) => t.key))) {
-    return { yaku: [{ name: 'Kokushi Musou', han: 13 }], han: 13, fu: 0, points: 32000, summary: 'Yakuman! Kokushi Musou (32000 pts)' };
-  }
+  const tail = [];
+  if (isMixedFlush(allTiles)) tail.push({ name: 'Honitsu', han: isConcealed ? 3 : 2 });
+  if (isFullFlush(allTiles)) tail.push({ name: 'Chinitsu', han: isConcealed ? 6 : 5 });
 
   // dora bonus
   let doraCount = 0;
@@ -1483,16 +1466,37 @@ function scoreJP(G, winnerSeat, loserSeat, isTsumo) {
       doraCount += allTiles.filter((t) => t.key === dk).length;
     }
   }
-  if (doraCount > 0) yaku.push({ name: `Dora (${doraCount})`, han: doraCount });
+  const dora = doraCount > 0 ? [{ name: `Dora (${doraCount})`, han: doraCount }] : [];
 
-  const totalHan = yaku.reduce((s, y) => s + y.han, 0);
-  if (totalHan === 0) {
-    return { yaku: [], han: 0, fu: 0, points: 0, summary: 'No yaku — cannot win' };
+  // Every reading of the hand, with the yaku that hang on the reading — Pinfu,
+  // Iipeiko, Toitoi — and its fu. "When a hand can be interpreted in more than
+  // one way, the interpretation which yields the highest score is used."
+  const winTile = isTsumo ? G.lastDraw : G.lastDiscard;
+  const options = jpReadings(G, p, winTile && winTile.key, isTsumo).map((r) => {
+    const mid = [];
+    if (r.pinfu) mid.push({ name: 'Pinfu', han: 1 });
+    if (r.iipeiko) mid.push({ name: 'Iipeiko', han: 1 });
+    if (r.toitoi) mid.push({ name: 'Toitoi', han: 2 });
+    return { yaku: [...lead, ...mid, ...tail], fu: r.fu };
+  });
+  // seven pairs: two han, and a flat 25 fu that is never rounded
+  if (isConcealed && hand.length === 14 && isSevenPairs(keys)) {
+    options.push({ yaku: [...lead, { name: 'Chiitoitsu', han: 2 }, ...tail], fu: 25 });
   }
 
-  const fu = calculateFu(G, hand, melds, isTsumo, isConcealed, winnerSeat);
-  const points = jpHanFuToPoints(totalHan, fu, winnerSeat === G.dealer);
-  return { yaku, han: totalHan, fu, points, summary: `${totalHan} han ${fu} fu (${points} pts)` };
+  // dora are never a yaku: a reading with nothing else cannot be won on
+  let best = null;
+  for (const o of options) {
+    if (!o.yaku.length) continue;
+    const yaku = [...o.yaku, ...dora];
+    const han = yaku.reduce((n, y) => n + y.han, 0);
+    const points = jpHanFuToPoints(han, o.fu, isDealer);
+    if (!best || points > best.points || (points === best.points && (han > best.han || (han === best.han && o.fu > best.fu)))) {
+      best = { yaku, han, fu: o.fu, points };
+    }
+  }
+  if (!best) return { yaku: [], han: 0, fu: 0, points: 0, summary: 'No yaku — cannot win' };
+  return { ...best, summary: `${best.han} han ${best.fu} fu (${best.points} pts)` };
 }
 
 // Turn up an indicator and put it in the log with what it actually points at —
@@ -1532,43 +1536,115 @@ function doraKey(indicator) {
   return '';
 }
 
-function calculateFu(G, hand, melds, isTsumo, isConcealed, winnerSeat) {
-  let fu = 20; // base fu
-  if (isTsumo) fu += 2;
-  else if (isConcealed) fu += 10; // menzen ron
-
-  // meld fu
-  for (const m of melds) {
-    if (m.type === 'pon') {
-      let base = isTerminalOrHonor(m.tiles[0]) ? 4 : 2;
-      if (!m.open) base *= 2;
-      fu += base;
-    } else if (m.type === 'kan') {
-      let base = isTerminalOrHonor(m.tiles[0]) ? 16 : 8;
-      if (!m.open) base *= 2;
-      fu += base;
-    }
-  }
-
-  // closed triplets in hand
-  const handKeys = hand.map((t) => t.key);
+// Every way to read a concealed hand as `need` sets and a pair, each set a run
+// or a triplet listed by its tile keys. 111222333 is three triplets or three
+// runs; a hand is scored on whichever reading pays most.
+function decompositions(keys, need) {
+  const out = [];
   const counts = {};
-  for (const k of handKeys) counts[k] = (counts[k] || 0) + 1;
-  // pair fu
-  for (const [k, c] of Object.entries(counts)) {
-    if (c >= 2) {
-      const t = hand.find((h) => h.key === k);
-      if (t && isHonor(t)) {
-        if (t.kind === 'dragon') fu += 2;
-        const sw = seatWind(G, winnerSeat);
-        if (t.kind === 'wind' && t.v === sw) fu += 2;
-        if (t.kind === 'wind' && t.v === G.roundWind) fu += 2;
+  for (const k of keys) counts[k] = (counts[k] || 0) + 1;
+  for (const pair of Object.keys(counts)) {
+    if (counts[pair] < 2) continue;
+    const rem = { ...counts };
+    rem[pair] -= 2;
+    const sets = [];
+    const walk = (left) => {
+      let first = null;
+      for (const k of Object.keys(rem).sort()) if (rem[k] > 0) { first = k; break; }
+      if (!first) { if (left === 0) out.push({ pair, sets: sets.slice() }); return; }
+      if (left === 0) return;
+      if (rem[first] >= 3) {
+        rem[first] -= 3;
+        sets.push({ run: false, keys: [first, first, first] });
+        walk(left - 1);
+        sets.pop();
+        rem[first] += 3;
       }
+      const pk = parseKey(first);
+      if (pk) {
+        const k2 = `${pk.suit}${pk.v + 1}`;
+        const k3 = `${pk.suit}${pk.v + 2}`;
+        if (rem[k2] > 0 && rem[k3] > 0) {
+          rem[first]--; rem[k2]--; rem[k3]--;
+          sets.push({ run: true, keys: [first, k2, k3] });
+          walk(left - 1);
+          sets.pop();
+          rem[first]++; rem[k2]++; rem[k3]++;
+        }
+      }
+    };
+    walk(need);
+  }
+  return out;
+}
+
+// The readings of a winning Riichi hand: which sets it is made of, and which of
+// them the winning tile completed — the wait. For each, the fu and the yaku that
+// depend on the reading.
+//
+// Fu: 20 to start; 10 for a win on a discard with a concealed hand, or 2 for a
+// self-draw; per triplet 2, doubled for terminals and honours and doubled again
+// if concealed (a kan four times that) — a triplet the winning discard
+// completed counts as open; 2 for a pair of dragons, of the seat wind, of the
+// round wind; 2 for a wait on one tile only — the middle of a run (kanchan),
+// the 3 or 7 of 1-2-3 or 7-8-9 (penchan), or the pair (tanki). Rounded up to
+// the next 10, and an open hand worth only the 20 counts 30.
+//
+// Pinfu: concealed, four runs, a pair that scores nothing, and a two-sided
+// wait. Its fu are fixed: 30 on a discard, 20 on a self-draw (no 2 for it).
+function jpReadings(G, p, winKey, isTsumo) {
+  const melds = p.melds;
+  const isConcealed = melds.every((m) => !m.open);
+  const need = setsNeeded('jp') - melds.length;
+  const sw = seatWind(G, p.seat);
+  const termHon = (k) => !parseKey(k) || k.endsWith('1') || k.endsWith('9');
+  const valuePair = (k) => k[0] === 'd' || k === `w${sw}` || k === `w${G.roundWind}`;
+  let meldFu = 0;
+  for (const m of melds) {
+    const th = isTerminalOrHonor(m.tiles[0]);
+    if (m.type === 'pon') meldFu += (th ? 4 : 2) * (m.open ? 1 : 2);
+    else if (m.type === 'kan') meldFu += (th ? 16 : 8) * (m.open ? 1 : 2);
+  }
+  const out = [];
+  for (const d of decompositions(p.hand.map((t) => t.key), need)) {
+    // where the winning tile could have landed
+    const waits = [];
+    if (d.pair === winKey) waits.push({ wait: 'tanki', set: -1 });
+    d.sets.forEach((st, i) => {
+      if (!st.keys.includes(winKey)) return;
+      if (!st.run) { waits.push({ wait: 'shanpon', set: i }); return; }
+      const pos = st.keys.indexOf(winKey);
+      const lo = parseKey(st.keys[0]).v;
+      const edge = (pos === 2 && lo === 1) || (pos === 0 && lo === 7);
+      waits.push({ wait: pos === 1 ? 'kanchan' : edge ? 'penchan' : 'ryanmen', set: i });
+    });
+    // no winning tile to go by: read the shape alone, with no wait
+    if (!winKey) waits.push({ wait: null, set: -2 });
+    const runs = d.sets.filter((st) => st.run).map((st) => st.keys.join());
+    const iipeiko = isConcealed && runs.some((k, i) => runs.indexOf(k) !== i);
+    const toitoi = melds.every((m) => m.type !== 'chi') && d.sets.every((st) => !st.run);
+    for (const w of waits) {
+      const pinfu = isConcealed && !melds.length && d.sets.every((st) => st.run) && !valuePair(d.pair) && w.wait === 'ryanmen';
+      let fu;
+      if (pinfu) fu = isTsumo ? 20 : 30;
+      else {
+        fu = 20 + meldFu + (isTsumo ? 2 : isConcealed ? 10 : 0);
+        d.sets.forEach((st, i) => {
+          if (st.run) return;
+          const open = !isTsumo && w.set === i;
+          fu += (termHon(st.keys[0]) ? 4 : 2) * (open ? 1 : 2);
+        });
+        if (d.pair[0] === 'd') fu += 2;
+        if (d.pair === `w${sw}`) fu += 2;
+        if (d.pair === `w${G.roundWind}`) fu += 2;
+        if (w.wait === 'kanchan' || w.wait === 'penchan' || w.wait === 'tanki') fu += 2;
+        fu = Math.ceil(fu / 10) * 10;
+        if (!isConcealed && fu === 20) fu = 30;
+      }
+      out.push({ wait: w.wait, pinfu, iipeiko, toitoi, fu });
     }
   }
-
-  // round up to next 10
-  return Math.ceil(fu / 10) * 10;
+  return out;
 }
 
 function jpHanFuToPoints(han, fu, isDealer) {
@@ -1747,56 +1823,6 @@ function isFullFlush(tiles) {
   return nonFlower.every((t) => t.kind === suit);
 }
 
-function hasIipeiko(hand, melds) {
-  // two identical sequences in a concealed hand
-  if (melds.length > 0) return false; // must be fully concealed for this check
-  // try decomposing and looking for duplicate sequences
-  const keys = hand.map((t) => t.key);
-  const counts = {};
-  for (const k of keys) counts[k] = (counts[k] || 0) + 1;
-
-  for (const pairKey of Object.keys(counts)) {
-    if (counts[pairKey] < 2) continue;
-    const rem = { ...counts };
-    rem[pairKey] -= 2;
-    if (rem[pairKey] === 0) delete rem[pairKey];
-    const seqs = extractAllSequences(rem);
-    if (seqs && hasDuplicateSequence(seqs)) return true;
-  }
-  return false;
-}
-
-function extractAllSequences(counts) {
-  const seqs = [];
-  const c = { ...counts };
-  for (const k of Object.keys(c).sort()) {
-    while (c[k] > 0) {
-      const p = parseKey(k);
-      if (!p || !p.suit) return null; // honor left over
-      const k2 = `${p.suit}${p.v + 1}`;
-      const k3 = `${p.suit}${p.v + 2}`;
-      if (c[k2] > 0 && c[k3] > 0) {
-        c[k] -= 1; c[k2] -= 1; c[k3] -= 1;
-        if (c[k] === 0) delete c[k];
-        if (c[k2] === 0) delete c[k2];
-        if (c[k3] === 0) delete c[k3];
-        seqs.push(`${k}-${k2}-${k3}`);
-      } else {
-        return null;
-      }
-    }
-  }
-  return seqs;
-}
-
-function hasDuplicateSequence(seqs) {
-  const seen = new Set();
-  for (const s of seqs) {
-    if (seen.has(s)) return true;
-    seen.add(s);
-  }
-  return false;
-}
 
 // ---------------------------------------------------------------- bot AI
 
@@ -2506,7 +2532,10 @@ function jpRoutesFor(ctx) {
   // closest arrangement that does not chase them.
   evaluate('any', [], 0, { mode: FREE });
   evaluate('tanyao', [{ term: 'tanyao', text: 'tanyao' }], 1, { mode: FREE, sup: simples, honors: false });
-  evaluate('pinfu', [{ term: 'pinfu', text: 'pinfu' }], 1, { mode: SEQ, closedOnly: true });
+  // Pinfu's pair must score nothing, so the route keeps to a pair from the
+  // suits. A guest wind would do as well, but no honour pair is ever the wrong
+  // advice; the two-sided wait it also needs is settled only by the last tile.
+  evaluate('pinfu', [{ term: 'pinfu', text: 'pinfu' }], 1, { mode: SEQ, closedOnly: true, honors: false });
   evaluate('toitoi', [{ term: 'toitoi', text: 'toitoi' }], 2, { mode: TRIP });
   for (const s of SUITS_ORDER) {
     evaluate(`honitsu:${s}`, [{ term: 'honitsu', text: `honitsu in ${SUIT_NAME[s]}` }], closed ? 3 : 2,
