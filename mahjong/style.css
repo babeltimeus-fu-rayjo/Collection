@@ -800,12 +800,24 @@ body {
 
 /* the score panel can be tucked away to study the board; this says how to bring
    it back, and never eats a click itself */
-#he-peek, #step-peek {
+#he-peek, #step-peek, #go-peek {
   position: fixed; left: 50%; transform: translateX(-50%); top: 50px; z-index: 75;
   background: rgba(10,26,18,.92); border: 1px solid #2a6b45; color: #e8d5a3;
   padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 600;
   box-shadow: 0 4px 16px rgba(0,0,0,.5); pointer-events: none;
 }
+/* the final result stays closed until asked for, so this one is a button */
+#go-peek { pointer-events: auto; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; padding: 7px 16px; }
+#go-peek:hover { border-color: #4db87a; }
+/* the final result closes like any popup: this corner button, a click beside
+   the panel, or Esc */
+#gameover .panel { position: relative; }
+.panel-close {
+  position: absolute; top: 10px; right: 10px; width: 30px; height: 30px;
+  border: none; border-radius: 50%; background: #1a4a32; color: #b0c8a8;
+  font-size: 14px; line-height: 1; cursor: pointer;
+}
+.panel-close:hover { background: #226b44; color: #e8e0d0; }
 
 /* the bots-are-holding prompt sits low, out of the board's way, and pulses
    gently so it reads as a live state rather than a label */
@@ -886,8 +898,9 @@ body {
 .call-pon { color: #ffd166; text-shadow: 0 2px 0 rgba(0,0,0,.6), 0 4px 16px rgba(0,0,0,.8), 0 0 36px rgba(255,209,102,.7); }
 .call-chi { color: #7fd4ff; text-shadow: 0 2px 0 rgba(0,0,0,.6), 0 4px 16px rgba(0,0,0,.8), 0 0 36px rgba(127,212,255,.7); }
 .call-kan { color: #ff9d6e; text-shadow: 0 2px 0 rgba(0,0,0,.6), 0 4px 16px rgba(0,0,0,.8), 0 0 36px rgba(255,157,110,.7); }
-/* Ron ends the hand — give it the loudest bloom of the four */
+/* Ron and Tsumo end the hand — give them the loudest blooms, each its own colour */
 .call-ron { color: #ff7a7a; text-shadow: 0 2px 0 rgba(0,0,0,.6), 0 4px 16px rgba(0,0,0,.85), 0 0 44px rgba(255,122,122,.85); }
+.call-tsumo { color: #e2b4ff; text-shadow: 0 2px 0 rgba(0,0,0,.6), 0 4px 16px rgba(0,0,0,.85), 0 0 44px rgba(214,150,255,.85); }
 @keyframes callFx {
   0%   { opacity: 0; transform: translate(-50%, -50%) scale(.3) rotate(-8deg); }
   18%  { opacity: 1; transform: translate(-50%, -50%) scale(1.3) rotate(3deg); }

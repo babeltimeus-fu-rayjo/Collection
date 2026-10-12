@@ -759,16 +759,20 @@ function fxLayer() {
   return layer;
 }
 
-// big PON/CHI/KAN/RON call, centred over the claiming player's quadrant
+// big PON/CHI/KAN/RON/TSUMO call, centred over the calling player's quadrant
 function showCall(seat, text) {
   const host = seatHost(seat);
   if (!host || !host.offsetParent) return;
   const word = String(text).replace(/[^a-z]/gi, '').toLowerCase();
   const r = host.getBoundingClientRect();
   const call = el('div', `call-fx call-${word}`, word.toUpperCase());
-  call.style.left = `${Math.round(r.left + r.width / 2)}px`;
   call.style.top = `${Math.round(r.top + r.height / 2)}px`;
   fxLayer().append(call);
+  // TSUMO is longer than the quadrant under it on a narrow screen: keep the
+  // word whole on screen at the peak of its pop (1.3x)
+  const half = (call.offsetWidth * 1.3) / 2 + 8;
+  const vw = document.documentElement.clientWidth;
+  call.style.left = `${Math.round(Math.min(vw - half, Math.max(half, r.left + r.width / 2)))}px`;
   setTimeout(() => call.remove(), 1500);
 }
 
@@ -1186,6 +1190,12 @@ function guestGone(code, why) {
 
 function renderLobby(sess, lobbyMsg) {
   showScreen('lobby');
+  // a finished game's result goes with the game — "Back to lobby" used to leave
+  // it over the seats, for the host and for every guest, with no way to close it
+  $('#gameover').classList.add('hidden');
+  $('#go-peek').classList.add('hidden');
+  overHidden = false;
+  hideHandEnd();
   const isHost = sess.isHost;
   const roster = isHost ? sess.roster : (lobbyMsg && lobbyMsg.roster) || [];
   const variant = isHost ? sess.selectedVariant : (lobbyMsg && lobbyMsg.variant) || 'tw';
@@ -1486,14 +1496,14 @@ function renderGame(view, sess) {
   // feed
   renderFeed(view);
 
-  // announcements: claims pop a big call over the seat; everything else is a
-  // normal speech bubble (discards aren't announced — the tile rests in the
-  // centre instead)
+  // announcements: claims and wins (Ron, Tsumo) pop a big call over the seat;
+  // everything else is a normal speech bubble (discards aren't announced — the
+  // tile rests in the centre instead)
   if (view.chatter) {
     for (const c of view.chatter) {
       if (c.n > chatSeenN) {
         chatSeenN = c.n;
-        if (c.kind === 'claim') showCall(c.seat, c.text);
+        if (c.kind === 'claim' || c.kind === 'win') showCall(c.seat, c.text);
         else showChatBubble({ seat: c.seat, text: c.text, say: true });
       }
     }
@@ -1534,19 +1544,17 @@ function renderGame(view, sess) {
     hideHandEnd();
   }
 
-  // Game over. The same tuck-away the hand-end panel has: a final board is the
-  // one you most want to look at, and this panel used to sit over it with no way
-  // past — every button on it starts or leaves a game.
+  // Game over. A final board is the one you most want to look at, so the
+  // result closes like any popup — its corner button, a click beside it, Esc,
+  // or Hide — and, unlike a hand's score, nobody is waiting on it: it stays
+  // closed until "Show the final result" brings it back, not on any stray click.
   if (view.phase === 'over') {
-    if (overHidden) {
-      $('#gameover').classList.add('hidden');
-      $('#he-peek').classList.remove('hidden');
-    } else {
-      $('#he-peek').classList.add('hidden');
-      showGameOver(view, sess);
-    }
+    $('#go-peek').classList.toggle('hidden', !overHidden);
+    if (overHidden) $('#gameover').classList.add('hidden');
+    else showGameOver(view, sess);
   } else {
     $('#gameover').classList.add('hidden');
+    $('#go-peek').classList.add('hidden');
     overHidden = false;
   }
 
@@ -2102,15 +2110,13 @@ function paintHandEnd() {
 const KEEPS_SCORE_HIDDEN = 'button, a, input, select, textarea, label, .term, .tile, '
   + '#chat, #feed, #cfg-drawer, #cfg-gear, #feed-toggle, .topbar, #size-popover, .modal';
 document.addEventListener('click', (e) => {
-  if (!scoreHidden && !overHidden) return;
+  if (!scoreHidden) return;
   const t = e.target;
   if (!t || !t.closest) return;
   // the peek line is the one control whose whole job is bringing it back
   if (!t.closest('#he-peek') && t.closest(KEEPS_SCORE_HIDDEN)) return;
   scoreHidden = false;
-  overHidden = false;
-  if (lastView && lastView.phase === 'over') { if (lastView) renderGame(lastView, session); }
-  else paintHandEnd();
+  paintHandEnd();
 }, true);
 
 function showHandEnd(view, sess) {
@@ -2917,6 +2923,9 @@ function leaveRoom() {
   scoreHidden = false;
   overHidden = false;
   hideHandEnd();
+  // and the final result: leaving from it used to leave it over the home screen
+  $('#gameover').classList.add('hidden');
+  $('#go-peek').classList.add('hidden');
   paintStep();
   // and the board itself: hand tiles are reused by tile id, which repeat every
   // game, so leaving them in place would carry this room's click handlers into
@@ -2940,8 +2949,19 @@ $('#btn-create').addEventListener('click', createRoom);
 $('#btn-join').addEventListener('click', joinRoom);
 $('#code-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') joinRoom(); });
 $('#name-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btn-create').click(); });
-$('#btn-go-hide')?.addEventListener('click', () => {
+// the final result closes like any popup, and opens again only when asked
+function closeGameOver() {
   overHidden = true;
+  if (lastView) renderGame(lastView, session);
+}
+$('#btn-go-hide')?.addEventListener('click', closeGameOver);
+$('#btn-go-close').addEventListener('click', closeGameOver);
+$('#gameover').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeGameOver(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('#gameover').classList.contains('hidden')) closeGameOver();
+});
+$('#go-peek').addEventListener('click', () => {
+  overHidden = false;
   if (lastView) renderGame(lastView, session);
 });
 $('#btn-routes').addEventListener('click', toggleRoutes);
