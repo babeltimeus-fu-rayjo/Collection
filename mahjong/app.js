@@ -1901,9 +1901,11 @@ function hkLadder(total, limit = 0) {
     cut = start > 0;
   }
   const wrap = el('div', 'he-ladder');
-  wrap.append(el('div', 'he-ladder-cap', capped
-    ? `faan \u2192 points \u00b7 house limit ${limit} faan`
-    : 'faan \u2192 points \u00b7 doubles from 7 up, no limit'));
+  const cap = el('div', 'he-ladder-cap');
+  cap.append(term('faan@hk', 'faan'), capped
+    ? ` \u2192 points \u00b7 house limit ${limit} faan`
+    : ' \u2192 points \u00b7 doubles from 7 up, no limit');
+  wrap.append(cap);
   const row = el('div', 'he-ladder-row');
   if (cut) row.append(el('div', 'he-step he-step-more', '\u2026'));
   for (const step of show) {
@@ -1917,25 +1919,50 @@ function hkLadder(total, limit = 0) {
   return wrap;
 }
 
+// label and value may be text, a node, or a list of both — the names on the
+// result explain themselves on hover
 function heRow(label, value, cls) {
   const row = el('div', 'he-row' + (cls ? ' ' + cls : ''));
-  row.append(el('span', 'he-label', label));
-  if (value != null && value !== '') row.append(el('span', 'he-val', value));
+  const lab = el('span', 'he-label');
+  lab.append(...[].concat(label));
+  row.append(lab);
+  if (value != null && value !== '') {
+    const val = el('span', 'he-val');
+    val.append(...[].concat(value));
+    row.append(val);
+  }
   return row;
+}
+
+// The glossary note behind a line of the score, by the name the scorer gave it
+// ("Seat wind (E)", "Dora (2)", "Chun (dragon)", "2 flower(s)"). In Riichi the
+// value-tile lines point at Yakuhai, the yaku they are; elsewhere at the tile.
+function scoreTerm(name, rs) {
+  const n = String(name).replace(/\s*\([^)]*\)$/, '');
+  if (/^\d+ flower/.test(n)) return 'flowers';
+  if (rs === 'jp') {
+    return ({ Riichi: 'riichi', Ippatsu: 'ippatsu', 'Menzen Tsumo': 'menzentsumo', Tanyao: 'tanyao',
+      'Seat wind': 'yakuhai', 'Round wind': 'yakuhai', Haku: 'yakuhai', Hatsu: 'yakuhai', Chun: 'yakuhai',
+      Pinfu: 'pinfu', Iipeiko: 'iipeiko', Toitoi: 'toitoi', Chiitoitsu: 'chiitoitsu', Honitsu: 'honitsu',
+      Chinitsu: 'chinitsu', 'Kokushi Musou': 'kokushi', Dora: 'dora' })[n] || null;
+  }
+  return ({ 'Self-draw': 'selfdrawwin', 'Concealed hand': 'concealedwin', 'Seat wind': 'seatwind',
+    'Round wind': 'roundwind', Haku: 'haku', Hatsu: 'hatsu', Chun: 'chun', 'All sequences': 'sequences',
+    'All triplets': 'triplets', 'Mixed flush': 'mixed', 'Full flush': 'full', 'All honors': 'honors' })[n] || null;
 }
 
 // cheatsheet of the special hands each ruleset scores; the ruleset currently in
 // play is listed first and flagged, the others stay below for reference
 // cheatsheet row names that the glossary can explain
 const CHEAT_TERMS = {
-  'Self-draw': 'selfdraw', 'Menzen Tsumo': 'selfdraw', 'Concealed hand': 'selfdraw',
+  'Self-draw': 'selfdrawwin', 'Menzen Tsumo': 'menzentsumo', 'Concealed hand': 'concealedwin',
   'Seat wind': 'seatwind', 'Round wind': 'roundwind', 'Dragon triplet': 'dragonpung',
   'All sequences': 'sequences', 'All triplets': 'triplets',
   'Mixed flush': 'mixed', 'Full flush': 'full', 'All honours': 'honors', 'Flowers': 'flowers',
   Riichi: 'riichi', Tanyao: 'tanyao', Pinfu: 'pinfu', Toitoi: 'toitoi',
   Chiitoitsu: 'chiitoitsu', Honitsu: 'honitsu', Chinitsu: 'chinitsu',
   'Kokushi Musou': 'kokushi', Dora: 'dora', 'Haku / Hatsu / Chun': 'yakuhai',
-  Ippatsu: 'ippatsu', Iipeiko: 'iipeiko', 'Concealed hand': 'concealed',
+  Ippatsu: 'ippatsu', Iipeiko: 'iipeiko',
 };
 
 // Hovering only helps if you already know which word to point at, so the panel
@@ -1944,10 +1971,11 @@ const GLOSSARY_SECTIONS = [
   ['The tiles', ['man', 'pin', 'sou', 'honours', 'dragons', 'terminals']],
   ['The table', ['meld', 'concealed', 'pung', 'run', 'tenpai', 'wall', 'dealer']],
   ['Calling a tile', ['chi', 'pon', 'kan', 'ron', 'tsumo', 'furiten']],
-  ['Keeping score', ['faan', 'han', 'fu', 'dora', 'uradora', 'yakuman', 'riichisticks', 'honba', 'current', 'drop', 'needs']],
-  ['Hong Kong & Taiwanese hands', ['flowers', 'selfdraw', 'sequences', 'triplets', 'mixed', 'full', 'honors',
-    'honourpung', 'seatwind', 'roundwind', 'dragonpung']],
-  ['Riichi yaku', ['riichi', 'ippatsu', 'tanyao', 'pinfu', 'iipeiko', 'toitoi', 'chiitoitsu',
+  ['Keeping score', ['faan', 'tai', 'base', 'han', 'fu', 'handvalue', 'dora', 'uradora', 'yakuman', 'riichisticks', 'honba',
+    'draw', 'current', 'drop', 'needs']],
+  ['Hong Kong & Taiwanese hands', ['flowers', 'selfdrawwin', 'concealedwin', 'selfdraw', 'sequences', 'triplets', 'mixed',
+    'full', 'honors', 'honourpung', 'seatwind', 'roundwind', 'dragonpung']],
+  ['Riichi yaku', ['riichi', 'ippatsu', 'menzentsumo', 'tanyao', 'pinfu', 'iipeiko', 'toitoi', 'chiitoitsu',
     'honitsu', 'chinitsu', 'kokushi', 'yakuhai']],
 ];
 
@@ -1960,7 +1988,7 @@ function renderGlossary(into) {
   for (const [heading, keys] of GLOSSARY_SECTIONS) {
     sec.append(el('div', 'gloss-head', heading));
     for (const k of keys) {
-      const g = GLOSSARY[k];
+      const g = glossFor(k);
       if (!g) continue;
       const row = el('div', 'gloss-row');
       row.append(el('div', 'gloss-term', g.title));
@@ -1993,7 +2021,9 @@ function cheatSection(g) {
       ? `${val.replace(/\s*each$/, '')} ${g.unit} each`
       : `${val} ${g.unit}`;
     const key = CHEAT_TERMS[name];
-    r.append(key ? (() => { const c = el('span', 'cheat-hand'); c.append(term(key, name)); return c; })()
+    // pinned to this tab's ruleset: Taiwanese tai on the Taiwanese tab, whatever
+    // the table is playing
+    r.append(key ? (() => { const c = el('span', 'cheat-hand'); c.append(term(`${key}@${g.key}`, name)); return c; })()
                  : el('span', 'cheat-hand', name));
     r.append(el('span', 'cheat-val', valStr));
     r.append(el('span', 'cheat-req', req));
@@ -2128,13 +2158,15 @@ function showHandEnd(view, sess) {
   const scores = $('#he-scores');
   const nameOf = (seat) => view.players.find((q) => q.seat === seat)?.name || `Seat ${seat}`;
   // scoring unit differs by ruleset: Riichi counts han, Taiwanese tai, HK faan
-  const unit = view.variant === 'jp' ? 'han' : view.variant === 'tw' ? 'tai' : 'faan';
+  const unit = UNIT_OF[view.variant] || 'faan';
+  // every name on the panel opens its note on hover, read for this table's ruleset
+  const T = (key, text) => term(`${key}@${view.variant}`, text);
 
   detail.replaceChildren();
 
   if (hr.type === 'win') {
     const winner = view.players.find((q) => q.seat === hr.winner);
-    title.textContent = hr.tsumo ? `${winner?.name} — Tsumo!` : `${winner?.name} — Ron!`;
+    title.replaceChildren(`${winner?.name} — `, hr.tsumo ? T('tsumo', 'Tsumo!') : T('ron', 'Ron!'));
     const sc = hr.scoring || {};
 
     // 1) every yaku / faan / tai with its value — and, where each unit is worth a
@@ -2145,52 +2177,56 @@ function showHandEnd(view, sess) {
     if (items.length) {
       for (const y of items) {
         const v = y.han != null ? y.han : y.val;
-        list.append(heRow(y.name, perUnit != null ? `${v} ${unit} (${v * perUnit} pts)` : `${v} ${unit}`));
+        const key = scoreTerm(y.name, view.variant);
+        list.append(heRow(key ? T(key, y.name) : y.name, perUnit != null ? `${v} ${unit} (${v * perUnit} pts)` : `${v} ${unit}`));
       }
+    } else if (view.variant === 'tw') {
+      // nothing on the list: every Taiwanese win is worth 1 tai at least
+      list.append(heRow(T('tai', 'Minimum hand'), perUnit != null ? `1 tai (${perUnit} pts)` : '1 tai'));
     } else {
-      list.append(heRow('No yaku', ''));
+      list.append(heRow(T('han', 'No yaku'), ''));
     }
     // the flat base every win scores, so the lines above add up to the total
-    if (sc.base != null && perUnit != null) list.append(heRow('Base', `${sc.base} pts`));
+    if (sc.base != null && perUnit != null) list.append(heRow(T('base', 'Base'), `${sc.base} pts`));
     detail.append(list);
 
     // 2) the total count (+ fu for Riichi), then the hand's value
-    const totalStr = view.variant === 'jp'
-      ? `${sc.han || 0} han · ${sc.fu || 0} fu`
-      : `${sc.total || 0} ${unit}`;
-    detail.append(heRow('Total', totalStr, 'he-total'));
+    const totalVal = view.variant === 'jp'
+      ? [`${sc.han || 0} `, T('han', 'han'), ` · ${sc.fu || 0} `, T('fu', 'fu')]
+      : [`${sc.total || 0} `, T(unit, unit)];
+    detail.append(heRow('Total', totalVal, 'he-total'));
     // Hong Kong does not multiply anything out: the faan total is looked up in
     // a table, and every step of that table is a different size. Without seeing
     // it, "6 faan" turning into 48 points is a number out of nowhere — and the
     // jumps are the whole reason one more faan is sometimes worth chasing and
     // sometimes not. So show the table, with the row you landed on marked.
     if (view.variant === 'hk') detail.append(hkLadder(sc.total || 0, view.faanLimit || 0));
-    detail.append(heRow('Hand value', `${sc.points ?? 0} pts`, 'he-total'));
+    detail.append(heRow(T('handvalue', 'Hand value'), `${sc.points ?? 0} pts`, 'he-total'));
 
     // 3) how that value is paid out
     const pay = hr.payments;
     const payWrap = el('div', 'he-pay');
     if (pay?.mode === 'ron') {
-      payWrap.append(heRow(`Ron — ${nameOf(pay.from)} pays`, `${pay.amount}`));
+      payWrap.append(heRow([T('ron', 'Ron'), ` — ${nameOf(pay.from)} pays`], `${pay.amount}`));
     } else if (pay?.mode === 'tsumo' && view.variant === 'jp') {
       if (hr.winner === view.dealer) {
-        payWrap.append(heRow('Tsumo — each pays', `${pay.dealer}`));
+        payWrap.append(heRow([T('tsumo', 'Tsumo'), ' — each pays'], `${pay.dealer}`));
       } else {
-        payWrap.append(heRow('Tsumo — dealer pays', `${pay.dealer}`));
-        payWrap.append(heRow('Tsumo — others pay', `${pay.nonDealer} each`));
+        payWrap.append(heRow([T('tsumo', 'Tsumo'), ' — ', T('dealer', 'dealer'), ' pays'], `${pay.dealer}`));
+        payWrap.append(heRow([T('tsumo', 'Tsumo'), ' — others pay'], `${pay.nonDealer} each`));
       }
     } else if (pay?.mode === 'tsumo') {
-      payWrap.append(heRow('Tsumo — each pays', `${pay.each}`));
+      payWrap.append(heRow([T('tsumo', 'Tsumo'), ' — each pays'], `${pay.each}`));
     }
-    if (hr.bonus?.riichi) payWrap.append(heRow('Riichi sticks', `+${hr.bonus.riichi}`));
-    if (hr.bonus?.honba) payWrap.append(heRow('Honba', `+${hr.bonus.honba}`));
+    if (hr.bonus?.riichi) payWrap.append(heRow(T('riichisticks', 'Riichi sticks'), `+${hr.bonus.riichi}`));
+    if (hr.bonus?.honba) payWrap.append(heRow(T('honba', 'Honba'), `+${hr.bonus.honba}`));
     if (payWrap.childElementCount) detail.append(payWrap);
   } else {
-    title.textContent = 'Exhaustive draw';
-    detail.append(heRow('The wall ran out — no winner.', ''));
+    title.replaceChildren(T('draw', 'Exhaustive draw'));
+    detail.append(heRow(['The ', T('wall', 'wall'), ' ran out — no winner.'], ''));
     if (hr.tenpai) {
       const names = hr.tenpai.length ? hr.tenpai.map(nameOf).join(', ') : 'nobody';
-      detail.append(heRow('Tenpai', names));
+      detail.append(heRow(T('tenpai', 'Tenpai'), names));
     }
   }
 
@@ -2248,12 +2284,12 @@ function windNote(v, name, glyph) {
   return {
     title: `${name} Wind`,
     tiles: [T_('wind', v)],
-    links: { pung: 'pung', faan: 'faan', han: 'han', 'seat wind': 'seatwind', 'round wind': 'roundwind' },
+    links: { pung: 'pung', faan: 'faan', tai: 'tai', han: 'han', 'seat wind': 'seatwind', 'round wind': 'roundwind' },
     body: () => {
       const view = lastView;
       const lead = `${glyph}, the ${name.toLowerCase()} wind. `;
       if (!view || view.dealer == null) return lead + rule;
-      const unit = view.variant === 'jp' ? 'han' : 'faan';
+      const unit = UNIT_OF[view.variant] || 'faan';
       const mine = WINDS[((view.mySeat - view.dealer) % 4 + 4) % 4];
       const isSeat = mine === v, isRound = view.roundWind === v;
       if (isSeat && isRound) {
@@ -2265,14 +2301,20 @@ function windNote(v, name, glyph) {
     },
   };
 }
+// the unit each ruleset scores in
+const UNIT_OF = { hk: 'faan', tw: 'tai', jp: 'han' };
+
+// A title or a body may be a function of the ruleset ('hk', 'tw' or 'jp'): the
+// same hand is worth 3 faan in Hong Kong and 4 tai in Taiwanese, and a self-draw
+// is paid three times over in one and split three ways in Riichi. See glossFor.
 const GLOSSARY = {
   faan: { title: 'Faan',
     body: "Hong Kong's scoring unit. Three is the minimum to declare a win at all — a complete hand worth less than that cannot be taken, so you keep playing. Above three, each faan roughly doubles the payout." },
-  mixed: { title: 'Mixed flush · 3 faan',
+  mixed: { title: (rs) => (rs === 'tw' ? 'Mixed flush · 4 tai' : 'Mixed flush · 3 faan'),
     body: 'Every numbered tile in one suit, with any winds or dragons alongside. No tiles from the other two suits.',
     links: { 'a win': 'ron' },
     tiles: [T_('p', 2), T_('p', 3), T_('p', 4), T_('p', 8), T_('p', 8), T_('p', 8), T_('wind', 'E'), T_('wind', 'E'), T_('wind', 'E')] },
-  full: { title: 'Full flush · 6 faan',
+  full: { title: (rs) => (rs === 'tw' ? 'Full flush · 8 tai' : 'Full flush · 6 faan'),
     body: 'Every tile in a single suit, with no winds or dragons at all. Harder than a mixed flush, and worth double.',
     links: { 'winds or dragons': 'honours', 'mixed flush': 'mixed' },
     tiles: [T_('m', 1), T_('m', 2), T_('m', 3), T_('m', 5), T_('m', 5), T_('m', 5), T_('m', 7), T_('m', 8), T_('m', 9)] },
@@ -2284,7 +2326,7 @@ const GLOSSARY = {
     body: 'Every set is a run of three consecutive tiles in one suit. No triplets anywhere except the pair.',
     links: { runs: 'run', triplets: 'pung' },
     tiles: [T_('s', 3), T_('s', 4), T_('s', 5), T_('p', 6), T_('p', 7), T_('p', 8)] },
-  triplets: { title: 'All triplets · 3 faan',
+  triplets: { title: (rs) => (rs === 'tw' ? 'All triplets · 4 tai' : 'All triplets · 3 faan'),
     body: 'Every set is three (or four) of the same tile. No runs anywhere.',
     links: { triplet: 'pung', kan: 'kan', runs: 'run' },
     tiles: [T_('p', 5), T_('p', 5), T_('p', 5), T_('m', 9), T_('m', 9), T_('m', 9)] },
@@ -2292,14 +2334,16 @@ const GLOSSARY = {
     body: 'Three of a dragon, of your own seat wind, or of the round wind. Your seat wind pays twice if it is also the round wind — East seat in the East round is two faan from one set.',
     links: { dragon: 'dragons', 'seat wind': 'seatwind', 'round wind': 'roundwind' },
     tiles: [T_('dragon', 'R'), T_('dragon', 'R'), T_('dragon', 'R')] },
-  dragonpung: { title: 'Dragon pung · 1 faan',
-    body: 'Three of any one dragon — Haku, Hatsu or Chun. Already melded, so it is banked.',
-    links: { Haku: 'dragons', Hatsu: 'dragons', Chun: 'dragons', melded: 'meld' },
+  dragonpung: { title: (rs) => `Dragon pung · 1 ${rs === 'tw' ? 'tai' : 'faan'}`,
+    body: 'Three (or four) of any one dragon — Haku, Hatsu or Chun. A dragon pays whoever collects it, whatever seat they sit in and whatever the round.',
+    links: { Haku: 'haku', Hatsu: 'hatsu', Chun: 'chun' },
     tiles: [T_('dragon', 'W'), T_('dragon', 'G'), T_('dragon', 'R')] },
-  seatwind: { title: 'Seat wind · 1 faan', body: 'Three of the wind matching your own seat. Banked once melded.' },
-  roundwind: { title: 'Round wind · 1 faan', body: 'Three of the wind the round is named for. It stacks with seat wind when they are the same tile.' },
-  flowers: { title: 'Flowers · 1 faan each',
-    body: 'Flower and season tiles never sit in your hand: they are set aside the moment you draw one and replaced with a fresh tile. Free faan, and nothing can take them away.',
+  seatwind: { title: (rs) => `Seat wind · 1 ${UNIT_OF[rs] || 'faan'}`,
+    body: 'Three (or four) of the wind matching your own seat — once melded, it is banked. It stacks with the round wind when they are the same tile.' },
+  roundwind: { title: (rs) => `Round wind · 1 ${UNIT_OF[rs] || 'faan'}`,
+    body: 'Three (or four) of the wind the round is named for. It stacks with seat wind when they are the same tile.' },
+  flowers: { title: (rs) => `Flowers · 1 ${rs === 'tw' ? 'tai' : 'faan'} each`,
+    body: (rs) => `Flower and season tiles never sit in your hand: they are set aside the moment you draw one and replaced with a fresh tile. Free ${rs === 'tw' ? 'tai' : 'faan'}, and nothing can take them away.`,
     links: { melded: 'meld' },
     tiles: [T_('flower', 1), T_('flower', 6)] },
   selfdraw: { title: 'Self-draw only · 1 faan',
@@ -2356,7 +2400,12 @@ const GLOSSARY = {
   ron: { title: 'Ron',
     body: 'Win on a tile somebody else discarded. Beats every other claim, and the discarder alone pays.' },
   tsumo: { title: 'Tsumo',
-    body: 'Win on the tile you drew yourself. Everyone pays — which is what makes a self-draw worth roughly three times a win on a discard.' },
+    // Hong Kong and Taiwanese bill each of the three for the whole hand; Riichi
+    // splits the one hand value between them
+    body: (rs) => (rs === 'jp'
+      ? 'Win on the tile you drew yourself. The other three share the bill: if the dealer won, each pays a third; otherwise the dealer pays half and the other two a quarter each.'
+      : 'Win on the tile you drew yourself. Each of the other three pays you the full hand — which is what makes a self-draw worth three times a win on a discard.'),
+    links: { dealer: 'dealer' } },
   furiten: { title: 'Furiten',
     body: 'A Riichi rule: if any tile that would complete your hand is sitting in your own discards, you cannot win by Ron. You may still win by self-draw.' },
   dora: { title: 'Dora · +1 han each',
@@ -2372,16 +2421,16 @@ const GLOSSARY = {
       { label: 'dragons', wraps: true, tiles: [T_('dragon', 'W'), T_('dragon', 'G'), T_('dragon', 'R'), T_('dragon', 'W')] },
     ] },
   haku: { title: 'Haku — the white dragon',
-    body: 'The blank one: a plain framed tile, no character on it. A pung of Haku is worth 1 faan in Hong Kong and 1 han in riichi, to anybody — unlike the winds, a dragon pays whoever collects it, whatever seat they are in and whatever the round.',
-    links: { pung: 'pung', faan: 'faan', han: 'han', winds: 'roundwind', dragon: 'dragons' },
+    body: 'The blank one: a plain framed tile, no character on it. A pung of Haku is worth 1 faan in Hong Kong, 1 tai in Taiwanese and 1 han in riichi, to anybody — unlike the winds, a dragon pays whoever collects it, whatever seat they are in and whatever the round.',
+    links: { pung: 'pung', faan: 'faan', tai: 'tai', han: 'han', winds: 'roundwind', dragon: 'dragons' },
     tiles: [T_('dragon', 'W')] },
   hatsu: { title: 'Hatsu — the green dragon',
-    body: '發, the green one. A pung of Hatsu is worth 1 faan in Hong Kong and 1 han in riichi, to anybody — unlike the winds, a dragon pays whoever collects it, whatever seat they are in and whatever the round.',
-    links: { pung: 'pung', faan: 'faan', han: 'han', winds: 'roundwind', dragon: 'dragons' },
+    body: '發, the green one. A pung of Hatsu is worth 1 faan in Hong Kong, 1 tai in Taiwanese and 1 han in riichi, to anybody — unlike the winds, a dragon pays whoever collects it, whatever seat they are in and whatever the round.',
+    links: { pung: 'pung', faan: 'faan', tai: 'tai', han: 'han', winds: 'roundwind', dragon: 'dragons' },
     tiles: [T_('dragon', 'G')] },
   chun: { title: 'Chun — the red dragon',
-    body: '中, the red one. A pung of Chun is worth 1 faan in Hong Kong and 1 han in riichi, to anybody — unlike the winds, a dragon pays whoever collects it, whatever seat they are in and whatever the round.',
-    links: { pung: 'pung', faan: 'faan', han: 'han', winds: 'roundwind', dragon: 'dragons' },
+    body: '中, the red one. A pung of Chun is worth 1 faan in Hong Kong, 1 tai in Taiwanese and 1 han in riichi, to anybody — unlike the winds, a dragon pays whoever collects it, whatever seat they are in and whatever the round.',
+    links: { pung: 'pung', faan: 'faan', tai: 'tai', han: 'han', winds: 'roundwind', dragon: 'dragons' },
     tiles: [T_('dragon', 'R')] },
   windE: windNote('E', 'East', '東'),
   windS: windNote('S', 'South', '南'),
@@ -2416,9 +2465,12 @@ const GLOSSARY = {
   concealed: { title: 'Concealed hand',
     body: 'A hand with no sets claimed from anyone. Drawing everything yourself keeps it concealed; one Chi, Pon or open Kan opens it and costs you riichi, pinfu, seven pairs and the rest of the concealed-only yaku.' },
   fu: { title: 'Fu',
-    body: "Riichi's second scoring axis, counted alongside han: a base 20, plus points for triplets (more for honours and terminals, more again if concealed), for a kan, for an awkward wait, and for a pair of value tiles. Han doubles the score, fu sets what is being doubled." },
+    body: "Riichi's second scoring axis, counted alongside han: a base 20, plus 2 for a self-draw or 10 for a win on a discard with a concealed hand; then points for triplets (more for honours and terminals, more again if concealed), for a kan, for an awkward wait, and for a pair of value tiles — rounded up to the next 10. Han doubles the score, fu sets what is being doubled.",
+    links: { 'self-draw': 'tsumo', discard: 'ron', concealed: 'concealed', triplets: 'pung', honours: 'honours', terminals: 'terminals', kan: 'kan' } },
   tenpai: { title: 'Tenpai',
-    body: 'One tile away from a complete hand. You must be tenpai to declare riichi, and at an exhaustive draw players who are tenpai collect from those who are not.' },
+    body: (rs) => (rs === 'jp'
+      ? 'One tile away from a complete hand. You must be tenpai to declare riichi, and at an exhaustive draw players who are tenpai collect from those who are not.'
+      : 'One tile away from a complete hand. At an exhaustive draw it is noted, but under these rules no points change hands.') },
   honba: { title: 'Honba',
     body: "A counter that rises each time a hand ends without a fresh dealer — a dealer win or a draw. Every honba adds 300 points to the next hand's payout, so a long dealer streak gets progressively more expensive." },
   riichisticks: { title: 'Riichi sticks',
@@ -2446,7 +2498,40 @@ const GLOSSARY = {
   yakuman: { title: 'Yakuman',
     body: 'A limit hand — the maximum payout, worth more than any pile of han. Kokushi musou is the one this game implements.' },
   dealer: { title: 'Dealer (East)',
-    body: 'The dealer wins and pays about half again as much as anyone else, and keeps the deal by winning — each repeat adding a honba. The seat rotates otherwise.' },
+    body: (rs) => (rs === 'jp'
+      ? 'The dealer is paid half as much again for a win, and on another player’s self-draw pays twice what each of the others does. Winning — or being tenpai at a draw — keeps the deal, each repeat adding a honba; otherwise it passes on.'
+      : 'East, the seat each hand is dealt from. Under these rules the dealer pays and is paid like anyone else, and keeps the deal by winning or at a draw — each repeat adding a honba; otherwise it passes on.'),
+    links: { 'self-draw': 'tsumo', tenpai: 'tenpai', honba: 'honba' } },
+  // ---- the lines of a hand's result
+  menzentsumo: { title: 'Menzen Tsumo \u00b7 1 han',
+    body: 'Win on the tile you drew yourself with a concealed hand — nothing claimed from anyone, though a closed kan keeps it concealed. It stacks with Riichi, Tanyao and the rest.',
+    links: { 'drew yourself': 'tsumo', concealed: 'concealed', 'closed kan': 'kan', Riichi: 'riichi', Tanyao: 'tanyao' } },
+  selfdrawwin: { title: (rs) => `Self-draw · 1 ${rs === 'tw' ? 'tai' : 'faan'}`,
+    body: 'Win on the tile you drew from the wall yourself, rather than on a discard. Each of the other three then pays you the full hand.',
+    links: { discard: 'ron' } },
+  concealedwin: { title: (rs) => `Concealed hand · 1 ${rs === 'tw' ? 'tai' : 'faan'}`,
+    body: (rs) => (rs === 'tw'
+      ? 'Nothing claimed from anyone — no Chi, Pon or open Kan. It stacks with Self-draw.'
+      : 'Win on a discard with nothing claimed from anyone — no Chi, Pon or open Kan. A self-drawn win scores Self-draw instead.'),
+    links: { Chi: 'chi', Pon: 'pon', Kan: 'kan', 'Self-draw': 'selfdrawwin', discard: 'ron' } },
+  tai: { title: 'Tai',
+    body: "Taiwanese scoring's unit (台). Every winning hand scores at least 1, and each tai adds a flat 200 points on top of the 200-point base — so the lines add up straight to the total. On a self-draw, each of the other three pays the whole amount.",
+    links: { base: 'base', 'self-draw': 'selfdrawwin' } },
+  base: { title: 'Base (底)',
+    body: 'Taiwanese scoring is additive: every win pays a flat 200-point base, plus 200 for each tai. Three tai pays 200 + 600 = 800.',
+    links: { tai: 'tai' } },
+  handvalue: { title: 'Hand value',
+    body: (rs) => (rs === 'jp'
+      ? 'What the han and fu are worth. Up to 4 han, fu × 2^(han + 2) is the basic value, paid four times over — six for the dealer — and rounded up to the next hundred; 2000 basic or more is capped at mangan. From 5 han it is a fixed limit: mangan (5) 8000, haneman (6–7) 12000, baiman (8–10) 16000, sanbaiman (11–12) 24000, yakuman (13) 32000 — half as much again for the dealer.'
+      : rs === 'tw'
+        ? 'The 200-point base plus 200 for each tai.'
+        : 'Faan looked up on the table: 3 faan pays 8, 4 pays 16, 5 pays 32, 6 pays 48, 7 pays 64, and every faan after that doubles it — unless the table set a house limit, which every bigger hand then pays.'),
+    links: { han: 'han', fu: 'fu', dealer: 'dealer', yakuman: 'yakuman', base: 'base', tai: 'tai', faan: 'faan' } },
+  draw: { title: 'Exhaustive draw',
+    body: (rs) => (rs === 'jp'
+      ? 'The wall ran out with nobody winning. If one to three players are tenpai, they share 3000 points paid by those who are not. The dealer keeps the deal only by being tenpai, and a honba is added.'
+      : 'The wall ran out with nobody winning. No points change hands; the dealer keeps the deal and a honba is added.'),
+    links: { wall: 'wall', tenpai: 'tenpai', dealer: 'dealer', honba: 'honba' } },
 };
 
 // ---- the notes themselves -------------------------------------------------
@@ -2544,6 +2629,19 @@ function exampleEl(g) {
 
 const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// A note as it reads for one ruleset. A term can name the ruleset it is about —
+// "mixed@tw" — which is how the hands sheet keeps Taiwanese tai on its
+// Taiwanese tab whatever the table is playing; otherwise it is the table's own.
+// The notes a note links to keep the same ruleset.
+function glossFor(key) {
+  const [k, pin] = String(key).split('@');
+  const g = GLOSSARY[k];
+  if (!g) return null;
+  const rs = pin || liveVariant() || 'hk';
+  const at = (x) => (typeof x === 'function' ? x(rs) : x);
+  return { ...g, title: at(g.title), body: at(g.body), pin: pin || null };
+}
+
 // wrap the phrases a note points at, so the reader can keep pulling the thread
 function bodyEl(g, depth) {
   const div = el('div', 'tip-body');
@@ -2564,7 +2662,7 @@ function bodyEl(g, depth) {
   while ((m = re.exec(g.body)) !== null) {
     if (m.index > last) div.append(document.createTextNode(g.body.slice(last, m.index)));
     const hit = phrases.find((x) => x.toLowerCase() === m[0].toLowerCase());
-    div.append(term(map[hit], m[0], depth + 1));
+    div.append(term(g.pin ? `${map[hit]}@${g.pin}` : map[hit], m[0], depth + 1));
     last = m.index + m[0].length;
   }
   if (last < g.body.length) div.append(document.createTextNode(g.body.slice(last)));
@@ -2572,13 +2670,13 @@ function bodyEl(g, depth) {
 }
 
 function showTip(anchor, key, depth = 0) {
-  const g = GLOSSARY[key];
+  const g = glossFor(key);
   if (!g) return;
   cancelClose();
   closeFrom(depth + 1);
   const tip = tipAt(depth);
   tip.replaceChildren();
-  tip.append(el('div', 'tip-title', typeof g.title === 'function' ? g.title() : g.title));
+  tip.append(el('div', 'tip-title', g.title));
   tip.append(bodyEl(g, depth));
   const ex = exampleEl(g);
   if (ex) tip.append(ex);
