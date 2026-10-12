@@ -2403,7 +2403,7 @@ const GLOSSARY = {
     // Hong Kong and Taiwanese bill each of the three for the whole hand; Riichi
     // splits the one hand value between them
     body: (rs) => (rs === 'jp'
-      ? 'Win on the tile you drew yourself. The other three share the bill: if the dealer won, each pays a third; otherwise the dealer pays half and the other two a quarter each.'
+      ? 'Win on the tile you drew yourself. The other three share the bill: if the dealer won, each pays a third; otherwise the dealer pays half and the other two a quarter each — each share rounded up to the hundred on its own, so a self-draw can come to a little more than a win on a discard.'
       : 'Win on the tile you drew yourself. Each of the other three pays you the full hand — which is what makes a self-draw worth three times a win on a discard.'),
     links: { dealer: 'dealer' } },
   furiten: { title: 'Furiten',
@@ -2472,7 +2472,10 @@ const GLOSSARY = {
       ? 'One tile away from a complete hand. You must be tenpai to declare riichi, and at an exhaustive draw players who are tenpai collect from those who are not.'
       : 'One tile away from a complete hand. At an exhaustive draw it is noted, but under these rules no points change hands.') },
   honba: { title: 'Honba',
-    body: "A counter that rises each time a hand ends without a fresh dealer — a dealer win or a draw. Every honba adds 300 points to the next hand's payout, so a long dealer streak gets progressively more expensive." },
+    body: (rs) => (rs === 'jp'
+      ? 'A counter that rises each time a hand ends without a fresh dealer — a dealer win or a draw. Every honba adds 300 points to the next win: the discarder pays them on a Ron, each of the other three 100 on a Tsumo. A long dealer streak gets progressively more expensive.'
+      : 'A counter that rises each time a hand ends without a fresh dealer — a dealer win or a draw. Under these rules it is only a count: it adds nothing to what a hand pays.'),
+    links: { Ron: 'ron', Tsumo: 'tsumo', dealer: 'dealer' } },
   riichisticks: { title: 'Riichi sticks',
     body: 'The 1000 points each player stakes when declaring riichi. They sit on the table and go, in full, to whoever wins the next hand — so an unclaimed stick rolls over and sweetens the pot.' },
   wall: { title: 'The wall',
@@ -2522,7 +2525,7 @@ const GLOSSARY = {
     links: { tai: 'tai' } },
   handvalue: { title: 'Hand value',
     body: (rs) => (rs === 'jp'
-      ? 'What the han and fu are worth. Up to 4 han, fu × 2^(han + 2) is the basic value, paid four times over — six for the dealer — and rounded up to the next hundred; 2000 basic or more is capped at mangan. From 5 han it is a fixed limit: mangan (5) 8000, haneman (6–7) 12000, baiman (8–10) 16000, sanbaiman (11–12) 24000, yakuman (13) 32000 — half as much again for the dealer.'
+      ? 'What the han and fu are worth. Up to 4 han the basic points are fu × 2^(han + 2), capped at a mangan’s 2000; from 5 han a limit sets them: mangan 2000, haneman (6–7 han) 3000, baiman (8–10) 4000, sanbaiman (11–12) 6000, yakuman (13) 8000. A Ron pays four times the basic points — six when the dealer won — rounded up to the hundred: a mangan is 8000. A Tsumo is paid in shares, each rounded up on its own: twice the basic points from the dealer and once from each of the others, or twice from each when the dealer won.'
       : rs === 'tw'
         ? 'The 200-point base plus 200 for each tai.'
         : 'Faan looked up on the table: 3 faan pays 8, 4 pays 16, 5 pays 32, 6 pays 48, 7 pays 64, and every faan after that doubles it — unless the table set a house limit, which every bigger hand then pays.'),

@@ -968,38 +968,39 @@ function resolveWin(G, winnerSeat, loserSeat, isTsumo) {
     addLog(G, `${winner.name} declares Tsumo — ${scoring.summary}!`);
     // a win is called as loudly as a claim, though nothing is claimed
     say(G, winnerSeat, 'Tsumo!', 'win');
-    // All others pay. Riichi splits the hand value between them (dealer pays more);
-    // Hong Kong and Taiwanese both have each player pay the hand IN FULL on a
-    // self-draw, which is what makes tsumo worth three times a win on a discard.
-    const each = G.variant === 'jp'
-      ? jpTsumoPayments(scoring.points, winnerSeat === G.dealer)
-      : scoring.points;
+    // All others pay. Riichi bills them in shares (the dealer's twice the
+    // others'), each with 100 a honba on top; Hong Kong and Taiwanese both have
+    // each player pay the hand IN FULL on a self-draw, which is what makes tsumo
+    // worth three times a win on a discard.
+    const jp = G.variant === 'jp' ? scoring.payments : null;
     for (const p of G.players) {
       if (p.seat === winnerSeat) continue;
-      const pay = G.variant === 'jp'
-        ? (p.seat === G.dealer ? each.dealer : each.nonDealer)
-        : each;
+      const pay = jp ? (p.seat === G.dealer ? jp.dealer : jp.nonDealer) + G.honba * 100 : scoring.points;
       p.score -= pay;
       winner.score += pay;
     }
-    payments = G.variant === 'jp'
-      ? { mode: 'tsumo', dealer: each.dealer, nonDealer: each.nonDealer }
-      : { mode: 'tsumo', each };
+    payments = jp
+      ? { mode: 'tsumo', dealer: jp.dealer, nonDealer: jp.nonDealer }
+      : { mode: 'tsumo', each: scoring.points };
   } else {
     const loser = playerBySeat(G, loserSeat);
     addLog(G, `${winner.name} wins by Ron from ${loser.name} — ${scoring.summary}!`);
     say(G, winnerSeat, 'Ron!', 'claim');
-    loser.score -= scoring.points;
-    winner.score += scoring.points;
+    // in Riichi the discarder also pays 300 a honba
+    const honba = G.variant === 'jp' ? G.honba * 300 : 0;
+    loser.score -= scoring.points + honba;
+    winner.score += scoring.points + honba;
     payments = { mode: 'ron', from: loserSeat, amount: scoring.points };
   }
 
-  // JP: collect riichi sticks and honba on top of the hand value
+  // JP: the riichi sticks on the table go to the winner. The honba were paid
+  // above — 300 each, from the discarder or 100 from each of the three; they
+  // used to be credited to the winner without anybody paying them.
   let bonus = null;
   if (G.variant === 'jp') {
     const riichi = G.riichiSticks * 1000;
     const honba = G.honba * 300;
-    winner.score += riichi + honba;
+    winner.score += riichi;
     if (riichi || honba) bonus = { riichi, honba };
     G.riichiSticks = 0;
   }
@@ -1051,16 +1052,6 @@ function advanceDealer(G) {
     const wi = WINDS.indexOf(G.roundWind);
     if (wi < 3) G.roundWind = WINDS[wi + 1];
   }
-}
-
-function jpTsumoPayments(total, isDealer) {
-  if (isDealer) {
-    const each = Math.ceil(total / 3);
-    return { dealer: each, nonDealer: each };
-  }
-  const dealerPay = Math.ceil(total / 2);
-  const nonDealerPay = Math.ceil(total / 4);
-  return { dealer: dealerPay, nonDealer: nonDealerPay };
 }
 
 export function nextHand(G) {
@@ -1429,8 +1420,8 @@ function scoreJP(G, winnerSeat, loserSeat, isTsumo) {
   // thirteen orphans: a yakuman — and like every limit, half as much again
   // for the dealer
   if (isConcealed && hand.length === 14 && isThirteenOrphans(keys)) {
-    const points = jpHanFuToPoints(13, 0, isDealer);
-    return { yaku: [{ name: 'Kokushi Musou', han: 13 }], han: 13, fu: 0, points, summary: `Yakuman! Kokushi Musou (${points} pts)` };
+    const pay = jpPayments(jpBasicPoints(13, 0), isDealer, isTsumo);
+    return { yaku: [{ name: 'Kokushi Musou', han: 13 }], han: 13, fu: 0, points: pay.points, payments: pay, summary: `Yakuman! Kokushi Musou (${pay.points} pts)` };
   }
 
   // the yaku the whole hand earns, however its sets are read
@@ -1490,9 +1481,10 @@ function scoreJP(G, winnerSeat, loserSeat, isTsumo) {
     if (!o.yaku.length) continue;
     const yaku = [...o.yaku, ...dora];
     const han = yaku.reduce((n, y) => n + y.han, 0);
-    const points = jpHanFuToPoints(han, o.fu, isDealer);
+    const pay = jpPayments(jpBasicPoints(han, o.fu), isDealer, isTsumo);
+    const points = pay.points;
     if (!best || points > best.points || (points === best.points && (han > best.han || (han === best.han && o.fu > best.fu)))) {
-      best = { yaku, han, fu: o.fu, points };
+      best = { yaku, han, fu: o.fu, points, payments: pay };
     }
   }
   if (!best) return { yaku: [], han: 0, fu: 0, points: 0, summary: 'No yaku — cannot win' };
@@ -1647,21 +1639,32 @@ function jpReadings(G, p, winKey, isTsumo) {
   return out;
 }
 
-function jpHanFuToPoints(han, fu, isDealer) {
-  if (han >= 13) return isDealer ? 48000 : 32000; // yakuman
-  if (han >= 11) return isDealer ? 36000 : 24000; // sanbaiman
-  if (han >= 8) return isDealer ? 24000 : 16000; // baiman
-  if (han >= 6) return isDealer ? 18000 : 12000; // haneman
-  if (han >= 5) return isDealer ? 12000 : 8000; // mangan
+// The basic points a Riichi hand is worth: fu × 2^(han + 2), capped at a
+// mangan's 2000, and from 5 han a limit's.
+function jpBasicPoints(han, fu) {
+  if (han >= 13) return 8000; // yakuman
+  if (han >= 11) return 6000; // sanbaiman
+  if (han >= 8) return 4000;  // baiman
+  if (han >= 6) return 3000;  // haneman
+  if (han >= 5) return 2000;  // mangan
+  return Math.min(2000, fu * Math.pow(2, han + 2));
+}
 
-  // basic points = fu × 2^(han+2), capped at mangan
-  const basic = fu * Math.pow(2, han + 2);
-  if (basic >= 2000) return isDealer ? 12000 : 8000; // mangan cap
+const up100 = (x) => Math.ceil(x / 100) * 100;
 
-  if (isDealer) {
-    return Math.ceil((basic * 6) / 100) * 100;
+// Who pays what. A Ron: the discarder, four times the basic points — six when
+// the dealer won. A Tsumo is paid in shares, each rounded up to the hundred on
+// its own: twice the basic points from the dealer and once from each of the
+// others, or twice from each when the dealer won. `points` is what the winner
+// collects, before honba and riichi sticks.
+function jpPayments(basic, dealerWon, isTsumo) {
+  if (!isTsumo) {
+    const amount = up100(basic * (dealerWon ? 6 : 4));
+    return { mode: 'ron', amount, points: amount };
   }
-  return Math.ceil((basic * 4) / 100) * 100;
+  const dealer = up100(basic * 2);
+  const nonDealer = up100(basic * (dealerWon ? 2 : 1));
+  return { mode: 'tsumo', dealer, nonDealer, points: dealerWon ? nonDealer * 3 : dealer + nonDealer * 2 };
 }
 
 // ---- Taiwanese scoring (tai-based)

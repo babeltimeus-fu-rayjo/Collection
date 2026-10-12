@@ -1,8 +1,9 @@
 // Riichi scoring, checked hand by hand: the fu of every wait and set, Pinfu
 // only with a two-sided wait and a pair worth nothing, the reading of a hand
 // that pays most, Chiitoitsu's flat 25 fu, the open hand counted 30, Kokushi
-// for the dealer — and Ippatsu, which lasts from a riichi to that player's next
-// discard and is broken by any call.
+// for the dealer; who pays what — a self-draw in shares rounded one by one, and
+// the honba from the payers — and Ippatsu, which lasts from a riichi to that
+// player's next discard and is broken by any call.
 import * as M from './game.js';
 
 let fails = 0, checks = 0;
@@ -32,7 +33,7 @@ function table() {
 
 // Score `hand` (every concealed tile, the winning one included) for `seat`,
 // won on `win` — by Ron from the next seat, or by Tsumo.
-function score(hand, win, { seat = 1, tsumo = false, riichi = false, ippatsu = false, melds = [] } = {}) {
+function scored(hand, win, { seat = 1, tsumo = false, riichi = false, ippatsu = false, melds = [] } = {}) {
   const G = table();
   const p = G.players[seat];
   p.hand = tiles(hand);
@@ -42,9 +43,12 @@ function score(hand, win, { seat = 1, tsumo = false, riichi = false, ippatsu = f
   const w = p.hand.find((t) => t.key === win);
   if (tsumo) { G.lastDraw = w; G.lastDiscard = null; }
   else { G.lastDiscard = w; G.lastDiscardSeat = (seat + 1) % 4; G.lastDraw = null; }
-  const s = M.scoreHand(G, seat, tsumo ? null : (seat + 1) % 4, tsumo);
-  return { yaku: s.yaku.map((y) => y.name), han: s.han, fu: s.fu, points: s.points };
+  return M.scoreHand(G, seat, tsumo ? null : (seat + 1) % 4, tsumo);
 }
+const score = (...a) => { const s = scored(...a); return { yaku: s.yaku.map((y) => y.name), han: s.han, fu: s.fu, points: s.points }; };
+// what each payer hands over: the dealer's and the others' shares and the
+// total, or the Ron
+const shares = (...a) => { const s = scored(...a); return s.payments.mode === 'ron' ? [s.payments.amount] : [s.payments.dealer, s.payments.nonDealer, s.points]; };
 
 console.log('— waits and Pinfu —');
 const RUNS = 'm2 m3 m4 m6 m7 m8 p4 p5 p6 s6 s7 s8 p9 p9';
@@ -80,6 +84,13 @@ eq(score('m2 m3 m4 m5 m6 m7 s3 s4 s5 s7 s7', 'm4', OPEN), { yaku: ['Tanyao'], ha
 const KOKUSHI = 'm1 m9 p1 p9 s1 s9 wE wS wW wN dR dG dW dW';
 eq(score(KOKUSHI, 'dW', { seat: 0 }).points, 48000, 'Kokushi musou for the dealer: a yakuman, 48000');
 eq(score(KOKUSHI, 'dW', { seat: 1 }).points, 32000, '…and 32000 for anybody else');
+
+console.log('— who pays what —');
+eq(shares(RUNS, 'm4', { tsumo: true }), [700, 400, 1500], '2 han 20 fu by self-draw: 700 from the dealer, 400 from each of the others — each share rounded on its own, 1500 in all');
+eq(shares('m1 m2 m3 m5 m6 m7 s3 s4 s5 p5 p5 p5 p8 p8', 'p5', { tsumo: true }), [500, 300, 1100], '1 han 30 fu by self-draw: 500 and 300');
+eq(shares(RUNS, 'm4', { tsumo: true, seat: 0 }), [700, 700, 2100], 'the dealer\'s 2 han 20 fu by self-draw: 700 from each');
+eq(shares('m2 m3 m4 m2 m3 m4 p3 p4 p5 s5 s6 s7 p8 p8', 's7', { tsumo: true, riichi: true }), [4000, 2000, 8000], 'a mangan by self-draw (Riichi, Menzen Tsumo, Tanyao, Pinfu, Iipeiko): 4000 and 2000');
+eq(shares(RUNS, 'm4', { seat: 0 }), [1500], 'the dealer\'s 1 han 30 fu by Ron: six times 240, rounded up — 1500');
 
 console.log('— Ippatsu —');
 // Seat 0 deals, discards s9 into riichi and waits on s5 alone; nobody else can
@@ -123,6 +134,32 @@ const throwBack = (G, seat) => play(G, seat, { kind: 'discard', tileId: G.lastDr
   throwBack(G, 3);
   throwBack(G, 0);
   eq(G.players[0].ippatsu, false, 'the riichi player\'s own next discard ends it');
+}
+
+console.log('— honba —');
+{
+  // the dealer's Riichi, Ippatsu, Menzen Tsumo: 3 han 30 fu, 2000 from each
+  const G = riichiTable('wN wN wN s5 m1');
+  G.honba = 2;
+  play(G, 0, { kind: 'riichi', tileId: G.players[0].hand.find((t) => t.key === 's9').id });
+  throwBack(G, 1);
+  throwBack(G, 2);
+  throwBack(G, 3);
+  play(G, 0, { kind: 'tsumo' });
+  const d = G.handResult.delta;
+  eq([d[1], d[2], d[3]], [-2200, -2200, -2200], 'on a self-draw each of the three pays 100 a honba on top of their share');
+  eq(d[0], 6600 + 1000, '…and the winner takes it all, with the riichi stick');
+  eq(d[0] + d[1] + d[2] + d[3], 1000, 'no point is made from nothing: all that changes hands is the stick staked at the riichi');
+}
+{
+  // the same wait, won on seat 1's discard: Riichi, Ippatsu, 2 han 40 fu, 3900 for the dealer
+  const G = riichiTable('s5 wN wN wN m1');
+  G.honba = 2;
+  play(G, 0, { kind: 'riichi', tileId: G.players[0].hand.find((t) => t.key === 's9').id });
+  throwBack(G, 1);
+  play(G, 0, { kind: 'ron' });
+  const d = G.handResult.delta;
+  eq([d[0], d[1], d[2], d[3]], [3900 + 600 + 1000, -(3900 + 600), 0, 0], 'on a Ron the discarder pays the hand and 300 a honba');
 }
 
 console.log(`\n${checks} checks` + (fails ? `, ${fails} FAILURES` : ', all pass'));
