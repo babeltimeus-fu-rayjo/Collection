@@ -2,8 +2,10 @@
 // only with a two-sided wait and a pair worth nothing, the reading of a hand
 // that pays most, Chiitoitsu's flat 25 fu, the open hand counted 30, Kokushi
 // for the dealer; who pays what — a self-draw in shares rounded one by one, and
-// the honba from the payers — and Ippatsu, which lasts from a riichi to that
-// player's next discard and is broken by any call.
+// the honba from the payers — Ippatsu, which lasts from a riichi to that
+// player's next discard and is broken by any call, and the lock a riichi puts
+// on the hand: the drawn tile goes back out unless it wins or makes a kan that
+// keeps the wait, and nothing can be called but a Ron.
 import * as M from './game.js';
 
 let fails = 0, checks = 0;
@@ -134,6 +136,75 @@ const throwBack = (G, seat) => play(G, seat, { kind: 'discard', tileId: G.lastDr
   throwBack(G, 3);
   throwBack(G, 0);
   eq(G.players[0].ippatsu, false, 'the riichi player\'s own next discard ends it');
+}
+
+console.log('— the riichi lock —');
+// Seat 0 declares riichi on `hand` by throwing `out`; each of the others then
+// draws and throws straight back, so the next tile off `wall` is seat 0's.
+// The dead wall is fixed, so a kan's replacement is known: a 9 Man.
+function lockTable(hand, out, wall) {
+  const G = riichiTable(wall);
+  G.deadWall = tiles('wE wE wE wE wS wS wS wN wN wN wW wW wW m9');
+  G.players[0].hand = tiles(hand);
+  G.lastDraw = G.players[0].hand[13];
+  play(G, 0, { kind: 'riichi', tileId: G.players[0].hand.find((t) => t.key === out).id });
+  throwBack(G, 1);
+  throwBack(G, 2);
+  throwBack(G, 3);
+  return G;
+}
+// three 9 Pin and a wait on Haku alone
+const LOCKED = 'p9 p9 p9 m2 m3 m4 m6 m7 m8 s3 s4 s5 dW wS';
+{
+  const G = lockTable(LOCKED, 'wS', 'wN wN wN p7 m1');
+  const drawn = G.lastDraw;
+  eq([G.turn, drawn.key], [0, 'p7'], 'round to the riichi player, who draws a 7 Pin');
+  eq(M.applyMove(G, 0, { kind: 'discard', tileId: G.players[0].hand.find((t) => t.key === 'm2').id }).ok, false, 'any tile but the one drawn is refused: the hand is locked');
+  eq(M.forcedMove(G, 0), { kind: 'discard', tileId: drawn.id }, 'with nothing to decide, the move is the drawn tile going straight back out');
+  eq([M.viewFor(G, 0, 'T').actions.forced, M.viewFor(G, 0, 'T').actions.lockedTile], [true, drawn.id], '…and the view says the table will play it');
+  eq([1, 2, 3].map((s) => M.forcedMove(G, s)), [null, null, null], 'nobody else has a forced move');
+  play(G, 0, M.forcedMove(G, 0));
+  eq(G.players[0].discards[G.players[0].discards.length - 1].key, 'p7', 'played, the 7 Pin lands in the discards');
+}
+{
+  const G = lockTable(LOCKED, 'wS', 'wN wN wN dW m1');
+  const a = M.viewFor(G, 0, 'T').actions;
+  eq([M.forcedMove(G, 0), a.canTsumo, a.forced, a.lockedTile === G.lastDraw.id], [null, true, false, true], 'a draw that wins is a choice, not a forced discard: Tsumo, or letting the drawn tile go');
+}
+{
+  const G = lockTable(LOCKED, 'wS', 'wN wN wN p9 m1');
+  const a = M.viewFor(G, 0, 'T').actions;
+  eq([a.canClosedKan, a.closedKanKeys, a.forced], [true, ['p9'], false], 'the fourth 9 Pin makes a kan that leaves the wait on Haku as it was: allowed, so nothing is forced');
+  play(G, 0, { kind: 'kan', type: 'closed', tileKey: 'p9' });
+  eq([G.lastDraw.key, M.forcedMove(G, 0)], ['m9', { kind: 'discard', tileId: G.lastDraw.id }], 'the replacement, a 9 Man, wins nothing and goes straight back out');
+}
+{
+  // 2-2-2-3-4 Man and a pair of Haku wait on 2 or 5 Man — or on Haku, the 2s
+  // read as a pair and a run. A kan of the fourth 2 would lose the Haku.
+  const G = lockTable('m2 m2 m2 m3 m4 p3 p4 p5 s6 s7 s8 dW dW wS', 'wS', 'wN wN wN m2 m1');
+  const a = M.viewFor(G, 0, 'T').actions;
+  eq([a.canTsumo, a.canClosedKan, a.closedKanKeys], [true, false, []], 'a kan that would change the wait is not offered — the fourth 2 Man is a Tsumo');
+  eq(M.applyMove(G, 0, { kind: 'kan', type: 'closed', tileKey: 'm2' }).ok, false, '…and asked for anyway, it is refused');
+}
+{
+  // waits on 6 or 9 Sou, with a pair of 5 Sou and 6-7 Man beside it
+  const G = riichiTable('s5 wN m5 p7 m1');
+  G.players[0].hand = tiles('m2 m3 m4 m6 m7 m8 p4 p5 p6 s5 s5 s7 s8 wS');
+  G.lastDraw = G.players[0].hand[13];
+  play(G, 0, { kind: 'riichi', tileId: G.players[0].hand.find((t) => t.key === 'wS').id });
+  throwBack(G, 1);
+  eq([G.phase, G.turn], ['discard', 2], 'a 5 Sou is not offered to the riichi hand as a Pon: seat 2 simply draws');
+  throwBack(G, 2);
+  throwBack(G, 3);
+  eq([G.phase, G.turn, G.lastDraw.key], ['discard', 0, 'p7'], 'nor the 5 Man from the left as a Chi: the riichi player draws');
+}
+{
+  const G = riichiTable('s6 wN wN wN m1');
+  G.players[0].hand = tiles('m2 m3 m4 m6 m7 m8 p4 p5 p6 s5 s5 s7 s8 wS');
+  G.lastDraw = G.players[0].hand[13];
+  play(G, 0, { kind: 'riichi', tileId: G.players[0].hand.find((t) => t.key === 'wS').id });
+  throwBack(G, 1);
+  eq(G.claimPhase && G.claimPhase.eligible.map((e) => [e.seat, e.opts]), [[0, ['ron']]], 'a winning tile is still offered — as a Ron');
 }
 
 console.log('— honba —');

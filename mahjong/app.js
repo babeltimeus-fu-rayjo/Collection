@@ -24,6 +24,7 @@ import {
   positionFromView,
   outlookFor,
   botChoose,
+  forcedMove,
   turnSeat,
   playerBySeat,
   markDisconnected,
@@ -1042,10 +1043,14 @@ class HostSession {
     clearTimeout(this.botTimer);
     this.stepPending = false;
     if (!this.G || this.G.phase === 'over' || this.G.phase === 'handEnd') { paintStep(); return; }
+    // A person whose hand riichi has locked has nothing to decide on most
+    // draws, so the table discards for them, on the bots' clock. It is never
+    // held for a step click: it is their move, not a bot's.
+    const forced = this.G.players.some((p) => !p.bot && !p.botFor && forcedMove(this.G, p.seat));
     // stepping: don't set a timer at all, just mark that a bot is holding and
     // wait to be nudged. Only advertise it when a bot actually HAS something to
     // do, so the prompt never appears while the table is waiting on you.
-    if (cfg.on('stepBots')) {
+    if (cfg.on('stepBots') && !forced) {
       this.stepPending = this.G.players.some((p) => (p.bot || p.botFor) && botChoose(this.G, p.seat));
       paintStep();
       return;
@@ -1068,8 +1073,8 @@ class HostSession {
   tickBots() {
     if (!this.G) return;
     for (const p of this.G.players) {
-      if (!p.bot && !p.botFor) continue;
-      const move = botChoose(this.G, p.seat);
+      // a bot plays its own choice; a person locked in riichi, the one move left
+      const move = p.bot || p.botFor ? botChoose(this.G, p.seat) : forcedMove(this.G, p.seat);
       if (!move) continue;                 // this bot is waiting (e.g. a gated claim)
       // a successful move re-broadcasts (which reschedules the bots); a rejected
       // one must NOT strand the loop, so fall through and keep the timer alive
@@ -1569,6 +1574,13 @@ function renderGame(view, sess) {
 // the session that is live NOW rather than the one captured at bind time.
 function handleTileClick(id) {
   if (!session || pendingMove) return;
+  // riichi has locked the hand: only the drawn tile can go, and when there is
+  // nothing else to decide the table sends it on its own
+  const a = lastView && lastView.actions;
+  if (a && a.lockedTile != null && (a.forced || id !== a.lockedTile)) {
+    toast(a.forced ? 'Riichi — the tile you drew goes out by itself' : 'Your hand is locked by riichi — only the tile you drew can go');
+    return;
+  }
   if (selectedTile === id) {
     // tap again = discard
     pendingMove = true;
@@ -1624,6 +1636,8 @@ function orderedHand(hand, view) {
 function renderHand(view, me, sess) {
   const handEl = $('#hand');
   if (!me || !me.hand) { handEl.replaceChildren(); return; }
+  // riichi locks the hand: the tiles stay where they are, only a draw can go
+  handEl.classList.toggle('locked', view.variant === 'jp' && !!me.riichi && view.phase !== 'handEnd' && view.phase !== 'over');
   const ordered = orderedHand(me.hand, view);
   const byId = new Map([...handEl.children].map((n) => [n.dataset.tid, n]));
   const desired = ordered.map((t) => {
@@ -1650,7 +1664,6 @@ function patchHandTile(el, id, isLastDraw) {
 function handCardEl(t, sess, isLastDraw) {
   const tile = renderTile(t, { lastDraw: isLastDraw });
   tile.dataset.tid = String(t.id);
-  tile.style.cursor = 'pointer';
   if (selectedTile === t.id) tile.classList.add('selected');
   attachHandDrag(tile, t.id, sess);
   return tile;
@@ -1855,8 +1868,13 @@ function renderActions(view, sess) {
       }
     }
 
-    if (!a.canTsumo) {
-      const hint = el('span', '', selectedTile ? 'Click again to discard' : 'Select a tile to discard');
+    // riichi has locked the hand: say so, rather than inviting a pick
+    const say_ = a.forced ? 'Riichi — the tile you drew goes out by itself'
+      : a.lockedTile != null ? (selectedTile ? 'Click again to let it go' : 'or click the tile you drew to let it go')
+      : a.canTsumo ? null
+      : selectedTile ? 'Click again to discard' : 'Select a tile to discard';
+    if (say_) {
+      const hint = el('span', '', say_);
       hint.style.cssText = 'font-size:12px;color:#5a8a6a;';
       bar.append(hint);
     }
@@ -2352,7 +2370,8 @@ const GLOSSARY = {
   han: { title: 'Han',
     body: "Riichi's scoring unit. You need at least one han that is NOT dora — that is what a yaku is — before a finished hand can be declared at all. Han and fu together set the payout." },
   riichi: { title: 'Riichi \u00b7 1 han',
-    body: 'Declare when your hand is concealed and one tile from winning. It costs a 1000-point stick and locks your discards, and it is itself the yaku — which is why almost any concealed hand still has a way home.' },
+    body: 'Declare when your hand is concealed and one tile from winning. It costs a 1000-point stick and locks your hand: from then on each tile you draw goes straight back out — the table discards it for you — unless it wins, or makes a closed kan that leaves your wait as it was, and the only call left to you is Ron. It is itself the yaku, which is why almost any concealed hand still has a way home.',
+    links: { 'closed kan': 'kan', Ron: 'ron' } },
   tanyao: { title: 'Tanyao \u00b7 1 han',
     body: 'No terminals and no honours: every tile between 2 and 8. The easiest yaku to steer into, and one of the few that survives opening your hand.',
     links: { yaku: 'han' },
@@ -2394,8 +2413,8 @@ const GLOSSARY = {
     links: { triplet: 'pung', Chi: 'chi' },
     tiles: [T_('p', 8), T_('p', 8), T_('p', 8)] },
   kan: { title: 'Kan',
-    body: 'A fourth copy of a tile you already have three of. You draw a replacement, and in Riichi it flips another dora indicator.',
-    links: { dora: 'dora', Riichi: 'riichi' },
+    body: 'A fourth copy of a tile you already have three of. You draw a replacement, and in Riichi it flips another dora indicator. Once you have declared riichi, only a closed kan of the tile you just drew, and only if your wait stays the same.',
+    links: { dora: 'dora', Riichi: 'riichi', 'declared riichi': 'riichi' },
     tiles: [T_('m', 5), T_('m', 5), T_('m', 5), T_('m', 5)] },
   ron: { title: 'Ron',
     body: 'Win on a tile somebody else discarded. Beats every other claim, and the discarder alone pays.' },

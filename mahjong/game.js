@@ -353,12 +353,28 @@ export function canDiscard(G, seat) {
   return p.hand.length === handSize(G.variant) + 1 - 3 * p.melds.length;
 }
 
+// Riichi locks the hand. From the declaration on, the tile you draw goes
+// straight back out unless it wins, or makes a closed kan that leaves the wait
+// exactly as it was; and nothing can be claimed but a Ron. A Chi, a Pon or an
+// open kan would change the hand the riichi was declared on.
+function riichiLocked(G, p) {
+  return G.variant === 'jp' && !!p && !!p.riichi;
+}
+
+// The one tile a locked hand may discard: the one just drawn, while its owner
+// holds it on their own turn.
+function lockedDraw(G, p) {
+  if (!riichiLocked(G, p) || G.turn !== p.seat || !G.lastDraw) return null;
+  return p.hand.find((t) => t.id === G.lastDraw.id) || null;
+}
+
 function canChi(G, seat) {
   if (!G.lastDiscard || G.lastDiscardSeat === seat) return false;
   if (nextSeat(G.lastDiscardSeat) !== seat) return false;
   const t = G.lastDiscard;
   if (!isNumber(t)) return false;
   const p = playerBySeat(G, seat);
+  if (riichiLocked(G, p)) return false;
   const hand = p.hand;
   const pairs = chiCombos(hand, t);
   return pairs.length > 0;
@@ -382,6 +398,7 @@ function canPon(G, seat) {
   if (!G.lastDiscard || G.lastDiscardSeat === seat) return false;
   const t = G.lastDiscard;
   const p = playerBySeat(G, seat);
+  if (riichiLocked(G, p)) return false;
   const count = p.hand.filter((h) => h.key === t.key).length;
   return count >= 2;
 }
@@ -390,23 +407,32 @@ function canOpenKan(G, seat) {
   if (!G.lastDiscard || G.lastDiscardSeat === seat) return false;
   const t = G.lastDiscard;
   const p = playerBySeat(G, seat);
+  if (riichiLocked(G, p)) return false;
   const count = p.hand.filter((h) => h.key === t.key).length;
   return count >= 3;
 }
 
 function canClosedKan(G, seat) {
   if (G.phase !== 'discard' || G.turn !== seat) return false;
-  const p = playerBySeat(G, seat);
-  const counts = {};
-  for (const t of p.hand) counts[t.key] = (counts[t.key] || 0) + 1;
-  return Object.values(counts).some((c) => c >= 4);
+  return closedKanKeys(G, seat).length > 0;
 }
 
 function closedKanKeys(G, seat) {
   const p = playerBySeat(G, seat);
   const counts = {};
   for (const t of p.hand) counts[t.key] = (counts[t.key] || 0) + 1;
-  return Object.keys(counts).filter((k) => counts[k] >= 4);
+  const keys = Object.keys(counts).filter((k) => counts[k] >= 4);
+  if (!keys.length || !riichiLocked(G, p)) return keys;
+  // In riichi only the tile just drawn can make the kan, and only if the hand
+  // still waits on exactly the same tiles afterwards.
+  const drawn = lockedDraw(G, p);
+  if (!drawn) return [];
+  const before = getWaits(p.hand.filter((t) => t.id !== drawn.id), G.variant, p.melds).join();
+  return keys.filter((k) => {
+    if (k !== drawn.key) return false;
+    const kan = { type: 'kan', open: false, tiles: p.hand.filter((t) => t.key === k) };
+    return getWaits(p.hand.filter((t) => t.key !== k), G.variant, [...p.melds, kan]).join() === before;
+  });
 }
 
 function canAddKan(G, seat) {
@@ -506,6 +532,17 @@ function riichiDiscards(G, seat) {
   return valid;
 }
 
+// The move a hand locked by riichi makes when it has nothing to decide: the
+// tile it just drew goes straight back out. Null whenever there is a choice —
+// a Tsumo to take, a kan that keeps the wait — so that stays the player's. The
+// host plays this for a person exactly as it plays a bot's move.
+export function forcedMove(G, seat) {
+  if (G.phase !== 'discard' || G.turn !== seat) return null;
+  const drawn = lockedDraw(G, playerBySeat(G, seat));
+  if (!drawn || canTsumo(G, seat) || canClosedKan(G, seat)) return null;
+  return { kind: 'discard', tileId: drawn.id };
+}
+
 // ---------------------------------------------------------------- moves
 
 export function applyMove(G, seat, move) {
@@ -564,6 +601,8 @@ function doDiscard(G, p, move) {
   if (G.phase !== 'discard' || G.turn !== p.seat) return { ok: false, error: 'Not your turn to discard' };
   const tile = p.hand.find((t) => t.id === move.tileId);
   if (!tile) return { ok: false, error: 'Tile not in hand' };
+  const drawn = lockedDraw(G, p);
+  if (drawn && tile.id !== drawn.id) return { ok: false, error: 'Your hand is locked by riichi — only the tile you drew can go' };
 
   p.hand = p.hand.filter((t) => t.id !== tile.id);
   p.discards.push(tile);
@@ -1875,10 +1914,9 @@ export function botChoose(G, seat) {
       }
     }
 
-    // if riichi, must discard the drawn tile (only legal discard)
-    if (p.riichi && G.lastDraw) {
-      return { kind: 'discard', tileId: G.lastDraw.id };
-    }
+    // riichi has locked the hand: the drawn tile is the only one that can go
+    const drawn = lockedDraw(G, p);
+    if (drawn) return { kind: 'discard', tileId: drawn.id };
 
     // discard strategy: discard the most "dangerous" / least useful tile
     const tile = botPickDiscard(G, p);
@@ -2976,6 +3014,7 @@ export function viewFor(G, seat, code, opts = {}) {
   // action options during discard phase
   let actions = null;
   if (G.phase === 'discard' && G.turn === seat) {
+    const drawn = lockedDraw(G, p);
     actions = {
       canTsumo: canTsumo(G, seat),
       canRiichi: canRiichi(G, seat),
@@ -2984,6 +3023,10 @@ export function viewFor(G, seat, code, opts = {}) {
       closedKanKeys: closedKanKeys(G, seat),
       canAddKan: canAddKan(G, seat),
       addKanOptions: addKanOptions(G, seat).map((t) => t.id),
+      // riichi: the only tile that may go, and whether the table will send it
+      // on its own because there is nothing else to decide
+      lockedTile: drawn ? drawn.id : null,
+      forced: !!forcedMove(G, seat),
     };
   }
 

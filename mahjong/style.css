@@ -555,6 +555,10 @@ body {
 #hand .tile:hover { transform: translateY(-4px); box-shadow: 0 4px 12px rgba(0,0,0,.3); }
 #hand .tile.selected { transform: translateY(-8px); box-shadow: 0 0 0 2px #e8d5a3, 0 6px 16px rgba(0,0,0,.4); }
 #hand .tile.dragging { opacity: .95; box-shadow: 0 8px 18px rgba(0,0,0,.5); transition: none; z-index: 5; }
+/* riichi has locked the hand: everything but the drawn tile sits still and a
+   shade darker, so it reads as out of play rather than as something to pick */
+#hand.locked .tile:not(.last-draw) { cursor: default; filter: brightness(.86); }
+#hand.locked .tile:not(.last-draw):hover { transform: none; box-shadow: none; }
 
 /* played (flowers + melds) — sized by --ts-played */
 .seat-played .tile, #my-played .tile, .meld .tile { --u: calc(1px * var(--ts-base) * var(--ts-played)); }
