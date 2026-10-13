@@ -1147,12 +1147,17 @@ class GuestSession {
       this.closed = true;
       try { this.peer.destroy(); } catch {}
       session = null;
+      resetTable();
       setHomeStatus(msg.reason === 'version' ? 'Version mismatch — refresh the page.' : `Denied: ${msg.reason}`, true);
       showScreen('home');
       setBusy(false);
       return;
     }
-    if (msg.t === 'lobby') renderLobby(this, msg);
+    if (msg.t === 'lobby') {
+      // the ruleset the host has picked, for the notes to read in the lobby
+      this.selectedVariant = msg.variant || null;
+      renderLobby(this, msg);
+    }
     if (msg.t === 'state') {
       // Authoritative state has landed, so whatever I was waiting on is done.
       // Without this the flag latches on my first move and every later click is
@@ -1186,6 +1191,7 @@ class GuestSession {
 
 function guestGone(code, why) {
   session = null;
+  resetTable();
   setHomeStatus(why, true);
   showScreen('home');
   setBusy(false);
@@ -1201,6 +1207,10 @@ function renderLobby(sess, lobbyMsg) {
   $('#go-peek').classList.add('hidden');
   overHidden = false;
   hideHandEnd();
+  // and its ruleset: the lobby is choosing the next one, and the notes and the
+  // hands sheet read whichever is live (see liveVariant)
+  lastView = null;
+  lastSess = null;
   const isHost = sess.isHost;
   const roster = isHost ? sess.roster : (lobbyMsg && lobbyMsg.roster) || [];
   const variant = isHost ? sess.selectedVariant : (lobbyMsg && lobbyMsg.variant) || 'tw';
@@ -1288,8 +1298,23 @@ function renderLobby(sess, lobbyMsg) {
 
 let seenFxSeq = 0;
 let chatSeenN = 0;
+let lastMid = null;
 
 function renderGame(view, sess) {
+  // A new match — Play again, or a fresh start from the lobby — restarts every
+  // count the table keeps, so what this screen remembers of the last one has
+  // to go too: otherwise the new game's calls and flashes are taken for ones
+  // already shown, and its first hand for the last game's.
+  if (view.mid !== lastMid) {
+    lastMid = view.mid;
+    chatSeenN = 0;
+    seenFxSeq = 0;
+    handOrder = [];
+    drawnPin = null;
+    lastHandSeen = -1;
+    claimMuted = new Set();
+    claimMutedHand = null;
+  }
   lastView = view;
   lastSess = sess;
   const handKey = `${view.roundWind}${view.handNum}.${view.honba}`;
@@ -2102,7 +2127,7 @@ function renderRulesScoring() {
     ], null],
     ['jp', 'Japanese Riichi', [
       'Han and fu together set the payout, and it climbs in named steps: mangan at 5 han (8000 to a non-dealer, 12000 to the dealer), haneman at 6\u20137, baiman at 8\u201310, sanbaiman at 11\u201312, yakuman at 13.',
-      'The dealer pays and receives half again as much. A self-draw splits the total between the other three; riichi sticks and honba are paid on top.',
+      'The dealer is paid half again as much for a win, and on another player’s self-draw pays twice what each of the others does. A self-draw is paid in those shares by the other three; riichi sticks and honba come on top.',
     ], null],
   ];
   parts.sort((a, b) => (b[0] === active) - (a[0] === active));
@@ -2237,7 +2262,12 @@ function showHandEnd(view, sess) {
       payWrap.append(heRow([T('tsumo', 'Tsumo'), ' — each pays'], `${pay.each}`));
     }
     if (hr.bonus?.riichi) payWrap.append(heRow(T('riichisticks', 'Riichi sticks'), `+${hr.bonus.riichi}`));
-    if (hr.bonus?.honba) payWrap.append(heRow(T('honba', 'Honba'), `+${hr.bonus.honba}`));
+    // the honba come from the payers, on top of the shares above: say whose
+    if (hr.bonus?.honba) {
+      const n = hr.bonus.honba / 300;
+      const who = pay?.mode === 'ron' ? `${nameOf(pay.from)} pays` : `${n * 100} from each`;
+      payWrap.append(heRow([T('honba', 'Honba'), ` ×${n} — ${who}`], `+${hr.bonus.honba}`));
+    }
     if (payWrap.childElementCount) detail.append(payWrap);
   } else {
     title.replaceChildren(T('draw', 'Exhaustive draw'));
@@ -2677,9 +2707,10 @@ function bodyEl(g, depth) {
   if (!map) { div.textContent = text; return div; }
   const phrases = Object.keys(map).sort((a, b) => b.length - a.length);
   // \b so a phrase has to start a word. Without it "chi" turned the middle of
-  // "reaching" into a link to Chi. No boundary at the END, though: a note that
-  // links "pung" should still catch "pungs".
-  const re = new RegExp(`\\b(${phrases.map(escapeRe).join('|')})`, 'gi');
+  // "reaching" into a link to Chi. At the end, a plural may follow — a note
+  // that links "pung" should still catch "pungs" — but nothing else: "han" is
+  // not the start of "haneman", nor "tai" of "Taiwanese".
+  const re = new RegExp(`\\b(${phrases.map(escapeRe).join('|')})(?=(?:e?s)?\\b)`, 'gi');
   let last = 0, m;
   while ((m = re.exec(g.body)) !== null) {
     if (m.index > last) div.append(document.createTextNode(g.body.slice(last, m.index)));
@@ -3022,10 +3053,14 @@ async function joinRoom() {
   setBusy(false);
 }
 
-function leaveRoom() {
-  if (session) { session.destroy(); session = null; }
+// Everything a room leaves behind, on screen and in memory, cleared on every
+// way out of it: leaving, the host going away, being turned away at the door.
+// The popups and the chat live outside the screens, so a screen change alone
+// leaves them standing over the home page.
+function resetTable() {
   lastView = null;
   lastSess = null;
+  lastMid = null;
   pendingMove = false;
   selectedTile = null;
   handOrder = [];
@@ -3059,6 +3094,12 @@ function leaveRoom() {
   // last game is still lying in the middle of the new one.
   $('#last-discard').replaceChildren();
   clearChatBubbles();
+  chatSetVisible(false);
+}
+
+function leaveRoom() {
+  if (session) { session.destroy(); session = null; }
+  resetTable();
   showScreen('home');
   setHomeStatus('');
 }
@@ -3072,7 +3113,7 @@ $('#name-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('
 // the final result closes like any popup, and opens again only when asked
 function closeGameOver() {
   overHidden = true;
-  if (lastView) renderGame(lastView, session);
+  if (lastView && session) renderGame(lastView, session);
 }
 $('#btn-go-hide')?.addEventListener('click', closeGameOver);
 $('#btn-go-close').addEventListener('click', closeGameOver);
@@ -3082,7 +3123,7 @@ document.addEventListener('keydown', (e) => {
 });
 $('#go-peek').addEventListener('click', () => {
   overHidden = false;
-  if (lastView) renderGame(lastView, session);
+  if (lastView && session) renderGame(lastView, session);
 });
 $('#btn-routes').addEventListener('click', toggleRoutes);
 $('#btn-add-bot').addEventListener('click', () => session?.addBot());

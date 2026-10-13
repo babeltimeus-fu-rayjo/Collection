@@ -86,6 +86,22 @@ eq(score('m2 m3 m4 m5 m6 m7 s3 s4 s5 s7 s7', 'm4', OPEN), { yaku: ['Tanyao'], ha
 const KOKUSHI = 'm1 m9 p1 p9 s1 s9 wE wS wW wN dR dG dW dW';
 eq(score(KOKUSHI, 'dW', { seat: 0 }).points, 48000, 'Kokushi musou for the dealer: a yakuman, 48000');
 eq(score(KOKUSHI, 'dW', { seat: 1 }).points, 32000, '…and 32000 for anybody else');
+eq(M.isWinningHand(tiles('m1 m9 p1 p9 s1 s9 wE wS wW wN dR dG dW m5'), 'jp', []), false, 'the thirteen orphans and a 5 Man is not Kokushi: the fourteenth tile has to be an orphan too');
+
+console.log('— the planner —');
+{
+  // seat 1 (South, in the East round) is tenpai for Pinfu on a pair of North,
+  // a wind worth nothing to it; with a pair of Chun instead it is not
+  const pinfuRoute = (hand) => {
+    const G = table();
+    G.players[1].hand = tiles(hand);
+    const out = M.outlookFor(M.positionFromView(M.viewFor(G, 1, 'T')));
+    return out.routes.find((r) => r.parts.some((p) => p.term === 'pinfu'));
+  };
+  const guest = pinfuRoute('m2 m3 m4 m6 m7 m8 p4 p5 p6 s3 s4 wN wN');
+  eq([guest.away, guest.wins.map((w) => w.k)], [0, ['s2', 's5']], 'a pair of a guest wind can be the Pinfu pair: tenpai, on 2 or 5 Sou');
+  eq(pinfuRoute('m2 m3 m4 m6 m7 m8 p4 p5 p6 s3 s4 dR dR').away > 0, true, 'a pair of Chun cannot: that Pinfu is still some way off');
+}
 
 console.log('— who pays what —');
 eq(shares(RUNS, 'm4', { tsumo: true }), [700, 400, 1500], '2 han 20 fu by self-draw: 700 from the dealer, 400 from each of the others — each share rounded on its own, 1500 in all');
@@ -218,6 +234,7 @@ console.log('— honba —');
   throwBack(G, 3);
   play(G, 0, { kind: 'tsumo' });
   const d = G.handResult.delta;
+  eq([G.handResult.payments, G.handResult.scoring.payments], [{ mode: 'tsumo', dealer: 2000, nonDealer: 2000, points: 6000 }, undefined], 'the result carries the shares once, as its payments');
   eq([d[1], d[2], d[3]], [-2200, -2200, -2200], 'on a self-draw each of the three pays 100 a honba on top of their share');
   eq(d[0], 6600 + 1000, '…and the winner takes it all, with the riichi stick');
   eq(d[0] + d[1] + d[2] + d[3], 1000, 'no point is made from nothing: all that changes hands is the stick staked at the riichi');
@@ -231,6 +248,7 @@ console.log('— honba —');
   play(G, 0, { kind: 'ron' });
   const d = G.handResult.delta;
   eq([d[0], d[1], d[2], d[3]], [3900 + 600 + 1000, -(3900 + 600), 0, 0], 'on a Ron the discarder pays the hand and 300 a honba');
+  eq(G.handResult.payments, { mode: 'ron', amount: 3900, points: 3900, from: 1 }, '…and the result says who: seat 1');
 }
 
 console.log(`\n${checks} checks` + (fails ? `, ${fails} FAILURES` : ', all pass'));

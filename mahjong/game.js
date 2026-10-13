@@ -1001,6 +1001,9 @@ function resolveWin(G, winnerSeat, loserSeat, isTsumo) {
   const before = {};
   for (const p of G.players) before[p.seat] = p.score;
   const scoring = scoreHand(G, winnerSeat, loserSeat, isTsumo);
+  // Riichi's scorer already says who pays what; that is the one record of it,
+  // so it travels as the result's payments rather than inside the scoring too
+  const { payments: shares, ...scored } = scoring;
 
   let payments;
   if (isTsumo) {
@@ -1011,16 +1014,13 @@ function resolveWin(G, winnerSeat, loserSeat, isTsumo) {
     // others'), each with 100 a honba on top; Hong Kong and Taiwanese both have
     // each player pay the hand IN FULL on a self-draw, which is what makes tsumo
     // worth three times a win on a discard.
-    const jp = G.variant === 'jp' ? scoring.payments : null;
     for (const p of G.players) {
       if (p.seat === winnerSeat) continue;
-      const pay = jp ? (p.seat === G.dealer ? jp.dealer : jp.nonDealer) + G.honba * 100 : scoring.points;
+      const pay = shares ? (p.seat === G.dealer ? shares.dealer : shares.nonDealer) + G.honba * 100 : scoring.points;
       p.score -= pay;
       winner.score += pay;
     }
-    payments = jp
-      ? { mode: 'tsumo', dealer: jp.dealer, nonDealer: jp.nonDealer }
-      : { mode: 'tsumo', each: scoring.points };
+    payments = shares || { mode: 'tsumo', each: scoring.points };
   } else {
     const loser = playerBySeat(G, loserSeat);
     addLog(G, `${winner.name} wins by Ron from ${loser.name} — ${scoring.summary}!`);
@@ -1029,7 +1029,7 @@ function resolveWin(G, winnerSeat, loserSeat, isTsumo) {
     const honba = G.variant === 'jp' ? G.honba * 300 : 0;
     loser.score -= scoring.points + honba;
     winner.score += scoring.points + honba;
-    payments = { mode: 'ron', from: loserSeat, amount: scoring.points };
+    payments = { ...(shares || { mode: 'ron', amount: scoring.points }), from: loserSeat };
   }
 
   // JP: the riichi sticks on the table go to the winner. The honba were paid
@@ -1052,7 +1052,7 @@ function resolveWin(G, winnerSeat, loserSeat, isTsumo) {
     winner: winnerSeat,
     loser: loserSeat,
     tsumo: isTsumo,
-    scoring,
+    scoring: scored,
     payments,
     bonus,
     delta,
@@ -1219,14 +1219,10 @@ function isSevenPairs(keys) {
 }
 
 function isThirteenOrphans(keys) {
-  const required = ['m1', 'm9', 'p1', 'p9', 's1', 's9', 'wE', 'wS', 'wW', 'wN', 'dR', 'dG', 'dW'];
-  const counts = {};
-  for (const k of keys) counts[k] = (counts[k] || 0) + 1;
-  for (const r of required) {
-    if (!counts[r]) return false;
-  }
-  // must have exactly one pair among the 13 terminal/honor tiles
-  return keys.length === 14;
+  if (keys.length !== 14) return false;
+  // one of each of the thirteen, and the fourteenth a second copy of one of
+  // them: a tile from anywhere else is not an orphan, however the rest look
+  return ORPHAN_KEYS.every((k) => keys.includes(k)) && keys.every((k) => ORPHAN_KEYS.includes(k));
 }
 
 // tenpai: is the hand 1 tile away from winning?
@@ -1307,7 +1303,7 @@ export const SCORING_GUIDE = [
       ['Chiitoitsu', '2', 'Seven pairs, concealed — always 25 fu'],
       ['Honitsu', '3 / 2', 'One suit plus honours (concealed / open)'],
       ['Chinitsu', '6 / 5', 'A single suit, no honours (concealed / open)'],
-      ['Kokushi Musou', '13', 'Thirteen orphans — yakuman, 32000 pts'],
+      ['Kokushi Musou', '13', 'Thirteen orphans — yakuman: 32000 pts, or 48000 for the dealer'],
       ['Dora', '+1 each', 'Each dora tile; ura-dora also count after riichi. A bonus only — never a yaku by itself'],
     ],
   },
@@ -1769,83 +1765,20 @@ function hasTripletOf(hand, melds, kind, val) {
   return count >= 3;
 }
 
+// Every meld a chi, and some reading of the concealed tiles all runs. Read by
+// the same decompositions Riichi scores with; canDecompose stays separate only
+// because the hot path (tenpai, waits) wants its early exit.
 function isAllSequences(hand, melds, variant) {
-  // all melds must be chi
-  for (const m of melds) {
-    if (m.type !== 'chi') return false;
-  }
-  // closed hand must decompose into sequences + 1 pair
-  const closed = hand.map((t) => t.key);
-  const need = setsNeeded(variant) - melds.length;
-  return canDecomposeAllSequences(closed, need);
+  if (melds.some((m) => m.type !== 'chi')) return false;
+  return decompositions(hand.map((t) => t.key), setsNeeded(variant) - melds.length)
+    .some((d) => d.sets.every((st) => st.run));
 }
 
-function canDecomposeAllSequences(keys, setsNeeded) {
-  const counts = {};
-  for (const k of keys) counts[k] = (counts[k] || 0) + 1;
-  for (const pairKey of Object.keys(counts)) {
-    if (counts[pairKey] < 2) continue;
-    const rem = { ...counts };
-    rem[pairKey] -= 2;
-    if (rem[pairKey] === 0) delete rem[pairKey];
-    if (extractSequencesOnly(rem, setsNeeded)) return true;
-  }
-  return false;
-}
-
-function extractSequencesOnly(counts, need) {
-  if (need === 0) return Object.values(counts).every((v) => v === 0);
-  let first = null;
-  for (const k of Object.keys(counts).sort()) {
-    if (counts[k] > 0) { first = k; break; }
-  }
-  if (!first) return need === 0;
-  const parsed = parseKey(first);
-  if (!parsed || !parsed.suit) return false; // honor can't form sequence
-  const k2 = `${parsed.suit}${parsed.v + 1}`;
-  const k3 = `${parsed.suit}${parsed.v + 2}`;
-  if (!counts[k2] || !counts[k3]) return false;
-  const c = { ...counts };
-  c[first] -= 1; c[k2] -= 1; c[k3] -= 1;
-  if (c[first] === 0) delete c[first];
-  if (c[k2] === 0) delete c[k2];
-  if (c[k3] === 0) delete c[k3];
-  return extractSequencesOnly(c, need - 1);
-}
-
+// No chi anywhere, and some reading of the concealed tiles all triplets.
 function isAllTriplets(hand, melds, variant) {
-  for (const m of melds) {
-    if (m.type === 'chi') return false;
-  }
-  const closed = hand.map((t) => t.key);
-  const need = setsNeeded(variant) - melds.length;
-  return canDecomposeAllTriplets(closed, need);
-}
-
-function canDecomposeAllTriplets(keys, setsNeeded) {
-  const counts = {};
-  for (const k of keys) counts[k] = (counts[k] || 0) + 1;
-  for (const pairKey of Object.keys(counts)) {
-    if (counts[pairKey] < 2) continue;
-    const rem = { ...counts };
-    rem[pairKey] -= 2;
-    if (rem[pairKey] === 0) delete rem[pairKey];
-    if (extractTripletsOnly(rem, setsNeeded)) return true;
-  }
-  return false;
-}
-
-function extractTripletsOnly(counts, need) {
-  if (need === 0) return Object.values(counts).every((v) => v === 0);
-  for (const k of Object.keys(counts)) {
-    if (counts[k] >= 3) {
-      const c = { ...counts };
-      c[k] -= 3;
-      if (c[k] === 0) delete c[k];
-      if (extractTripletsOnly(c, need - 1)) return true;
-    }
-  }
-  return false;
+  if (melds.some((m) => m.type === 'chi')) return false;
+  return decompositions(hand.map((t) => t.key), setsNeeded(variant) - melds.length)
+    .some((d) => d.sets.every((st) => !st.run));
 }
 
 function isMixedFlush(tiles) {
@@ -2573,10 +2506,15 @@ function jpRoutesFor(ctx) {
   // closest arrangement that does not chase them.
   evaluate('any', [], 0, { mode: FREE });
   evaluate('tanyao', [{ term: 'tanyao', text: 'tanyao' }], 1, { mode: FREE, sup: simples, honors: false });
-  // Pinfu's pair must score nothing, so the route keeps to a pair from the
-  // suits. A guest wind would do as well, but no honour pair is ever the wrong
-  // advice; the two-sided wait it also needs is settled only by the last tile.
-  evaluate('pinfu', [{ term: 'pinfu', text: 'pinfu' }], 1, { mode: SEQ, closedOnly: true, honors: false });
+  // Pinfu's pair must score nothing: a pair from the suits, or of a guest wind
+  // — never a dragon, the seat wind or the round wind, whose supply is zeroed
+  // for it. (All runs, so an honour can only ever be the pair.) The two-sided
+  // wait it also needs is settled only by the last tile.
+  const plainPair = supply.map((v, i) => {
+    const k = KEY_LIST[i];
+    return k[0] === 'd' || k === `w${sw}` || k === `w${rw}` ? 0 : v;
+  });
+  evaluate('pinfu', [{ term: 'pinfu', text: 'pinfu' }], 1, { mode: SEQ, closedOnly: true, sup: plainPair });
   evaluate('toitoi', [{ term: 'toitoi', text: 'toitoi' }], 2, { mode: TRIP });
   for (const s of SUITS_ORDER) {
     evaluate(`honitsu:${s}`, [{ term: 'honitsu', text: `honitsu in ${SUIT_NAME[s]}` }], closed ? 3 : 2,
@@ -3031,6 +2969,8 @@ export function viewFor(G, seat, code, opts = {}) {
   }
 
   return {
+    // which match this is: every counter below restarts with a new one
+    mid: G.mid,
     variant: G.variant,
     phase: G.phase,
     roundWind: G.roundWind,
