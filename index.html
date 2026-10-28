@@ -100,6 +100,14 @@
     .art.bng .star { filter: drop-shadow(0 4px 8px rgba(0, 0, 0, .5)); }
     .art.bng .star i { display: block; width: 58px; height: 58px; background: linear-gradient(180deg, #ffe08a, #c98f24); clip-path: polygon(50% 0%, 64% 25.8%, 93.3% 25%, 78% 50%, 93.3% 75%, 64% 74.2%, 50% 100%, 36% 74.2%, 6.7% 75%, 22% 50%, 6.7% 25%, 36% 25.8%); }
     .art.bng .word { font-family: 'Rockwell', 'Rockwell Nova', 'American Typewriter', 'Roboto Slab', serif; font-weight: 900; font-size: 34px; letter-spacing: .04em; color: #ffd77a; transform: rotate(-8deg); text-shadow: 3px 3px 0 #6e1d12, 0 6px 14px rgba(0, 0, 0, .5); }
+    .art.scl { background: radial-gradient(120% 90% at 50% 0%, #2e6b3f, #0a1d10 72%); }
+    .art.scl .clv { position: relative; width: 100px; height: 100px; }
+    .art.scl .clv i { position: absolute; width: 48px; height: 48px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #8be08f, #46b562 60%, #1f6a35); box-shadow: 0 3px 8px rgba(0, 0, 0, .4); }
+    .art.scl .clv i:nth-child(1) { left: 26px; top: 0; }
+    .art.scl .clv i:nth-child(2) { left: 52px; top: 26px; }
+    .art.scl .clv i:nth-child(3) { left: 26px; top: 52px; }
+    .art.scl .clv i:nth-child(4) { left: 0; top: 26px; }
+    .art.scl .clv b { position: absolute; left: 31px; top: 31px; width: 38px; height: 38px; border-radius: 7px; background: #fffaf0; box-shadow: 0 2px 6px rgba(0, 0, 0, .45); }
     .art.cop { background: radial-gradient(120% 90% at 50% 0%, #4a2034, #12070d 72%); grid-auto-flow: column; justify-content: center; align-items: center; gap: 12px; }
     .art.cop .cd { display: block; width: 42px; height: 58px; border-radius: 6px; border: 2px solid rgba(226, 180, 90, .7); background: repeating-linear-gradient(45deg, rgba(226, 180, 90, .2) 0 4px, transparent 4px 9px), linear-gradient(180deg, #3a1b29, #1d0e16); box-shadow: 0 4px 10px rgba(0, 0, 0, .5); transform: rotate(-8deg); }
     .art.cop .cd.up { display: grid; place-items: center; font-size: 24px; background: linear-gradient(180deg, #5b3a8a, #24132f); border-color: #a77ce6; transform: rotate(7deg) translateY(-4px); }
@@ -406,6 +414,21 @@
   <p class="sub">Games that run entirely in your browser. Share a room code to play with friends peer-to-peer — most games can fill empty seats with bots. No accounts, no downloads, no server.</p>
 
   <main class="shelf">
+    <a class="game" href="./soclover/">
+      <div class="art scl">
+        <span class="clv"><i></i><i></i><i></i><i></i><b></b></span>
+      </div>
+      <div class="body">
+        <div class="title-row">
+          <span class="name">So Clover!</span>
+          <span class="players">3–6 players</span>
+        </div>
+        <p class="blurb">Four Keyword cards land at random on your four-leaf clover, and each leaf sits between two of them. Write one word on each leaf that ties its pair together — then watch in silence while the rest of the table puts your cards back, the right way round, from your Clues alone. Cooperative: everyone scores together.</p>
+        <div class="tags"><span class="tag">cooperative</span><span class="tag">word association</span><span class="tag">~30 min</span></div>
+        <span class="play">Play So Clover! →</span>
+      </div>
+    </a>
+
     <a class="game" href="./coup/">
       <div class="art cop">
         <span class="cd"></span><span class="cd up">👑</span>
