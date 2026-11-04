@@ -100,6 +100,14 @@
     .art.bng .star { filter: drop-shadow(0 4px 8px rgba(0, 0, 0, .5)); }
     .art.bng .star i { display: block; width: 58px; height: 58px; background: linear-gradient(180deg, #ffe08a, #c98f24); clip-path: polygon(50% 0%, 64% 25.8%, 93.3% 25%, 78% 50%, 93.3% 75%, 64% 74.2%, 50% 100%, 36% 74.2%, 6.7% 75%, 22% 50%, 6.7% 25%, 36% 25.8%); }
     .art.bng .word { font-family: 'Rockwell', 'Rockwell Nova', 'American Typewriter', 'Roboto Slab', serif; font-weight: 900; font-size: 34px; letter-spacing: .04em; color: #ffd77a; transform: rotate(-8deg); text-shadow: 3px 3px 0 #6e1d12, 0 6px 14px rgba(0, 0, 0, .5); }
+    .art.sb { background: radial-gradient(1.4px 1.4px at 14% 22%, #fff, transparent 60%), radial-gradient(1px 1px at 82% 30%, #dfe8ff, transparent 60%), radial-gradient(1.2px 1.2px at 70% 80%, #fff, transparent 60%), radial-gradient(1px 1px at 28% 76%, #cfe0ff, transparent 60%), radial-gradient(120% 90% at 50% 0%, #2b3f8c, #060a1a 72%); grid-auto-flow: column; justify-content: center; align-items: center; gap: 14px; }
+    .art.sb .d { display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); width: 48px; height: 48px; padding: 7px; border-radius: 11px; background: linear-gradient(145deg, #fff, #d2daec); box-shadow: inset -2px -3px 0 rgba(20, 30, 70, .2), 0 6px 14px rgba(0, 0, 0, .5); transform: rotate(-10deg); }
+    .art.sb .d + .d { transform: rotate(8deg) translateY(-8px); }
+    .art.sb .d i { width: 8px; height: 8px; margin: auto; border-radius: 50%; }
+    .art.sb .d i.p { background: #16224d; }
+    .art.sb .tok { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; font: 800 15px/1 'Avenir Next Condensed', 'Arial Narrow', sans-serif; box-shadow: 0 4px 10px rgba(0, 0, 0, .45); }
+    .art.sb .tok.cr { background: radial-gradient(circle at 35% 30%, #fff1b8, #ffc94a 45%, #c98a14); color: #3a2600; transform: translateY(10px); }
+    .art.sb .tok.vp { background: linear-gradient(180deg, #fff, #b9c6e2); color: #14224a; border-radius: 50% 50% 6px 6px / 70% 70% 6px 6px; transform: translateY(-6px); }
     .art.scl { background: radial-gradient(120% 90% at 50% 0%, #2e6b3f, #0a1d10 72%); }
     .art.scl .clv { position: relative; width: 100px; height: 100px; }
     .art.scl .clv i { position: absolute; width: 48px; height: 48px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #8be08f, #46b562 60%, #1f6a35); box-shadow: 0 3px 8px rgba(0, 0, 0, .4); }
@@ -414,6 +422,24 @@
   <p class="sub">Games that run entirely in your browser. Share a room code to play with friends peer-to-peer — most games can fill empty seats with bots. No accounts, no downloads, no server.</p>
 
   <main class="shelf">
+    <a class="game" href="./spacebase/">
+      <div class="art sb">
+        <span class="tok cr">5</span>
+        <span class="d"><i class="p"></i><i></i><i class="p"></i><i></i><i class="p"></i><i></i><i class="p"></i><i></i><i class="p"></i></span>
+        <span class="d"><i class="p"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="p"></i></span>
+        <span class="tok vp">40</span>
+      </div>
+      <div class="body">
+        <div class="title-row">
+          <span class="name">Space Base</span>
+          <span class="players">2–5 players</span>
+        </div>
+        <p class="blurb">Two dice, and every commodore at once takes each die or the sum — the roller from their stationed ships, everyone else from their deployed ones. Buying a ship spends all your credits and sends the one it replaces out to pay you on others’ turns. Charge abilities, settle colonies, race to 40.</p>
+        <div class="tags"><span class="tag">dice</span><span class="tag">engine building</span><span class="tag">bots</span><span class="tag">~45 min</span></div>
+        <span class="play">Play Space Base →</span>
+      </div>
+    </a>
+
     <a class="game" href="./soclover/">
       <div class="art scl">
         <span class="clv"><i></i><i></i><i></i><i></i><b></b></span>
